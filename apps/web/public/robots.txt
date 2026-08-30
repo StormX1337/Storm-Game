@@ -1,0 +1,4 @@
+# A control panel has nothing to offer a search engine, and its URLs leak the
+# shape of an install. Keep it out of indexes.
+User-agent: *
+Disallow: /

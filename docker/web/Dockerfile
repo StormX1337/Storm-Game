@@ -32,6 +32,11 @@ ENV API_INTERNAL_URL=${API_INTERNAL_URL}
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN pnpm --filter @storm/web run build
 
+# The runtime stage copies public/ unconditionally, and COPY fails on a missing
+# source. The repository ships the directory, but a deployment that has emptied
+# it should still build.
+RUN mkdir -p /repo/apps/web/public
+
 # ---------------------------------------------------------------- runtime --
 FROM node:22-bookworm-slim AS runtime
 
