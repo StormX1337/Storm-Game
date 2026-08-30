@@ -1,0 +1,7 @@
+/* Relative rather than a package specifier: postcss-import resolves paths, not
+   the package `exports` map, and the workspace layout is stable in Docker too. */
+@import '../../../../packages/ui/src/styles.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;

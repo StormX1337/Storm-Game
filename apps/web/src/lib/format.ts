@@ -1,0 +1,121 @@
+import type { NodeStatus, ServerStatus } from '@storm/types';
+
+/* ------------------------------------------------------------------ sizes -- */
+
+const BYTE_UNITS = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB'];
+
+export function formatBytes(bytes: number, decimals = 1): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+  const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), BYTE_UNITS.length - 1);
+  const value = bytes / 1024 ** exponent;
+  return `${value.toFixed(exponent === 0 ? 0 : decimals)} ${BYTE_UNITS[exponent]}`;
+}
+
+/** Values the API reports in MiB (limits, node capacity). */
+export function formatMib(mib: number, decimals = 1): string {
+  return formatBytes(mib * 1024 * 1024, decimals);
+}
+
+export function formatBitrate(bytesPerSecond: number): string {
+  return `${formatBytes(bytesPerSecond, 1)}/s`;
+}
+
+export function formatPercent(value: number, decimals = 1): string {
+  if (!Number.isFinite(value)) return '0%';
+  return `${value.toFixed(decimals)}%`;
+}
+
+export function formatNumber(value: number): string {
+  return new Intl.NumberFormat().format(value);
+}
+
+/* ------------------------------------------------------------------ times -- */
+
+export function formatUptime(milliseconds: number): string {
+  if (!Number.isFinite(milliseconds) || milliseconds <= 0) return '—';
+  const seconds = Math.floor(milliseconds / 1000);
+
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const remaining = seconds % 60;
+
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  if (minutes > 0) return `${minutes}m ${remaining}s`;
+  return `${remaining}s`;
+}
+
+export function formatDate(value: string | Date | null | undefined): string {
+  if (!value) return '—';
+  const date = typeof value === 'string' ? new Date(value) : value;
+  if (Number.isNaN(date.getTime())) return '—';
+  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date);
+}
+
+export function formatDateShort(value: string | Date | null | undefined): string {
+  if (!value) return '—';
+  const date = typeof value === 'string' ? new Date(value) : value;
+  if (Number.isNaN(date.getTime())) return '—';
+  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(date);
+}
+
+export function formatRelative(value: string | Date | null | undefined): string {
+  if (!value) return 'never';
+  const date = typeof value === 'string' ? new Date(value) : value;
+  if (Number.isNaN(date.getTime())) return 'never';
+
+  const seconds = Math.round((date.getTime() - Date.now()) / 1000);
+  const absolute = Math.abs(seconds);
+  const formatter = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
+
+  if (absolute < 45) return formatter.format(Math.round(seconds), 'second');
+  if (absolute < 2700) return formatter.format(Math.round(seconds / 60), 'minute');
+  if (absolute < 79200) return formatter.format(Math.round(seconds / 3600), 'hour');
+  if (absolute < 2592000) return formatter.format(Math.round(seconds / 86400), 'day');
+  if (absolute < 31536000) return formatter.format(Math.round(seconds / 2592000), 'month');
+  return formatter.format(Math.round(seconds / 31536000), 'year');
+}
+
+/* --------------------------------------------------------------- statuses -- */
+
+export type StatusTone = 'success' | 'warning' | 'destructive' | 'muted' | 'default';
+
+export const SERVER_STATUS_META: Record<ServerStatus, { label: string; tone: StatusTone; pulse?: boolean }> = {
+  INSTALLING: { label: 'Installing', tone: 'default', pulse: true },
+  INSTALL_FAILED: { label: 'Install failed', tone: 'destructive' },
+  STARTING: { label: 'Starting', tone: 'warning', pulse: true },
+  ONLINE: { label: 'Online', tone: 'success' },
+  STOPPING: { label: 'Stopping', tone: 'warning', pulse: true },
+  OFFLINE: { label: 'Offline', tone: 'muted' },
+  CRASHED: { label: 'Crashed', tone: 'destructive' },
+  SUSPENDED: { label: 'Suspended', tone: 'destructive' },
+  REINSTALLING: { label: 'Reinstalling', tone: 'default', pulse: true },
+};
+
+export const NODE_STATUS_META: Record<NodeStatus, { label: string; tone: StatusTone; pulse?: boolean }> = {
+  ONLINE: { label: 'Online', tone: 'success' },
+  OFFLINE: { label: 'Offline', tone: 'destructive' },
+  DEGRADED: { label: 'Degraded', tone: 'warning', pulse: true },
+  MAINTENANCE: { label: 'Maintenance', tone: 'muted' },
+};
+
+/** Turns `server:power.start` or `admin.user_created` into readable prose. */
+export function humaniseEvent(event: string): string {
+  const cleaned = event.replace(/^(server|admin|auth|account|file|backup|schedule|database):?\.?/, '');
+  const words = cleaned.replace(/[._:]/g, ' ').trim();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+export function initials(name: string): string {
+  const parts = name.trim().split(/[\s.@_-]+/).filter(Boolean);
+  if (parts.length === 0) return '??';
+  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase();
+  return `${parts[0]![0]}${parts[1]![0]}`.toUpperCase();
+}
+
+/** Percentage of a limit, clamped for display. Zero limit means unlimited. */
+export function usagePercent(used: number, limit: number): number {
+  if (!limit || limit <= 0) return 0;
+  return Math.min(100, Math.max(0, (used / limit) * 100));
+}

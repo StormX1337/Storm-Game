@@ -1,0 +1,794 @@
+// Storm Panel — data model
+//
+// Conventions:
+//   * every table has createdAt/updatedAt
+//   * external identifiers are UUIDs; primary keys are cuids
+//   * secrets are stored encrypted (columns suffixed `Enc`) or hashed (`Hash`)
+//   * deletes cascade from owner -> server -> server children; nodes and
+//     templates are restricted so an in-use node can never disappear underneath
+//     a running server.
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = []
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/* ------------------------------------------------------------------ enums -- */
+
+enum RoleName {
+  OWNER
+  ADMIN
+  STAFF
+  SUPPORT
+  CUSTOMER
+}
+
+enum ServerStatus {
+  INSTALLING
+  INSTALL_FAILED
+  STARTING
+  ONLINE
+  STOPPING
+  OFFLINE
+  CRASHED
+  SUSPENDED
+  REINSTALLING
+}
+
+enum NodeStatus {
+  ONLINE
+  OFFLINE
+  DEGRADED
+  MAINTENANCE
+}
+
+enum Protocol {
+  TCP
+  UDP
+}
+
+enum BackupStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  RESTORING
+  DELETING
+}
+
+enum BackupDriver {
+  LOCAL
+  S3
+  R2
+  MINIO
+}
+
+enum ScheduleAction {
+  POWER_START
+  POWER_STOP
+  POWER_RESTART
+  POWER_KILL
+  COMMAND
+  BACKUP
+  NOTIFY
+}
+
+enum DatabaseEngine {
+  POSTGRES
+  MYSQL
+}
+
+enum NotificationLevel {
+  INFO
+  SUCCESS
+  WARNING
+  ERROR
+}
+
+enum VerificationTokenType {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+}
+
+enum WebhookDeliveryStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+/* ------------------------------------------------------------------- rbac -- */
+
+model Role {
+  id          String       @id @default(cuid())
+  name        RoleName     @unique
+  displayName String
+  description String       @default("")
+  priority    Int          @default(0)
+  isSystem    Boolean      @default(true)
+  permissions Permission[] @relation("RolePermissions")
+  users       User[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  category    String
+  description String   @default("")
+  roles       Role[]   @relation("RolePermissions")
+  createdAt   DateTime @default(now())
+
+  @@index([category])
+  @@map("permissions")
+}
+
+/* ------------------------------------------------------------------ users -- */
+
+model User {
+  id           String   @id @default(cuid())
+  uuid         String   @unique @default(uuid())
+  email        String   @unique
+  username     String   @unique
+  firstName    String?
+  lastName     String?
+  passwordHash String
+  avatarUrl    String?
+
+  roleId String
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Restrict)
+
+  /** Grants beyond the role, and explicit denials that win over the role. */
+  extraPermissions  String[] @default([])
+  deniedPermissions String[] @default([])
+
+  emailVerifiedAt DateTime?
+  suspendedAt     DateTime?
+  lastLoginAt     DateTime?
+  lastLoginIp     String?
+
+  serverLimit     Int @default(2)
+  cpuLimit        Int @default(0)
+  memoryLimit     Int @default(0)
+  diskLimit       Int @default(0)
+  backupLimit     Int @default(5)
+  databaseLimit   Int @default(2)
+  allocationLimit Int @default(5)
+
+  twoFactor          TwoFactorAuth?
+  sessions           Session[]
+  apiKeys            ApiKey[]
+  servers            Server[]            @relation("ServerOwner")
+  subuserOf          ServerSubuser[]
+  notifications      Notification[]
+  auditLogs          AuditLog[]          @relation("AuditActor")
+  activityLogs       ActivityLog[]
+  verificationTokens VerificationToken[]
+  backups            Backup[]            @relation("BackupCreator")
+  webhooks           Webhook[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([roleId])
+  @@index([suspendedAt])
+  @@index([createdAt])
+  @@map("users")
+}
+
+model Session {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash   String    @unique
+  /// The hash this session had before its last rotation. Presenting it again
+  /// means the old token leaked, so the whole session family is revoked.
+  previousTokenHash String? @unique
+  userAgent   String?
+  ip          String?
+  deviceLabel String?
+  lastUsedAt  DateTime  @default(now())
+  expiresAt   DateTime
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+model TwoFactorAuth {
+  id          String    @id @default(cuid())
+  userId      String    @unique
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  secretEnc   String
+  enabled     Boolean   @default(false)
+  confirmedAt DateTime?
+  /** SHA-256 digests of single-use backup codes. */
+  backupCodes String[]  @default([])
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@map("two_factor_auth")
+}
+
+model VerificationToken {
+  id        String                @id @default(cuid())
+  userId    String
+  user      User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      VerificationTokenType
+  tokenHash String                @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime              @default(now())
+
+  @@index([userId, type])
+  @@index([expiresAt])
+  @@map("verification_tokens")
+}
+
+model ApiKey {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  keyId       String    @unique
+  keyHash     String
+  permissions String[]  @default([])
+  lastUsedAt  DateTime?
+  expiresAt   DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([userId])
+  @@map("api_keys")
+}
+
+/* ------------------------------------------------------------------ nodes -- */
+
+model Node {
+  id          String  @id @default(cuid())
+  uuid        String  @unique @default(uuid())
+  name        String  @unique
+  description String?
+  location    String
+  region      String?
+
+  hostname  String
+  ip        String
+  publicIp  String?
+  scheme    String  @default("https")
+  agentPort Int     @default(8081)
+  sftpPort  Int     @default(2022)
+
+  status          NodeStatus @default(OFFLINE)
+  maintenanceMode Boolean    @default(false)
+  isPublic        Boolean    @default(true)
+
+  cpuCores         Int     @default(1)
+  cpuModel         String?
+  memoryTotal      Int     @default(1024) // MiB
+  diskTotal        Int     @default(10240) // MiB
+  memoryOvercommit Int     @default(0) // percent
+  diskOvercommit   Int     @default(0) // percent
+
+  dockerVersion String?
+  agentVersion  String?
+  kernel        String?
+  os            String?
+
+  dataDirectory   String @default("/var/lib/storm/servers")
+  backupDirectory String @default("/var/lib/storm/backups")
+
+  lastHeartbeatAt DateTime?
+
+  tokens        NodeToken[]
+  servers       Server[]
+  allocations   ServerAllocation[]
+  stats         NodeStat[]
+  databaseHosts DatabaseHost[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@map("nodes")
+}
+
+model NodeToken {
+  id         String    @id @default(cuid())
+  nodeId     String
+  node       Node      @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  name       String    @default("default")
+  /** Public identifier sent in the Authorization header. */
+  tokenId    String    @unique
+  tokenHash  String
+  /** HMAC secret used to sign request bodies, encrypted at rest. */
+  secretEnc  String
+  lastUsedAt DateTime?
+  expiresAt  DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([nodeId])
+  @@map("node_tokens")
+}
+
+model NodeStat {
+  id           String   @id @default(cuid())
+  nodeId       String
+  node         Node     @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  cpuPercent   Float    @default(0)
+  memoryUsed   BigInt   @default(0)
+  memoryTotal  BigInt   @default(0)
+  diskUsed     BigInt   @default(0)
+  diskTotal    BigInt   @default(0)
+  networkRx    BigInt   @default(0)
+  networkTx    BigInt   @default(0)
+  containers   Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  @@index([nodeId, createdAt])
+  @@map("node_stats")
+}
+
+/* -------------------------------------------------------------- templates -- */
+
+model GameTemplate {
+  id          String  @id @default(cuid())
+  uuid        String  @unique @default(uuid())
+  name        String
+  slug        String  @unique
+  game        String
+  category    String  @default("Other")
+  description String  @default("")
+  author      String  @default("Storm Panel")
+
+  /** Map of display name -> docker image reference. */
+  dockerImages Json   @default("{}")
+  defaultImage String
+
+  startupCommand    String
+  stopCommand       String @default("^C")
+  installScript     String @default("")
+  installContainer  String @default("debian:bookworm-slim")
+  installEntrypoint String @default("bash")
+
+  startupDetection String @default("")
+  crashDetection   String @default("")
+
+  configFiles Json     @default("{}")
+  logConfig   Json     @default("{}")
+  defaultPorts Int[]   @default([])
+  supportedVersions String[] @default([])
+
+  version  Int     @default(1)
+  parentId String?
+  parent   GameTemplate?  @relation("TemplateVersions", fields: [parentId], references: [id], onDelete: SetNull)
+  versions GameTemplate[] @relation("TemplateVersions")
+
+  isActive Boolean @default(true)
+
+  variables TemplateVariable[]
+  servers   Server[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([category])
+  @@index([isActive])
+  @@map("game_templates")
+}
+
+model TemplateVariable {
+  id           String       @id @default(cuid())
+  templateId   String
+  template     GameTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  name         String
+  description  String       @default("")
+  envVariable  String
+  defaultValue String       @default("")
+  userViewable Boolean      @default(true)
+  userEditable Boolean      @default(true)
+  rules        String       @default("string")
+  sortOrder    Int          @default(0)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  serverVariables ServerVariable[]
+
+  @@unique([templateId, envVariable])
+  @@index([templateId])
+  @@map("template_variables")
+}
+
+/* ---------------------------------------------------------------- servers -- */
+
+model Server {
+  id          String  @id @default(cuid())
+  uuid        String  @unique @default(uuid())
+  shortId     String  @unique
+  name        String
+  description String?
+
+  ownerId String
+  owner   User   @relation("ServerOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+
+  nodeId String
+  node   Node   @relation(fields: [nodeId], references: [id], onDelete: Restrict)
+
+  templateId String?
+  template   GameTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+
+  status         ServerStatus @default(INSTALLING)
+  dockerImage    String
+  startupCommand String
+
+  cpuLimit         Int     @default(200) // percent of one core (100 = 1 core)
+  memoryLimit      Int     @default(2048) // MiB
+  diskLimit        Int     @default(10240) // MiB
+  swapLimit        Int     @default(0) // MiB, -1 = unlimited
+  ioWeight         Int     @default(500)
+  networkLimitMbps Int     @default(0)
+  pidsLimit        Int     @default(512)
+  oomKill          Boolean @default(true)
+  cpuPinning       String?
+
+  installedAt DateTime?
+  suspendedAt DateTime?
+  crashedAt   DateTime?
+  lastStartAt DateTime?
+
+  /** SFTP credentials are per-server and rooted in the server's data dir. */
+  sftpUsername    String  @unique
+  sftpPasswordEnc String
+
+  allocations ServerAllocation[]
+  variables   ServerVariable[]
+  backups     Backup[]
+  schedules   Schedule[]
+  databases   ServerDatabase[]
+  subusers    ServerSubuser[]
+  activity    ActivityLog[]
+  stats       ServerStat[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([ownerId])
+  @@index([nodeId])
+  @@index([status])
+  @@index([templateId])
+  @@map("servers")
+}
+
+model ServerAllocation {
+  id        String   @id @default(cuid())
+  nodeId    String
+  node      Node     @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  ip        String
+  port      Int
+  protocol  Protocol @default(TCP)
+  alias     String?
+  notes     String?
+
+  serverId  String?
+  server    Server? @relation(fields: [serverId], references: [id], onDelete: SetNull)
+  isPrimary Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([nodeId, ip, port, protocol])
+  @@index([serverId])
+  @@index([nodeId, serverId])
+  @@map("server_allocations")
+}
+
+model ServerVariable {
+  id                 String            @id @default(cuid())
+  serverId           String
+  server             Server            @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  templateVariableId String?
+  templateVariable   TemplateVariable? @relation(fields: [templateVariableId], references: [id], onDelete: SetNull)
+  key                String
+  value              String            @default("")
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  @@unique([serverId, key])
+  @@index([serverId])
+  @@map("server_variables")
+}
+
+model ServerSubuser {
+  id          String   @id @default(cuid())
+  serverId    String
+  server      Server   @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permissions String[] @default([])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([serverId, userId])
+  @@index([userId])
+  @@map("server_subusers")
+}
+
+model ServerStat {
+  id          String   @id @default(cuid())
+  serverId    String
+  server      Server   @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  cpuPercent  Float    @default(0)
+  memoryBytes BigInt   @default(0)
+  diskBytes   BigInt   @default(0)
+  networkRx   BigInt   @default(0)
+  networkTx   BigInt   @default(0)
+  players     Int?
+  createdAt   DateTime @default(now())
+
+  @@index([serverId, createdAt])
+  @@map("server_stats")
+}
+
+/* ---------------------------------------------------------------- backups -- */
+
+model BackupStorage {
+  id             String       @id @default(cuid())
+  name           String       @unique
+  driver         BackupDriver @default(LOCAL)
+  isDefault      Boolean      @default(false)
+  bucket         String?
+  region         String?
+  endpoint       String?
+  accessKeyEnc   String?
+  secretKeyEnc   String?
+  pathPrefix     String       @default("backups")
+  forcePathStyle Boolean      @default(true)
+  retentionDays  Int          @default(0)
+  isActive       Boolean      @default(true)
+  backups        Backup[]
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@map("backup_storages")
+}
+
+model Backup {
+  id           String        @id @default(cuid())
+  uuid         String        @unique @default(uuid())
+  serverId     String
+  server       Server        @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  storageId    String
+  storage      BackupStorage @relation(fields: [storageId], references: [id], onDelete: Restrict)
+  createdById  String?
+  createdBy    User?         @relation("BackupCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  name         String
+  status       BackupStatus @default(PENDING)
+  bytes        BigInt       @default(0)
+  checksum     String?
+  checksumType String       @default("sha256")
+  ignoredFiles String[]     @default([])
+  storageKey   String?
+  isLocked     Boolean      @default(false)
+  isAutomatic  Boolean      @default(false)
+  error        String?
+  completedAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([serverId, createdAt])
+  @@index([status])
+  @@map("backups")
+}
+
+/* -------------------------------------------------------------- schedules -- */
+
+model Schedule {
+  id             String   @id @default(cuid())
+  serverId       String
+  server         Server   @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  name           String
+  cronMinute     String   @default("0")
+  cronHour       String   @default("*")
+  cronDayOfMonth String   @default("*")
+  cronMonth      String   @default("*")
+  cronDayOfWeek  String   @default("*")
+  timezone       String   @default("UTC")
+  isActive       Boolean  @default(true)
+  onlyWhenOnline Boolean  @default(false)
+  isProcessing   Boolean  @default(false)
+  lastRunAt      DateTime?
+  nextRunAt      DateTime?
+  lastError      String?
+
+  tasks ScheduleTask[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([serverId])
+  @@index([isActive, nextRunAt])
+  @@map("schedules")
+}
+
+model ScheduleTask {
+  id                String         @id @default(cuid())
+  scheduleId        String
+  schedule          Schedule       @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  action            ScheduleAction
+  payload           String         @default("")
+  timeOffsetSec     Int            @default(0)
+  sequence          Int            @default(0)
+  continueOnFailure Boolean        @default(false)
+  lastRunAt         DateTime?
+  lastError         String?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  @@index([scheduleId, sequence])
+  @@map("schedule_tasks")
+}
+
+/* -------------------------------------------------------------- databases -- */
+
+model DatabaseHost {
+  id           String         @id @default(cuid())
+  name         String         @unique
+  engine       DatabaseEngine
+  host         String
+  publicHost   String?
+  port         Int
+  username     String
+  passwordEnc  String
+  maxDatabases Int            @default(0)
+  nodeId       String?
+  node         Node?          @relation(fields: [nodeId], references: [id], onDelete: SetNull)
+  isActive     Boolean        @default(true)
+
+  databases ServerDatabase[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("database_hosts")
+}
+
+/// Customer-facing database provisioned on a DatabaseHost for one server.
+model ServerDatabase {
+  id           String       @id @default(cuid())
+  serverId     String
+  server       Server       @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  hostId       String
+  host         DatabaseHost @relation(fields: [hostId], references: [id], onDelete: Restrict)
+  databaseName String       @unique
+  username     String       @unique
+  passwordEnc  String
+  remoteAccess String       @default("%")
+  maxConnections Int        @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([serverId])
+  @@index([hostId])
+  @@map("server_databases")
+}
+
+/* ------------------------------------------------------- logging & comms -- */
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  actorId     String?
+  actor       User?    @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+  actorLabel  String?
+  action      String
+  targetType  String?
+  targetId    String?
+  targetLabel String?
+  ip          String?
+  userAgent   String?
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now())
+
+  @@index([actorId])
+  @@index([action])
+  @@index([targetType, targetId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model ActivityLog {
+  id        String   @id @default(cuid())
+  serverId  String
+  server    Server   @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  event     String
+  ip        String?
+  metadata  Json     @default("{}")
+  createdAt DateTime @default(now())
+
+  @@index([serverId, createdAt])
+  @@index([userId])
+  @@map("activity_logs")
+}
+
+model Notification {
+  id        String            @id @default(cuid())
+  userId    String
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  title     String
+  message   String
+  level     NotificationLevel @default(INFO)
+  link      String?
+  metadata  Json              @default("{}")
+  readAt    DateTime?
+  createdAt DateTime          @default(now())
+
+  @@index([userId, readAt])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+model Webhook {
+  id            String   @id @default(cuid())
+  name          String
+  url           String
+  secretEnc     String
+  events        String[] @default([])
+  isActive      Boolean  @default(true)
+  createdById   String?
+  createdBy     User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  failureCount  Int      @default(0)
+  lastStatus    Int?
+  lastDeliveryAt DateTime?
+
+  deliveries WebhookDelivery[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive])
+  @@map("webhooks")
+}
+
+model WebhookDelivery {
+  id           String                @id @default(cuid())
+  webhookId    String
+  webhook      Webhook               @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+  event        String
+  payload      Json
+  status       WebhookDeliveryStatus @default(PENDING)
+  responseCode Int?
+  error        String?
+  attempt      Int                   @default(1)
+  createdAt    DateTime              @default(now())
+
+  @@index([webhookId, createdAt])
+  @@map("webhook_deliveries")
+}
+
+model Setting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     Json
+  category  String   @default("general")
+  isPublic  Boolean  @default(false)
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+
+  @@index([category])
+  @@map("settings")
+}

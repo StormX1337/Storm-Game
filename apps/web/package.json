@@ -1,0 +1,50 @@
+{
+  "name": "@storm/web",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --port 3000",
+    "build": "NODE_ENV=production next build",
+    "start": "next start --port 3000",
+    "typecheck": "tsc --noEmit",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@codemirror/lang-javascript": "6.2.2",
+    "@codemirror/lang-json": "6.0.1",
+    "@codemirror/lang-yaml": "6.1.2",
+    "@codemirror/theme-one-dark": "6.1.2",
+    "@storm/types": "workspace:*",
+    "@storm/ui": "workspace:*",
+    "@tanstack/react-query": "5.62.11",
+    "@uiw/react-codemirror": "4.23.7",
+    "@xterm/addon-fit": "0.10.0",
+    "@xterm/addon-search": "0.15.0",
+    "@xterm/addon-web-links": "0.11.0",
+    "@xterm/xterm": "5.5.0",
+    "clsx": "2.1.1",
+    "date-fns": "4.1.0",
+    "lucide-react": "0.469.0",
+    "next": "15.1.4",
+    "next-themes": "0.4.4",
+    "qrcode": "^1.5.4",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "recharts": "2.15.0",
+    "tailwind-merge": "2.6.0",
+    "zod": "3.24.1",
+    "zustand": "5.0.2"
+  },
+  "devDependencies": {
+    "@types/node": "22.10.5",
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "19.0.2",
+    "@types/react-dom": "19.0.2",
+    "autoprefixer": "10.4.20",
+    "postcss": "8.4.49",
+    "postcss-import": "16.1.0",
+    "tailwindcss": "3.4.17",
+    "tailwindcss-animate": "1.0.7",
+    "typescript": "5.7.3"
+  }
+}

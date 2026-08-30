@@ -1,0 +1,14 @@
+node_modules
+**/node_modules
+**/dist
+apps/web/.next
+.git
+.env
+.env.local
+.data
+data
+storage
+*.log
+playwright-report
+test-results
+docs

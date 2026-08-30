@@ -1,0 +1,204 @@
+import fp from 'fastify-plugin';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
+import { hashToken, safeCompare } from '@storm/security';
+import { COOKIE_NAMES } from '@storm/config';
+import {
+  Permission,
+  ROLE_PRIORITY,
+  type RoleName,
+  ErrorCode,
+} from '@storm/types';
+import { verifyJwt, JwtError } from '../lib/jwt.js';
+import { AppError, forbidden, unauthorized } from '../lib/errors.js';
+import { AuthService } from '../services/auth.service.js';
+
+export interface AuthenticatedUser {
+  id: string;
+  uuid: string;
+  email: string;
+  username: string;
+  role: RoleName;
+  rolePriority: number;
+  permissions: Set<string>;
+  sessionId: string | null;
+  apiKeyId: string | null;
+  suspended: boolean;
+  emailVerified: boolean;
+}
+
+declare module 'fastify' {
+  interface FastifyInstance {
+    auth: AuthService;
+    /** preHandler: requires a signed-in, non-suspended user. */
+    authenticate: (request: FastifyRequest) => Promise<void>;
+    /** preHandler factory: requires the given panel-wide permission. */
+    requirePermission: (
+      ...permissions: string[]
+    ) => (request: FastifyRequest) => Promise<void>;
+    /** Resolves a user from a token string (used by the WebSocket handshake). */
+    resolveUserFromToken: (token: string) => Promise<AuthenticatedUser>;
+  }
+  interface FastifyRequest {
+    user?: AuthenticatedUser;
+    /** Throws unless the request is authenticated. */
+    currentUser: () => AuthenticatedUser;
+  }
+}
+
+const JWT_ISSUER = 'storm-panel';
+
+export default fp(
+  async function authPlugin(app: FastifyInstance) {
+    app.decorate('auth', new AuthService(app));
+
+    /* ------------------------------------------------ user resolution -- */
+
+    async function loadUser(userId: string, sessionId: string | null, apiKeyId: string | null) {
+      const user = await app.prisma.user.findUnique({
+        where: { id: userId },
+        include: { role: { include: { permissions: true } } },
+      });
+      if (!user) throw unauthorized('Your account no longer exists');
+      if (user.suspendedAt) {
+        throw new AppError(403, ErrorCode.ACCOUNT_SUSPENDED, 'This account has been suspended');
+      }
+
+      const permissions = new Set<string>(user.role.permissions.map((p) => p.key));
+      for (const extra of user.extraPermissions) permissions.add(extra);
+      for (const denied of user.deniedPermissions) permissions.delete(denied);
+
+      return {
+        id: user.id,
+        uuid: user.uuid,
+        email: user.email,
+        username: user.username,
+        role: user.role.name as RoleName,
+        rolePriority: ROLE_PRIORITY[user.role.name as RoleName] ?? 0,
+        permissions,
+        sessionId,
+        apiKeyId,
+        suspended: Boolean(user.suspendedAt),
+        emailVerified: Boolean(user.emailVerifiedAt),
+      } satisfies AuthenticatedUser;
+    }
+
+    async function fromJwt(token: string): Promise<AuthenticatedUser> {
+      let payload;
+      try {
+        payload = verifyJwt(app.env.JWT_SECRET, token, JWT_ISSUER);
+      } catch (error) {
+        if (error instanceof JwtError) throw unauthorized(error.message);
+        throw error;
+      }
+      if (payload.typ !== 'access') throw unauthorized('That token cannot be used here');
+
+      // A revoked session must invalidate its access token immediately, so the
+      // session row is checked on every request rather than trusted from the JWT.
+      const session = await app.prisma.session.findUnique({ where: { id: payload.sid } });
+      if (!session || session.revokedAt || session.expiresAt.getTime() < Date.now()) {
+        throw unauthorized('Your session has expired, please sign in again');
+      }
+
+      return loadUser(payload.sub, session.id, null);
+    }
+
+    async function fromApiKey(raw: string): Promise<AuthenticatedUser> {
+      const [keyId, secret] = raw.split('.', 2);
+      if (!keyId || !secret) throw unauthorized('Malformed API key');
+
+      const key = await app.prisma.apiKey.findUnique({ where: { keyId } });
+      if (!key || key.revokedAt || (key.expiresAt && key.expiresAt.getTime() < Date.now())) {
+        throw unauthorized('That API key is not valid');
+      }
+      if (!safeCompare(key.keyHash, hashToken(secret))) {
+        throw unauthorized('That API key is not valid');
+      }
+
+      await app.prisma.apiKey
+        .update({ where: { id: key.id }, data: { lastUsedAt: new Date() } })
+        .catch(() => undefined);
+
+      const user = await loadUser(key.userId, null, key.id);
+      if (key.permissions.length > 0) {
+        // An API key can only ever narrow the user's permissions.
+        user.permissions = new Set([...user.permissions].filter((p) => key.permissions.includes(p)));
+      }
+      return user;
+    }
+
+    app.decorate('resolveUserFromToken', async (token: string) => {
+      if (token.startsWith('storm_')) return fromApiKey(token.slice('storm_'.length));
+      return fromJwt(token);
+    });
+
+    /* ------------------------------------------------------- decorators -- */
+
+    app.decorateRequest('user', undefined);
+    app.decorateRequest('currentUser', function currentUser(this: FastifyRequest) {
+      if (!this.user) throw unauthorized();
+      return this.user;
+    });
+
+    /**
+     * Populates `request.user` when credentials are present but never rejects —
+     * routes opt in to enforcement with `authenticate`.
+     */
+    app.addHook('onRequest', async (request) => {
+      // Node-agent callbacks carry node credentials, not a user session, and
+      // authenticate themselves inside the route. Parsing their header as a
+      // JWT here would reject them before they ever reach it.
+      if (request.url.includes('/internal/')) return;
+
+      const header = request.headers.authorization;
+      let token: string | undefined;
+
+      if (header?.startsWith('Bearer ')) {
+        token = header.slice(7).trim();
+      } else {
+        token = request.cookies[COOKIE_NAMES.accessToken];
+      }
+      if (!token) return;
+
+      try {
+        request.user = await app.resolveUserFromToken(token);
+      } catch (error) {
+        // Expired cookies are common; surface the failure only when the route
+        // actually requires authentication.
+        if (header) throw error;
+        request.log.debug({ err: error }, 'ignoring invalid session cookie');
+      }
+    });
+
+    app.decorate('authenticate', async (request: FastifyRequest) => {
+      if (!request.user) throw unauthorized();
+    });
+
+    app.decorate(
+      'requirePermission',
+      (...permissions: string[]) =>
+        async (request: FastifyRequest) => {
+          const user = request.user;
+          if (!user) throw unauthorized();
+          if (user.role === 'OWNER') return;
+          const granted = permissions.some((permission) => user.permissions.has(permission));
+          if (!granted) {
+            throw forbidden(`This action requires the ${permissions.join(' or ')} permission`);
+          }
+        },
+    );
+  },
+  { name: 'storm-auth', dependencies: ['storm-env', 'storm-prisma', 'storm-redis'] },
+);
+
+/** True when the user may act on resources belonging to other users. */
+export function isPanelAdmin(user: AuthenticatedUser): boolean {
+  return user.role === 'OWNER' || user.permissions.has(Permission.ADMIN_SERVERS);
+}
+
+/** Guards role escalation: you may never act on someone at or above your level. */
+export function assertOutranks(actor: AuthenticatedUser, targetRole: RoleName): void {
+  if (actor.role === 'OWNER') return;
+  if ((ROLE_PRIORITY[targetRole] ?? 0) >= actor.rolePriority) {
+    throw forbidden('You cannot manage an account at or above your own role level');
+  }
+}
