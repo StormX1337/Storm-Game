@@ -82,6 +82,33 @@ you have restored the database from before it:
 docker compose run --rm migrate npx prisma migrate resolve --rolled-back <migration>
 ```
 
+**nginx restarts in a loop and nothing answers, on 80 either**
+
+```bash
+docker compose logs --tail=20 nginx
+```
+
+A line beginning `storm: serving HTTP only` names the reason and the panel
+stays up on HTTP. If instead you see `cannot load certificate key`, the
+container is from before that check existed — `git pull` and rebuild.
+
+The usual cause is a certificate or key that did not survive being pasted into
+an editor. Check the files themselves:
+
+```bash
+openssl pkey -in docker/nginx/certs/origin.key -noout && echo "key ok"
+openssl x509 -in docker/nginx/certs/origin.pem -noout -subject -enddate
+
+# And that the two actually belong together — these must print the same hash:
+openssl x509 -in docker/nginx/certs/origin.pem -noout -pubkey | openssl sha256
+openssl pkey -in docker/nginx/certs/origin.key -pubout | openssl sha256
+```
+
+An editor that indents pasted lines is the classic culprit: PEM does not
+survive leading spaces. `grep -n '^ ' docker/nginx/certs/origin.key` finds it.
+Write the files with a here-document instead of an editor and the problem goes
+away.
+
 **`web` builds but shows a blank page**
 
 Check the browser console. A 502 from `/api` means nginx cannot reach the API —
