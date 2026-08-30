@@ -220,7 +220,29 @@ Saving it mints a token pair: a token id, a token, and an HMAC secret. The
 token is stored as a digest and the secret encrypted at rest, so **the panel
 shows the plaintext once**. Copy the configuration block it gives you.
 
-Lost it? `Admin → Nodes → <node> → Tokens → Rotate`, or from the CLI:
+### All on one machine
+
+For a single box running both the panel and its servers, the panel reaches the
+agent over the container network while customers still need a routable address
+for SFTP. Register the node with both:
+
+```bash
+docker compose exec api node apps/api/dist/cli/index.js node create \
+  --name main --location "Falkenstein" \
+  --hostname agent --scheme http \
+  --ip 10.0.0.2 --public-ip 203.0.113.10
+```
+
+`--hostname agent` is the Compose service name, so panel-to-agent traffic never
+leaves the host and port 8081 needs no firewall hole at all. `--public-ip` is
+what customers see for SFTP. Then bring the agent up with the credentials it
+printed:
+
+```bash
+docker compose --profile agent up -d
+```
+
+Lost the token? `Admin → Nodes → <node> → Tokens → Rotate`, or from the CLI:
 
 ```bash
 docker compose exec api node apps/api/dist/cli/index.js node token fsn-1

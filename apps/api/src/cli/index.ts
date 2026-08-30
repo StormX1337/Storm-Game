@@ -391,6 +391,10 @@ node
   .requiredOption('-l, --location <location>', 'human readable location')
   .requiredOption('-H, --hostname <hostname>', 'hostname the panel connects to')
   .requiredOption('-i, --ip <ip>', 'IP address')
+  // The panel and the customer often need different addresses for the same
+  // node: an all-in-one install reaches the agent over the container network
+  // while customers need a routable host for SFTP.
+  .option('--public-ip <ip>', 'address shown to customers for SFTP (defaults to --ip)')
   .option('--scheme <scheme>', 'http or https', 'https')
   .option('--agent-port <port>', 'agent port', '8081')
   .option('--sftp-port <port>', 'SFTP port', '2022')
@@ -409,6 +413,7 @@ node
           location: options.location!,
           hostname: options.hostname!,
           ip: options.ip!,
+          ...(options.publicIp ? { publicIp: options.publicIp } : {}),
           scheme: options.scheme ?? 'https',
           agentPort: Number(options.agentPort ?? 8081),
           sftpPort: Number(options.sftpPort ?? 2022),
