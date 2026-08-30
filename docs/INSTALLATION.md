@@ -159,6 +159,32 @@ panel.example.com {
 }
 ```
 
+**Cloudflare Origin certificates** — if Cloudflare proxies the hostname, the
+panel's own nginx can terminate TLS with an origin certificate. Create one in
+the dashboard (SSL/TLS → Origin Server), then:
+
+```bash
+cd /opt/storm-panel
+install -d -m 0755 docker/nginx/certs
+nano docker/nginx/certs/origin.pem       # the certificate
+nano docker/nginx/certs/origin.key       # the private key
+chmod 600 docker/nginx/certs/origin.key
+docker compose up -d nginx
+docker compose logs nginx | grep storm:  # "HTTPS enabled"
+```
+
+Both files are gitignored. The HTTPS server switches itself on only when both
+are present, so an install without certificates still starts on HTTP alone.
+Set Cloudflare's encryption mode to **Full (strict)** — an origin certificate
+is not trusted by browsers, only by Cloudflare, and any weaker mode makes the
+padlock a decoration.
+
+The client's address arrives in `CF-Connecting-IP`, and
+`docker/nginx/cloudflare.conf` restores it before anything keys on it. Without
+that, nginx's rate limit, the API's per-account limits and the audit log all
+see Cloudflare instead of the person — every visitor sharing one bucket and one
+log entry.
+
 **nginx with certbot** — set `HTTP_PORT=8000` in `.env` first, so the host's
 nginx can own 80 and 443:
 

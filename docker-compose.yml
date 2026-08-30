@@ -137,9 +137,17 @@ services:
     restart: unless-stopped
     ports:
       - '${HTTP_PORT:-80}:80'
+      - '${HTTPS_PORT:-443}:443'
     volumes:
       - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./docker/nginx/storm_proxy.conf:/etc/nginx/storm_proxy.conf:ro
+      - ./docker/nginx/storm_locations.conf:/etc/nginx/storm_locations.conf:ro
+      - ./docker/nginx/cloudflare.conf:/etc/nginx/cloudflare.conf:ro
+      - ./docker/nginx/tls.conf:/etc/nginx/tls.conf:ro
+      # Drop origin.pem and origin.key in here to serve HTTPS. Empty is fine:
+      # the entrypoint script leaves the TLS server off until both exist.
+      - ./docker/nginx/certs:/etc/nginx/certs:ro
+      - ./docker/nginx/entrypoint/40-storm-tls.sh:/docker-entrypoint.d/40-storm-tls.sh:ro
     depends_on:
       - api
       - web

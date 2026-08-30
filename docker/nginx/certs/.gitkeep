@@ -1,0 +1,3 @@
+Put origin.pem (certificate, 0644) and origin.key (private key, 0600) here to
+serve HTTPS. Both are gitignored — a key belongs on the server, not in a
+repository.
