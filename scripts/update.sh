@@ -53,7 +53,37 @@ step "Checking for changes"
 
 git rev-parse --git-dir >/dev/null 2>&1 || fail "Not a git checkout — update by hand."
 BRANCH="$(git rev-parse --abbrev-ref HEAD)"
-git fetch --quiet origin "$BRANCH" || fail "Could not reach the remote."
+
+# Never let git open a prompt. The host-side updater runs this as a systemd
+# service with no terminal, so a credential prompt there is an update that
+# hangs until someone notices; run by hand it is a script that sits silently
+# waiting for a username. Failing and saying why is better than either.
+export GIT_TERMINAL_PROMPT=0
+export GIT_ASKPASS=/bin/true
+export SSH_ASKPASS=/bin/true
+
+FETCH_ERR="$(git fetch --quiet origin "$BRANCH" 2>&1)" || {
+  printf '%s\n' "$FETCH_ERR" | sed 's/^/  /' >&2
+  case "$FETCH_ERR" in
+    *[Aa]uthentication*|*[Cc]ould\ not\ read\ Username*|*[Tt]erminal\ prompts\ disabled*|*403*|*401*)
+      printf '\n' >&2
+      fail "GitHub wants credentials for $(git remote get-url origin 2>/dev/null || echo origin).
+
+  A private repository over HTTPS needs a token, and GitHub also asks for one
+  when it is rate limiting anonymous requests from this address.
+
+  Store a personal access token once:
+    git config --global credential.helper store
+    git pull        # enter your username and the token as the password
+
+  Or switch the remote to SSH, if you have a deploy key here:
+    git remote set-url origin git@github.com:OWNER/REPO.git"
+      ;;
+    *)
+      fail "Could not reach the remote."
+      ;;
+  esac
+}
 
 CURRENT="$(git rev-parse HEAD)"
 TARGET="$(git rev-parse "origin/${BRANCH}")"

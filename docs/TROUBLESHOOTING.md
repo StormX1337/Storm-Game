@@ -7,6 +7,7 @@ second thing you try, after you have stopped guessing.
 - [First moves](#first-moves)
 - [The panel will not start](#the-panel-will-not-start)
 - [I pulled, but the panel looks the same](#i-pulled-but-the-panel-looks-the-same)
+- [The update asks for a GitHub username](#the-update-asks-for-a-github-username)
 - [Cannot sign in](#cannot-sign-in)
 - [A node never comes online](#a-node-never-comes-online)
 - [A server will not install](#a-server-will-not-install)
@@ -153,6 +154,52 @@ the hostname before suspecting the panel.
 
 Two things that are **not** the cause: the database (no migration changes what
 the sidebar renders) and the API container (it serves data, not pages).
+
+---
+
+## The update asks for a GitHub username
+
+```
+==> Checking for changes
+Username for 'https://github.com':
+```
+
+Git is being asked to authenticate and has nowhere to get a credential. Two
+things cause it, and they need the same fix:
+
+- **The repository is private.** Anonymous HTTPS access to it is refused.
+- **GitHub is rate limiting anonymous requests from this address.** Unauthenticated
+  git operations are capped per IP, and a host that checks often can hit the
+  cap. This one is intermittent, which is the tell: the same command worked
+  ten minutes ago.
+
+Which one it is:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' https://api.github.com/repos/OWNER/REPO
+```
+
+`200` means the repository is public, so it is the rate limit. `404` means it is
+private, or does not exist under that name.
+
+Either way, store a token once:
+
+```bash
+git config --global credential.helper store
+git pull    # username, then a personal access token as the password
+```
+
+A token with `repo` scope for a private repository; any token lifts the
+anonymous rate limit. Or use SSH, if the host has a deploy key:
+
+```bash
+git remote set-url origin git@github.com:OWNER/REPO.git
+```
+
+`scripts/update.sh` no longer waits at that prompt — it fails immediately and
+says this instead. That matters most for the host-side updater, which runs it as
+a service with no terminal: a prompt there would hang the update indefinitely
+while the panel showed it as still running.
 
 ---
 

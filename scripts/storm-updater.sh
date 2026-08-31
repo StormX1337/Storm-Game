@@ -92,7 +92,13 @@ process_request() {
   else
     log "update failed"
     printf '%s\n' "$output" | tail -20 | sed 's/^/  /'
-    write_status failed "$(printf '%s' "$output" | tail -3 | tr '\n' ' ')"
+    # update.sh marks its reason with the failure glyph. Taking the last three
+    # lines instead lands on whatever the message happened to end with — for a
+    # credentials failure, the SSH suggestion rather than the cause — so the
+    # panel would show a remedy for a problem it never named.
+    _reason="$(printf '%s' "$output" | sed 's/\x1b\[[0-9;]*m//g' | grep -m1 '✖' | sed 's/^[[:space:]]*✖[[:space:]]*//')"
+    [ -n "$_reason" ] || _reason="$(printf '%s' "$output" | tail -3 | tr '\n' ' ')"
+    write_status failed "$_reason"
   fi
 }
 
