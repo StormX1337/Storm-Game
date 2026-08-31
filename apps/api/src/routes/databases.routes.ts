@@ -84,8 +84,13 @@ export default async function serverDatabaseRoutes(app: FastifyInstance): Promis
       const username = `${prefix}_${input.name.toLowerCase()}`.slice(0, 30);
       const password = generatePassword(28);
 
+      // Deliberately global, not scoped to this server: the name goes to a
+      // shared host where it must be unique across every tenant, and the column
+      // is unique too. Saying "for this server" was wrong — a name can be taken
+      // by a server the caller cannot see, and naming that server would leak
+      // that it exists.
       const duplicate = await app.prisma.serverDatabase.findFirst({ where: { databaseName } });
-      if (duplicate) throw badRequest('A database with that name already exists for this server');
+      if (duplicate) throw badRequest('That database name is already taken. Choose another.');
 
       await app.databases.provision(host, databaseName, username, password, input.remoteAccess);
 
