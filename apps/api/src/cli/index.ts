@@ -11,6 +11,7 @@ import { Command } from 'commander';
 import { createInterface } from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
 import { execFile } from 'node:child_process';
+import { readdir } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -471,9 +472,10 @@ node
 
 node
   .command('token')
-  .description('Issue a fresh token for an existing node')
+  .description('Issue a fresh token for an existing node and revoke the old ones')
   .argument('<name>', 'node name')
-  .action(async (name: string) => {
+  .option('--keep-existing', 'leave the previous tokens valid instead of revoking them')
+  .action(async (name: string, options: { keepExisting?: boolean }) => {
     const env = loadApiEnv();
 
     await withPrisma(async (prisma) => {
@@ -489,6 +491,17 @@ node
       const secret = generateToken(32);
       const tokenId = generateToken(8).slice(0, 16);
 
+      // Revoke first. The usual reason to rotate is that the old token is
+      // somewhere it should not be, and a rotation that leaves it working is
+      // not one — the panel would pick the newest token for its own calls and
+      // never notice the leaked one still authenticating.
+      const revoked = options.keepExisting
+        ? { count: 0 }
+        : await prisma.nodeToken.updateMany({
+            where: { nodeId: found.id, revokedAt: null },
+            data: { revokedAt: new Date() },
+          });
+
       await prisma.nodeToken.create({
         data: {
           nodeId: found.id,
@@ -503,6 +516,14 @@ node
       log.field('AGENT_TOKEN_ID', tokenId);
       log.field('AGENT_TOKEN', token);
       log.field('AGENT_SECRET', secret);
+
+      if (options.keepExisting) {
+        log.warn('Previous tokens are still valid (--keep-existing).');
+      } else if (revoked.count > 0) {
+        log.warn(
+          `Revoked ${revoked.count} previous token(s). The node is offline until it uses these.`,
+        );
+      }
       log.warn('Update the agent configuration and restart it to use these.');
     });
   });
@@ -668,11 +689,82 @@ program
       process.exitCode = 1;
     }
 
+    // Reusing one value for all three passes validation and quietly couples
+    // three unrelated compromises together.
+    const secrets = [env.JWT_SECRET, env.ENCRYPTION_KEY, env.COOKIE_SECRET];
+    if (new Set(secrets).size === secrets.length) {
+      log.success('Secrets are long enough and distinct');
+    } else {
+      log.error('JWT_SECRET, ENCRYPTION_KEY and COOKIE_SECRET must differ from each other');
+      process.exitCode = 1;
+    }
+
+    // A half-applied migration is the cause behind a whole family of confusing
+    // "column does not exist" errors, and it does not show up anywhere else.
+    try {
+      const onDisk = (
+        await readdir(path.join(DATABASE_PACKAGE, 'prisma', 'migrations'), {
+          withFileTypes: true,
+        })
+      )
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => entry.name);
+
+      await withPrisma(async (prisma) => {
+        const applied = await prisma.$queryRaw<{ name: string; finished: boolean }[]>`
+          SELECT migration_name AS name, (finished_at IS NOT NULL) AS finished
+          FROM _prisma_migrations
+        `;
+        const failed = applied.filter((row) => !row.finished).map((row) => row.name);
+        const done = new Set(applied.filter((row) => row.finished).map((row) => row.name));
+        const pending = onDisk.filter((name) => !done.has(name));
+
+        if (failed.length > 0) {
+          log.error(`Migration did not finish: ${failed.join(', ')}`);
+          process.exitCode = 1;
+        } else if (pending.length > 0) {
+          log.error(`${pending.length} migration(s) not applied — run "storm migrate"`);
+          for (const name of pending) log.field('pending', name);
+          process.exitCode = 1;
+        } else {
+          log.success(`Schema is up to date (${done.size} migrations)`);
+        }
+      });
+    } catch {
+      // An unreadable migrations directory or missing table is worth saying
+      // out loud, but it is not itself a reason to fail the whole check —
+      // the database result above already covers "can we talk to it".
+      log.warn('Could not determine migration state');
+    }
+
     const owners = await withPrisma((prisma) =>
       prisma.user.count({ where: { role: { name: 'OWNER' } } }),
     ).catch(() => 0);
     if (owners === 0) {
       log.warn('No owner account exists — run "storm admin create --role OWNER"');
+    }
+
+    // A node the panel has stopped hearing from still looks fine in a server
+    // list; the servers on it are the ones that stop responding.
+    const quietCutoff = new Date(Date.now() - 5 * 60_000);
+    const quiet = await withPrisma((prisma) =>
+      prisma.node.findMany({
+        where: {
+          maintenanceMode: false,
+          OR: [{ lastHeartbeatAt: null }, { lastHeartbeatAt: { lt: quietCutoff } }],
+        },
+        select: { name: true, lastHeartbeatAt: true },
+        orderBy: { name: 'asc' },
+      }),
+    ).catch(() => []);
+
+    if (quiet.length === 0) {
+      log.success('Every node has checked in recently');
+    } else {
+      log.warn(`${quiet.length} node(s) have not checked in for five minutes:`);
+      for (const entry of quiet) {
+        log.field(entry.name, entry.lastHeartbeatAt?.toISOString() ?? 'never');
+      }
     }
   });
 

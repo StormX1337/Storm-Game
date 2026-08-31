@@ -265,6 +265,11 @@ To try a change without touching what customers are using, **clone** the
 template. The clone records its parent, so the lineage stays visible, and you
 can point one test server at it before editing the original.
 
+There is a second reason to work from a clone. Re-running the seed — `storm
+seed`, or an upgrade that ships new reference data — resets the twelve built-in
+templates to their shipped definitions and discards edits made to them in the
+panel. A clone has its own slug and is never touched.
+
 ---
 
 ## Import and export

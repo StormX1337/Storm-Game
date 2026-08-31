@@ -218,6 +218,7 @@ Full detail and the threat model: `docs/SECURITY.md`.
 | [DEPLOYMENT.md](docs/DEPLOYMENT.md)           | Scaling, backups, upgrades, monitoring |
 | [SECURITY.md](docs/SECURITY.md)               | Threat model and controls              |
 | [API.md](docs/API.md)                         | REST API reference and examples        |
+| [CLI.md](docs/CLI.md)                         | The `storm` command line and recovery  |
 | [NODE-AGENT.md](docs/NODE-AGENT.md)           | Agent protocol and operations          |
 | [GAME-TEMPLATES.md](docs/GAME-TEMPLATES.md)   | Writing and editing templates          |
 | [BACKUPS.md](docs/BACKUPS.md)                 | Storage drivers, retention, restores   |
