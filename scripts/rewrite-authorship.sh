@@ -18,6 +18,10 @@
 # VPS included — has to be reset afterwards:
 #
 #   git fetch origin && git reset --hard origin/<branch>
+#
+# Rewriting also drops commit signatures, because the commits are rebuilt. Every
+# rewritten commit will read "Unverified" on GitHub afterwards. That is a
+# property of rewriting history, not something this script chooses.
 
 set -euo pipefail
 
@@ -68,17 +72,15 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
 cat > "${TMP}/env-filter.sh" <<EOF
-# Only the addresses named above. Anything else keeps its own author.
+# The author only, and only the addresses named above.
+#
+# GitHub credits the author, so that is what puts a commit under your name. The
+# committer is left alone: it is what the signature covers, and rewriting it
+# would make every commit read as unsigned by someone it was not.
 case ",${MATCH}," in
   *",\$GIT_AUTHOR_EMAIL,"*)
     export GIT_AUTHOR_NAME="${NAME}"
     export GIT_AUTHOR_EMAIL="${EMAIL}"
-    ;;
-esac
-case ",${MATCH}," in
-  *",\$GIT_COMMITTER_EMAIL,"*)
-    export GIT_COMMITTER_NAME="${NAME}"
-    export GIT_COMMITTER_EMAIL="${EMAIL}"
     ;;
 esac
 EOF
