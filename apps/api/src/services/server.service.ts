@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import type { Node, Prisma, Server } from '@storm/database';
+import type { Node, Prisma, Server, ServerAllocation } from '@storm/database';
 import { generatePassword, generateReadableId } from '@storm/security';
 import {
   ErrorCode,
@@ -399,10 +399,23 @@ export class ServerService {
   /* ---------------------------------------------------------- agents -- */
 
   /** Builds the container specification handed to the node agent. */
-  async buildAgentSpec(serverId: string): Promise<AgentServerSpec> {
+  /**
+   * Builds the specification a node needs to run this server.
+   *
+   * `allocationOverride` exists for a move: while one is running the server
+   * holds ports on both nodes at once, and reading them from the row would let
+   * the old node's address win — baked into SERVER_IP, the startup command and
+   * every config file the template writes. The caller that knows which node
+   * the spec is for passes that node's ports instead.
+   */
+  async buildAgentSpec(
+    serverId: string,
+    allocationOverride?: ServerAllocation[],
+  ): Promise<AgentServerSpec> {
     const server = await this.findWithRelations(serverId);
     const variables = Object.fromEntries(server.variables.map((v) => [v.key, v.value]));
-    const primary = server.allocations.find((a) => a.isPrimary) ?? server.allocations[0];
+    const allocations = allocationOverride ?? server.allocations;
+    const primary = allocations.find((a) => a.isPrimary) ?? allocations[0];
 
     const context: Record<string, string> = {
       ...variables,
@@ -430,7 +443,7 @@ export class ServerService {
         pidsLimit: server.pidsLimit,
         oomKill: server.oomKill,
       },
-      ports: server.allocations.map((allocation) => ({
+      ports: allocations.map((allocation) => ({
         ip: allocation.ip,
         port: allocation.port,
         containerPort: allocation.port,

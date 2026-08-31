@@ -38,6 +38,7 @@ enum ServerStatus {
   CRASHED
   SUSPENDED
   REINSTALLING
+  TRANSFERRING
 }
 
 enum NodeStatus {

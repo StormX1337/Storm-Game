@@ -279,6 +279,20 @@ export const updateSettingsSchema = z.object({
   maintenanceMessage: z.string().max(1000).optional(),
 });
 
+/* ------------------------------------------------------------- server move -- */
+
+export const moveServerSchema = z.object({
+  nodeId: cuidLikeId,
+  /** A specific port on the destination; the lowest free one when omitted. */
+  allocationId: cuidLikeId.optional(),
+  /**
+   * Keep the archive the move was made from once it has landed. Off by
+   * default: the copy exists to survive the move, not to quietly spend the
+   * customer's backup allowance forever.
+   */
+  keepBackup: z.boolean().default(false),
+});
+
 /* -------------------------------------------------------------- audit log -- */
 
 export const auditQuerySchema = z.object({

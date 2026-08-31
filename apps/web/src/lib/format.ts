@@ -105,6 +105,7 @@ export const SERVER_STATUS_META: Record<
   CRASHED: { label: 'Crashed', tone: 'destructive' },
   SUSPENDED: { label: 'Suspended', tone: 'destructive' },
   REINSTALLING: { label: 'Reinstalling', tone: 'default', pulse: true },
+  TRANSFERRING: { label: 'Moving node', tone: 'default', pulse: true },
 };
 
 export const NODE_STATUS_META: Record<

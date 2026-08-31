@@ -2,14 +2,23 @@ import { Worker } from 'bullmq';
 import type { FastifyInstance } from 'fastify';
 import { QUEUE_NAMES } from '@storm/config';
 import { BackupStatus, NotificationType, WebhookEvent, type AgentBackupResult } from '@storm/types';
-import type { BackupJobData, RestoreJobData } from '../plugins/queues.js';
+import type { BackupJobData, RestoreJobData, TransferJobData } from '../plugins/queues.js';
+import { runTransfer } from './transfer.worker.js';
 import { concurrency } from './concurrency.js';
 
 /** Executes backup creation and restoration against the owning node. */
-export function createBackupWorker(app: FastifyInstance): Worker<BackupJobData | RestoreJobData> {
-  return new Worker<BackupJobData | RestoreJobData>(
+export function createBackupWorker(
+  app: FastifyInstance,
+): Worker<BackupJobData | RestoreJobData | TransferJobData> {
+  return new Worker<BackupJobData | RestoreJobData | TransferJobData>(
     QUEUE_NAMES.backups,
     async (job) => {
+      // A move shares this queue because it is the same kind of work: hours
+      // long, node-bound, and made of the very backup and restore below.
+      if (job.name === 'transfer') {
+        await runTransfer(app, job.data as TransferJobData);
+        return;
+      }
       if (job.name === 'restore') {
         await runRestore(app, job.data as RestoreJobData);
         return;

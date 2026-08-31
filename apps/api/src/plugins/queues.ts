@@ -20,6 +20,14 @@ export interface RestoreJobData {
   userId: string | null;
 }
 
+export interface TransferJobData {
+  serverId: string;
+  destinationNodeId: string;
+  allocationId: string | null;
+  keepBackup: boolean;
+  userId: string | null;
+}
+
 export interface WebhookJobData {
   webhookId: string;
   event: string;
@@ -41,7 +49,7 @@ declare module 'fastify' {
   interface FastifyInstance {
     queues: {
       install: Queue<InstallJobData>;
-      backups: Queue<BackupJobData | RestoreJobData>;
+      backups: Queue<BackupJobData | RestoreJobData | TransferJobData>;
       webhooks: Queue<WebhookJobData>;
       mail: Queue<MailJobData>;
       schedules: Queue<ScheduleJobData>;
@@ -49,6 +57,7 @@ declare module 'fastify' {
       enqueueInstall: (serverId: string, options?: Partial<InstallJobData>) => Promise<void>;
       enqueueBackup: (backupId: string) => Promise<void>;
       enqueueRestore: (backupId: string, truncate: boolean, userId: string | null) => Promise<void>;
+      enqueueTransfer: (data: TransferJobData) => Promise<void>;
       enqueueWebhook: (
         webhookId: string,
         event: string,
@@ -72,7 +81,10 @@ export default fp(
     const connection = { url: app.env.REDIS_URL };
 
     const install = new Queue<InstallJobData>(QUEUE_NAMES.installs, { connection });
-    const backups = new Queue<BackupJobData | RestoreJobData>(QUEUE_NAMES.backups, { connection });
+    const backups = new Queue<BackupJobData | RestoreJobData | TransferJobData>(
+      QUEUE_NAMES.backups,
+      { connection },
+    );
     const webhooks = new Queue<WebhookJobData>(QUEUE_NAMES.webhooks, { connection });
     const mail = new Queue<MailJobData>(QUEUE_NAMES.mail, { connection });
     const schedules = new Queue<ScheduleJobData>(QUEUE_NAMES.schedules, { connection });
@@ -110,6 +122,18 @@ export default fp(
           { backupId, truncate, userId },
           { ...RETRY, attempts: 1, jobId: `restore-${backupId}-${Date.now()}` },
         );
+      },
+
+      async enqueueTransfer(data) {
+        // Never retried. A half-finished move has already changed which node
+        // owns the files, so running the same steps again from the top would
+        // act on a world that no longer matches the job — the worker unwinds
+        // its own failure instead and leaves the server where it started.
+        await backups.add('transfer', data, {
+          ...RETRY,
+          attempts: 1,
+          jobId: `transfer-${data.serverId}-${Date.now()}`,
+        });
       },
 
       async enqueueWebhook(webhookId, event, payload) {

@@ -502,6 +502,59 @@ Unauthenticated, for load balancers and monitoring.
 
 ---
 
+## Moving a server to another node
+
+```http
+POST /admin/servers/:id/move
+{ "nodeId": "…", "allocationId": "…", "keepBackup": false }
+```
+
+Requires `admin.servers`. The move runs on a queue and takes as long as the
+files do, so this returns 200 once it is accepted, not once it is done. Watch
+the server's status: `TRANSFERRING` while it runs, `OFFLINE` on the new node
+when it lands.
+
+**The archive is the route between the two hosts.** The source node uploads it
+to backup storage and the destination downloads it, so a shared storage — S3 or
+compatible — must exist. A `LOCAL` storage lives on one node's own disk, which
+the other cannot read, and the endpoint refuses the move up front rather than
+letting the worker discover it an hour in. That check sits with the others,
+all of them made before anything is touched:
+
+| Refused when                                     | Status                           |
+| ------------------------------------------------ | -------------------------------- |
+| The destination is the node it already runs on   | 400                              |
+| The destination is offline or in maintenance     | 409                              |
+| The destination lacks memory or disk             | 409 `INSUFFICIENT_NODE_CAPACITY` |
+| The destination has no free port                 | 409 `NO_ALLOCATION_AVAILABLE`    |
+| No shared backup storage exists                  | 409                              |
+| The server is installing, reinstalling or moving | 409                              |
+
+The order of the move is chosen so the point of no return comes last:
+
+1. Stop the server and wait for the container to actually be down — an archive
+   taken mid-write is a world saved half way through a tick.
+2. Archive it from the source node into storage.
+3. Claim a port on the destination.
+4. Build the container there and unpack the archive into it. The specification
+   is built from the destination's port, not the server's row: mid-move it holds
+   ports on both nodes, and the old address would otherwise be written into
+   `SERVER_IP`, the startup command and every config file the template renders.
+5. Only now flip the row and release the old ports.
+6. Delete the container and files from the old node.
+
+Anything failing before step 5 leaves the source untouched and complete: the
+destination's port is handed back, its half-built container removed, and the
+server is still where it was. Step 6 failing costs disk on the old node and
+nothing else, so it does not fail the move.
+
+The archive is deleted afterwards unless `keepBackup` is set — it exists to
+survive the move, not to spend the customer's backup allowance forever.
+
+The server's address changes. Anything that connects to it needs the new one.
+
+---
+
 ## Maintenance mode
 
 `PATCH /admin/settings` with `maintenanceMode: true` closes the panel to
