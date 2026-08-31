@@ -7,6 +7,10 @@
 #   ./scripts/rewrite-authorship.sh --apply         # rewrite locally
 #   ./scripts/rewrite-authorship.sh --apply --push  # rewrite and force-push
 #
+# REWRITE_NAME, REWRITE_EMAIL and REWRITE_MATCH_EMAIL override who the commits
+# become and which addresses are rewritten. The email is what GitHub matches an
+# account on, so it has to be one your account has registered.
+#
 # It rewrites metadata only. File contents are untouched, and the script
 # verifies that before it will push.
 #
@@ -17,8 +21,17 @@
 
 set -euo pipefail
 
-NAME="${REWRITE_NAME:-Storm Panel}"
-EMAIL="${REWRITE_EMAIL:-ivanbul85@gmail.com}"
+# GitHub links a commit to an account by the address in it, not by the name —
+# so this has to be an address that account has registered, or the commits show
+# up under a stranger, or under nobody at all.
+NAME="${REWRITE_NAME:-IvoX777}"
+EMAIL="${REWRITE_EMAIL:-ivanpopov777@gmx.de}"
+
+# Addresses to rewrite, separated by commas. Anything not listed keeps its own
+# author: this is for correcting your own commits, not for claiming other
+# people's.
+MATCH="${REWRITE_MATCH_EMAIL:-noreply@anthropic.com,ivanbul85@gmail.com}"
+
 APPLY=0
 PUSH=0
 
@@ -40,6 +53,7 @@ BEFORE_TREE="$(git rev-parse "HEAD^{tree}")"
 echo "Repository: $(pwd)"
 echo "Branch:     ${BRANCH}"
 echo "New author: ${NAME} <${EMAIL}>"
+echo "Rewriting:  ${MATCH}"
 echo
 echo "Authors currently in the history:"
 git log --format='%an <%ae>' | sort | uniq -c | sed 's/^/  /'
@@ -54,16 +68,19 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
 cat > "${TMP}/env-filter.sh" <<EOF
-# Only commits attributed to the assistant. Anything you or anyone else
-# authored keeps its own name.
-if [ "\$GIT_AUTHOR_EMAIL" = "noreply@anthropic.com" ]; then
-  export GIT_AUTHOR_NAME="${NAME}"
-  export GIT_AUTHOR_EMAIL="${EMAIL}"
-fi
-if [ "\$GIT_COMMITTER_EMAIL" = "noreply@anthropic.com" ]; then
-  export GIT_COMMITTER_NAME="${NAME}"
-  export GIT_COMMITTER_EMAIL="${EMAIL}"
-fi
+# Only the addresses named above. Anything else keeps its own author.
+case ",${MATCH}," in
+  *",\$GIT_AUTHOR_EMAIL,"*)
+    export GIT_AUTHOR_NAME="${NAME}"
+    export GIT_AUTHOR_EMAIL="${EMAIL}"
+    ;;
+esac
+case ",${MATCH}," in
+  *",\$GIT_COMMITTER_EMAIL,"*)
+    export GIT_COMMITTER_NAME="${NAME}"
+    export GIT_COMMITTER_EMAIL="${EMAIL}"
+    ;;
+esac
 EOF
 
 cat > "${TMP}/msg-filter.sh" <<'EOF'
