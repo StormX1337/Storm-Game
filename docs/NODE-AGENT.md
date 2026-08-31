@@ -332,6 +332,17 @@ Each session is confined to its server's directory. The same path resolution
 and symlink checks apply as everywhere else, so `cd /` in an SFTP client lands
 at the server's root, not the host's.
 
+Creating links is refused: `ln -s` over SFTP answers "operation unsupported"
+rather than making one. A symlink is the one file a customer could leave behind
+that points somewhere every later read has to be checked against, and no game
+server needs to make one this way. Reads still follow links safely — a server
+that symlinks its own world folder keeps working — the refusal is only on
+creating them remotely.
+
+`chmod` is accepted and ignored. Honouring it would let a client mark its own
+files unreadable by the container user and then wonder why the server will not
+start; the panel owns ownership and modes.
+
 The host key is generated on first start and persisted, so clients do not see a
 changed-key warning after a restart.
 

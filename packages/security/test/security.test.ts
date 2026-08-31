@@ -87,6 +87,81 @@ test('symlink escapes are rejected', async () => {
   await fs.rm(base, { recursive: true, force: true });
 });
 
+test('symlink escapes are rejected in every shape they come in', async () => {
+  const base = await fs.mkdtemp(path.join(os.tmpdir(), 'storm-link-'));
+  const root = path.join(base, 'root');
+  const outside = path.join(base, 'outside');
+  await fs.mkdir(root);
+  await fs.mkdir(path.join(root, 'plugins'));
+  await fs.mkdir(outside);
+  await fs.writeFile(path.join(outside, 'secret.txt'), 'nope');
+
+  // A link straight at a file, not a directory to walk through.
+  await fs.symlink(path.join(outside, 'secret.txt'), path.join(root, 'direct.txt'));
+  await assert.rejects(
+    () => assertNoSymlinkEscape(root, path.join(root, 'direct.txt')),
+    PathTraversalError,
+    'a symlink to a file outside was followed',
+  );
+
+  // Relative, which is what `ln -s ../../outside` produces and what a string
+  // comparison on the link target would miss.
+  await fs.symlink('../outside', path.join(root, 'relative'));
+  await assert.rejects(
+    () => assertNoSymlinkEscape(root, path.join(root, 'relative', 'secret.txt')),
+    PathTraversalError,
+    'a relative symlink escaped',
+  );
+
+  // Chained: resolving one hop is not enough.
+  await fs.symlink(path.join(root, 'relative'), path.join(root, 'chained'));
+  await assert.rejects(
+    () => assertNoSymlinkEscape(root, path.join(root, 'chained', 'secret.txt')),
+    PathTraversalError,
+    'a chain of symlinks escaped',
+  );
+
+  // Creating something new *inside* a symlinked directory — the file does not
+  // exist yet, so the check has to walk up to the link to see it.
+  await assert.rejects(
+    () => assertNoSymlinkEscape(root, path.join(root, 'relative', 'planted.txt')),
+    PathTraversalError,
+    'a new file could be created through a symlink',
+  );
+
+  // Deeper still, with several components that do not exist.
+  await assert.rejects(
+    () => assertNoSymlinkEscape(root, path.join(root, 'relative', 'a', 'b', 'c.txt')),
+    PathTraversalError,
+  );
+
+  // A link that stays inside must keep working: this guard has to refuse
+  // escapes without breaking a server that symlinks its own world folder.
+  await fs.symlink(path.join(root, 'plugins'), path.join(root, 'inside'));
+  await fs.writeFile(path.join(root, 'plugins', 'config.yml'), 'ok');
+  await assertNoSymlinkEscape(root, path.join(root, 'inside', 'config.yml'));
+  await assertNoSymlinkEscape(root, path.join(root, 'inside', 'not-yet.yml'));
+
+  await fs.rm(base, { recursive: true, force: true });
+});
+
+test('a root reached through a symlink is still its own root', async () => {
+  // /var/lib/storm is a symlink on plenty of hosts, so the root itself resolves
+  // elsewhere. Comparing the requested path against the unresolved root would
+  // then reject every legitimate file.
+  const base = await fs.mkdtemp(path.join(os.tmpdir(), 'storm-realroot-'));
+  const real = path.join(base, 'real');
+  const linked = path.join(base, 'linked');
+  await fs.mkdir(real);
+  await fs.writeFile(path.join(real, 'server.properties'), 'ok');
+  await fs.symlink(real, linked);
+
+  await assertNoSymlinkEscape(linked, path.join(linked, 'server.properties'));
+  await assertNoSymlinkEscape(linked, path.join(linked, 'new-file.txt'));
+
+  await fs.rm(base, { recursive: true, force: true });
+});
+
 test('filename sanitising and display paths', () => {
   assert.equal(sanitizeFilename('../../etc/passwd'), 'passwd');
   assert.equal(sanitizeFilename('..'), 'unnamed');

@@ -350,6 +350,17 @@ export class SftpService {
 
     sftp.on('FSETSTAT', (reqid) => sftp.status(reqid, STATUS_CODE.OK));
 
+    // Links are refused outright rather than left unhandled.
+    //
+    // A symlink is the one file a customer could create that points somewhere
+    // the path checks would otherwise have to catch on every later read, and
+    // there is no reason a game server needs one made over SFTP. Without these
+    // handlers ssh2 simply never answers, so `ln -s` hangs the client until it
+    // times out — the refusal was already the behaviour, just an accidental and
+    // unreadable one.
+    sftp.on('SYMLINK', (reqid) => sftp.status(reqid, STATUS_CODE.OP_UNSUPPORTED));
+    sftp.on('READLINK', (reqid) => sftp.status(reqid, STATUS_CODE.OP_UNSUPPORTED));
+
     sftp.on('close', () => {
       for (const entry of handles.values()) {
         fs.close(entry.fd, () => undefined);
