@@ -145,6 +145,38 @@ Rules that save you grief:
 - Pin versions where you can. "Latest" changes under you.
 - Never `curl | bash` from a URL a variable controls.
 
+### Upstream APIs move
+
+Every script here depends on a service somebody else operates, and those change
+on their own schedule. PaperMC retired its v2 API; the built-in Minecraft
+template kept calling it and every install began failing with `curl: (22)` and
+an exit code — which names neither the URL nor the status, so nobody could tell
+what had broken.
+
+Three habits make that survivable:
+
+**Report what failed.** Wrap the fetching so a failure prints the URL and the
+HTTP status. A 410 says the endpoint is gone; a 000 says the node has no
+outbound network. Those need different fixes and look identical otherwise.
+
+**Read the response loosely.** Pulling a download URL out with a path like
+`.downloads."server:default".url` breaks the day upstream renames a field. Ask
+for the shape you need instead:
+
+```bash
+jq -r '[.. | objects | select(has("url")) | .url]
+       | map(select(endswith(".jar"))) | first // empty'
+```
+
+**Leave an escape hatch.** Give the template a variable holding a direct
+download URL, checked before any API call. When an upstream changes, the
+operator installs anyway instead of waiting for a template update. The built-in
+Minecraft template calls it `SERVER_DOWNLOAD_URL`.
+
+And check which service actually serves a project: Purpur is not a PaperMC
+project and has its own API, which the built-in template got wrong for as long
+as PaperMC answered 404 quietly.
+
 The panel `chown`s the result to uid 1000 afterwards, so a root-owned install
 still yields a directory the unprivileged game process can write.
 

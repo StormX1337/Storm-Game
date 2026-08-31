@@ -104,24 +104,97 @@ PROJECT="\${PROJECT:-paper}"
 VERSION="\${MINECRAFT_VERSION:-latest}"
 JARFILE="\${SERVER_JARFILE:-server.jar}"
 
-if [ "\$PROJECT" = "vanilla" ]; then
-  echo "[storm] Resolving vanilla \$VERSION ..."
-  MANIFEST=\$(curl -fsSL https://launchermeta.mojang.com/mc/game/version_manifest_v2.json)
+# Every fetch says which URL failed and what came back. The old script let a
+# bare "curl: (22)" and an exit code stand for "the upstream API changed",
+# which is not something anyone can act on.
+fetch() {
+  _url="\$1"
+  _body=\$(curl -fsSL --retry 3 --retry-delay 2 -w '\n%{http_code}' "\$_url" 2>/dev/null) || {
+    # curl already prints 000 when it never connected, and exits non-zero while
+    # doing it — so a fallback here appends a second 000 and reports "HTTP
+    # 000000", which reads like a bug in the panel rather than an unreachable
+    # host.
+    _code=\$(curl -s -o /dev/null -w '%{http_code}' "\$_url" 2>/dev/null)
+    echo "[storm] Request failed: \$_url" >&2
+    echo "[storm] HTTP \$_code — if this is 404 or 410, the upstream API has moved." >&2
+    echo "[storm] Work around it by setting SERVER_DOWNLOAD_URL on this server." >&2
+    exit 1
+  }
+  printf '%s' "\$_body" | sed '\$d'
+}
+
+# The escape hatch. Upstream APIs change on their own schedule; nobody should be
+# stuck waiting for a template update to install a server.
+if [ -n "\${SERVER_DOWNLOAD_URL:-}" ]; then
+  DOWNLOAD="\$SERVER_DOWNLOAD_URL"
+  echo "[storm] Using the download URL set on this server."
+
+elif [ "\$PROJECT" = "vanilla" ]; then
+  echo "[storm] Resolving vanilla \$VERSION from Mojang ..."
+  MANIFEST=\$(fetch https://launchermeta.mojang.com/mc/game/version_manifest_v2.json)
   if [ "\$VERSION" = "latest" ]; then
     VERSION=\$(echo "\$MANIFEST" | jq -r '.latest.release')
   fi
   URL=\$(echo "\$MANIFEST" | jq -r --arg V "\$VERSION" '.versions[] | select(.id==\$V) | .url')
-  DOWNLOAD=\$(curl -fsSL "\$URL" | jq -r '.downloads.server.url')
-else
-  echo "[storm] Resolving \$PROJECT \$VERSION from the PaperMC API ..."
+  [ -n "\$URL" ] && [ "\$URL" != "null" ] || {
+    echo "[storm] Mojang lists no version \$VERSION." >&2; exit 1;
+  }
+  DOWNLOAD=\$(fetch "\$URL" | jq -r '.downloads.server.url')
+
+elif [ "\$PROJECT" = "purpur" ]; then
+  # Purpur is its own project with its own API. Asking PaperMC for it never
+  # worked, and stopped failing quietly once PaperMC's v2 API was retired.
+  echo "[storm] Resolving purpur \$VERSION from the Purpur API ..."
   if [ "\$VERSION" = "latest" ]; then
-    VERSION=\$(curl -fsSL "https://api.papermc.io/v2/projects/\$PROJECT" | jq -r '.versions[-1]')
+    VERSION=\$(fetch https://api.purpurmc.org/v2/purpur | jq -r '.versions[-1]')
   fi
-  BUILD=\$(curl -fsSL "https://api.papermc.io/v2/projects/\$PROJECT/versions/\$VERSION/builds" \\
-    | jq -r '[.builds[] | select(.channel=="default")][-1].build')
-  NAME=\$(curl -fsSL "https://api.papermc.io/v2/projects/\$PROJECT/versions/\$VERSION/builds/\$BUILD" \\
-    | jq -r '.downloads.application.name')
-  DOWNLOAD="https://api.papermc.io/v2/projects/\$PROJECT/versions/\$VERSION/builds/\$BUILD/downloads/\$NAME"
+  BUILD=\$(fetch "https://api.purpurmc.org/v2/purpur/\$VERSION" | jq -r '.builds.latest')
+  [ -n "\$BUILD" ] && [ "\$BUILD" != "null" ] || {
+    echo "[storm] Purpur has no build for \$VERSION." >&2; exit 1;
+  }
+  DOWNLOAD="https://api.purpurmc.org/v2/purpur/\$VERSION/\$BUILD/download"
+
+else
+  # PaperMC's v2 API answers 410 Gone; v3 is served from fill.papermc.io.
+  echo "[storm] Resolving \$PROJECT \$VERSION from the PaperMC API ..."
+  API="https://fill.papermc.io/v3/projects/\$PROJECT"
+
+  if [ "\$VERSION" = "latest" ]; then
+    # Versions come back as bare strings in some responses and as objects in
+    # others; take whichever this one is rather than assuming.
+    VERSION=\$(fetch "\$API" | jq -r '
+      [.. | objects | select(has("version")) | .version] as \$objs
+      | (if (\$objs | length) > 0 then \$objs
+         else [.. | arrays | .[] | select(type=="string")] end)
+      | last // empty')
+    [ -n "\$VERSION" ] || {
+      echo "[storm] Could not read a version list from \$API." >&2; exit 1;
+    }
+    echo "[storm] Latest is \$VERSION"
+  fi
+
+  BUILDS=\$(fetch "\$API/versions/\$VERSION/builds")
+
+  # Deliberately shape-agnostic: take the newest build entry by whatever
+  # numeric id it carries, then the first .jar URL anywhere inside it. A field
+  # rename upstream should not break installing a server.
+  DOWNLOAD=\$(echo "\$BUILDS" | jq -r '
+    (if type=="array" then . else (.builds // []) end)
+    | map(select(type=="object"))
+    | sort_by((.id // .build // 0) | tonumber? // 0)
+    | last
+    | [.. | objects | select(has("url")) | .url]
+    | map(select(endswith(".jar")))
+    | first // empty')
+
+  [ -n "\$DOWNLOAD" ] || {
+    echo "[storm] No download found for \$PROJECT \$VERSION." >&2
+    echo "[storm] The API answered:" >&2
+    echo "\$BUILDS" | head -c 400 >&2
+    echo >&2
+    echo "[storm] Set SERVER_DOWNLOAD_URL on this server to install it anyway." >&2
+    exit 1
+  }
 fi
 
 echo "[storm] Downloading \$DOWNLOAD"
@@ -192,6 +265,17 @@ echo "[storm] Install complete."
         sortOrder: 3,
       },
       {
+        name: 'Download URL',
+        description:
+          'Optional. A direct link to the server jar, used instead of asking the project API. Upstream APIs change on their own schedule; this is how you install anyway.',
+        envVariable: 'SERVER_DOWNLOAD_URL',
+        defaultValue: '',
+        userViewable: true,
+        userEditable: true,
+        rules: 'nullable|string|max:512',
+        sortOrder: 4,
+      },
+      {
         name: 'Max Players',
         description: 'Maximum concurrent players.',
         envVariable: 'MAX_PLAYERS',
@@ -199,7 +283,7 @@ echo "[storm] Install complete."
         userViewable: true,
         userEditable: true,
         rules: 'required|integer|between:1,1000',
-        sortOrder: 4,
+        sortOrder: 5,
       },
       {
         name: 'Online Mode',
@@ -209,7 +293,7 @@ echo "[storm] Install complete."
         userViewable: true,
         userEditable: true,
         rules: 'required|boolean',
-        sortOrder: 5,
+        sortOrder: 6,
       },
       {
         name: 'Accept EULA',
@@ -219,7 +303,7 @@ echo "[storm] Install complete."
         userViewable: true,
         userEditable: true,
         rules: 'required|boolean',
-        sortOrder: 6,
+        sortOrder: 7,
       },
       PORT_VARIABLE(25565, 7),
     ],
