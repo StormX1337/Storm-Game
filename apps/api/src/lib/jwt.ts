@@ -61,8 +61,18 @@ export function verifyJwt(secret: string, token: string, expectedIssuer: string)
 
   let payload: JwtPayload;
   try {
-    payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')) as JwtPayload;
-  } catch {
+    const parsed: unknown = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
+    // JSON.parse is happy with `null`, `[]` and `"text"`, and reading a claim
+    // off any of them throws a TypeError rather than a JwtError — which the
+    // caller does not catch, turning what should be a 401 into a 500. Reaching
+    // here at all takes a valid signature, so this is robustness rather than a
+    // way in, but the function promises JwtError and has to keep that promise.
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new JwtError('Malformed token payload');
+    }
+    payload = parsed as JwtPayload;
+  } catch (error) {
+    if (error instanceof JwtError) throw error;
     throw new JwtError('Malformed token payload');
   }
 
