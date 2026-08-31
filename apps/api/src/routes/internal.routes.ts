@@ -21,7 +21,72 @@ import { unauthorized } from '../lib/errors.js';
  * presents `<tokenId>.<token>` and the panel compares the SHA-256 digest with
  * the stored hash. These routes are never reachable with a user session.
  */
+
+/**
+ * How long a server has to survive for its run to count as a real one. A crash
+ * inside this window is a server that cannot start, not one that fell over.
+ */
+const STABLE_RUN_MS = 60_000;
+
+/** How many failed starts in a row before auto-restart gives up. */
+const MAX_RESTART_ATTEMPTS = 3;
+
 export default async function internalRoutes(app: FastifyInstance): Promise<void> {
+  /**
+   * Brings a crashed server back, unless it is crashing on startup.
+   *
+   * Restarting forever turns one broken server into a node-wide load problem
+   * and buries the owner in notifications, so a crash that arrives sooner than
+   * a minute after starting counts against a budget. Surviving the minute
+   * clears it: a server that runs for a week and then falls over gets its
+   * restart, however many times it has failed in the past.
+   */
+  async function considerRestart(
+    server: {
+      id: string;
+      name: string;
+      shortId: string;
+      ownerId: string;
+      lastStartAt: Date | null;
+      restartAttempts: number;
+    },
+    outOfMemory: boolean,
+  ): Promise<void> {
+    // Out of memory will happen again the moment it starts, and the fix is a
+    // setting only the owner can change. Restarting is just a louder failure.
+    if (outOfMemory) return;
+
+    const ranFor = server.lastStartAt ? Date.now() - server.lastStartAt.getTime() : 0;
+    const attempts = ranFor >= STABLE_RUN_MS ? 0 : server.restartAttempts + 1;
+
+    if (attempts > MAX_RESTART_ATTEMPTS) {
+      await app.prisma.server.update({
+        where: { id: server.id },
+        data: { restartAttempts: attempts },
+      });
+
+      // Only on the crash that exhausts the budget. Past that the server is
+      // already left alone, and repeating the message every time it is started
+      // and dies again is noise, not information.
+      if (attempts > MAX_RESTART_ATTEMPTS + 1) return;
+
+      await app.notifications.push(server.ownerId, {
+        type: NotificationType.SERVER_CRASHED,
+        title: 'Automatic restart gave up',
+        message: `${server.name} crashed ${attempts} times without staying up. It will not be restarted again until you start it yourself.`,
+        level: 'ERROR',
+        link: `/servers/${server.shortId}/console`,
+      });
+      return;
+    }
+
+    await app.prisma.server.update({
+      where: { id: server.id },
+      data: { restartAttempts: attempts },
+    });
+    await app.servers.sendPower(server.id, 'start').catch(() => undefined);
+  }
+
   async function authenticateNode(request: FastifyRequest): Promise<Node> {
     const header = request.headers.authorization;
     if (!header?.startsWith('Bearer ')) throw unauthorized('Node credentials are required');
@@ -202,6 +267,8 @@ export default async function internalRoutes(app: FastifyInstance): Promise<void
           name: server.name,
           reason: outOfMemory ? 'out_of_memory' : 'exited',
         });
+
+        if (server.autoRestart) await considerRestart(server, outOfMemory);
       }
 
       return ok({ updated: true });

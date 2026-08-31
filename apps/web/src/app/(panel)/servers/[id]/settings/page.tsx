@@ -41,6 +41,20 @@ export default function ServerSettingsPage() {
     onError: (error) => toast.error('Could not save', errorMessage(error)),
   });
 
+  const setAutoRestart = useMutation({
+    mutationFn: (autoRestart: boolean) => api.patch(`/servers/${server.id}`, { autoRestart }),
+    onSuccess: (_data, autoRestart) => {
+      void queryClient.invalidateQueries({ queryKey: ['server', server.id] });
+      toast.success(
+        autoRestart ? 'Automatic restart is on' : 'Automatic restart is off',
+        autoRestart
+          ? 'The panel will bring this server back after a crash.'
+          : 'A crash will leave the server stopped.',
+      );
+    },
+    onError: (error) => toast.error('Could not change that', errorMessage(error)),
+  });
+
   const reinstall = useMutation({
     mutationFn: (wipe: boolean) => api.post(`/servers/${server.id}/reinstall`, { wipe }),
     onSuccess: () => {
@@ -121,6 +135,37 @@ export default function ServerSettingsPage() {
               Save changes
             </Button>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>After a crash</CardTitle>
+          <CardDescription>What happens when the server stops on its own.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <label className="flex items-start gap-3">
+            <input
+              type="checkbox"
+              className="mt-1 h-4 w-4 accent-primary"
+              checked={server.autoRestart}
+              // Not gated here, for the same reason the name field is not: the
+              // API allows a server's owner as well as anyone holding
+              // servers.update, and the context only knows the second. Mirroring
+              // half the rule would lock owners out of their own server.
+              disabled={setAutoRestart.isPending}
+              onChange={(event) => setAutoRestart.mutate(event.target.checked)}
+            />
+            <span className="text-sm">
+              <span className="font-medium">Start it again automatically</span>
+              <span className="mt-1 block text-muted-foreground">
+                A server that crashes three times without staying up for a minute is left alone, so
+                one that cannot start does not restart forever. Starting it yourself clears that.
+                Running out of memory is never retried — it would only happen again, and the fix is
+                a setting.
+              </span>
+            </span>
+          </label>
         </CardContent>
       </Card>
 

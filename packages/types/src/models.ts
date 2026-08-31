@@ -79,6 +79,8 @@ export interface ServerSummary {
   status: ServerStatus;
   suspended: boolean;
   installed: boolean;
+  /** Whether the panel restarts this server on its own after a crash. */
+  autoRestart: boolean;
   node: { id: string; name: string; location: string; status: NodeStatus };
   template: {
     id: string;

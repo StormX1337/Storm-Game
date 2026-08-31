@@ -446,6 +446,16 @@ model Server {
   crashedAt   DateTime?
   lastStartAt DateTime?
 
+  /**
+   * Bring the server back up on its own after a crash.
+   *
+   * `restartAttempts` counts crashes that happened too soon after starting, so
+   * a server that dies on startup is retried a few times and then left alone
+   * rather than restarted forever. A run that lasts resets it.
+   */
+  autoRestart     Boolean @default(false)
+  restartAttempts Int     @default(0)
+
   /** SFTP credentials are per-server and rooted in the server's data dir. */
   sftpUsername    String  @unique
   sftpPasswordEnc String

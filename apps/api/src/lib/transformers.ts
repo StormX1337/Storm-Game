@@ -102,6 +102,7 @@ export function toServerSummary(server: Row): ServerSummary {
     status: server.status,
     suspended: Boolean(server.suspendedAt),
     installed: Boolean(server.installedAt),
+    autoRestart: Boolean(server.autoRestart),
     node: server.node
       ? {
           id: server.node.id,

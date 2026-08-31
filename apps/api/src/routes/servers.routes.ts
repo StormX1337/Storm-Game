@@ -168,6 +168,11 @@ export default async function serverRoutes(app: FastifyInstance): Promise<void> 
       data: {
         ...(input.name ? { name: input.name } : {}),
         ...(input.description !== undefined ? { description: input.description } : {}),
+        // Turning it on clears whatever budget a previous crash loop used up,
+        // so the switch means what it says rather than being on but spent.
+        ...(input.autoRestart !== undefined
+          ? { autoRestart: input.autoRestart, restartAttempts: 0 }
+          : {}),
         ...(input.ownerId ? { ownerId: input.ownerId } : {}),
         ...(input.limits ?? {}),
       },
@@ -277,6 +282,15 @@ export default async function serverRoutes(app: FastifyInstance): Promise<void> 
       const access = await app.serverAccess.require(user, id, permission);
       ServerAccessService.assertNotSuspended(access);
       ServerAccessService.assertInstalled(access);
+
+      // A person starting or restarting it is saying "try again", so the
+      // automatic-restart budget starts over. Auto-restart calls sendPower
+      // directly and does not come through here, so it cannot clear its own.
+      if (action === 'start' || action === 'restart') {
+        await app.prisma.server
+          .update({ where: { id: access.server.id }, data: { restartAttempts: 0 } })
+          .catch(() => undefined);
+      }
 
       await app.servers.sendPower(access.server.id, action);
       await app.audit.activity(request, {

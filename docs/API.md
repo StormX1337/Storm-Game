@@ -209,21 +209,21 @@ response carries `x-ratelimit-limit`, `x-ratelimit-remaining` and
 
 ### Servers
 
-|                                  | Permission             |
-| -------------------------------- | ---------------------- |
-| `GET /servers`                   | `servers.view`         |
-| `POST /servers`                  | `servers.create`       |
-| `GET /servers/:id`               | `servers.view`         |
-| `PATCH /servers/:id`             | `servers.update`       |
-| `DELETE /servers/:id`            | `servers.delete`       |
-| `POST /servers/:id/power`        | `servers.power`        |
-| `POST /servers/:id/command`      | `servers.console.send` |
-| `POST /servers/:id/reinstall`    | `servers.update`       |
-| `GET /servers/:id/stats`         | `servers.view`         |
-| `GET /servers/:id/stats/history` | `servers.view`         |
-| `PATCH /servers/:id/startup`     | `servers.startup`      |
-| `PUT /servers/:id/variables`     | `servers.startup`      |
-| `GET /servers/:id/activity`      | `servers.view`         |
+|                                  | Permission                              |
+| -------------------------------- | --------------------------------------- |
+| `GET /servers`                   | `servers.view`                          |
+| `POST /servers`                  | `servers.create`                        |
+| `GET /servers/:id`               | `servers.view`                          |
+| `PATCH /servers/:id`             | `servers.update`, or the server's owner |
+| `DELETE /servers/:id`            | `servers.delete`                        |
+| `POST /servers/:id/power`        | `servers.power`                         |
+| `POST /servers/:id/command`      | `servers.console.send`                  |
+| `POST /servers/:id/reinstall`    | `servers.update`                        |
+| `GET /servers/:id/stats`         | `servers.view`                          |
+| `GET /servers/:id/stats/history` | `servers.view`                          |
+| `PATCH /servers/:id/startup`     | `servers.startup`                       |
+| `PUT /servers/:id/variables`     | `servers.startup`                       |
+| `GET /servers/:id/activity`      | `servers.view`                          |
 
 Creating a server takes its resource ceilings under `limits`, in MiB and
 percent — `cpuLimit` is percent of one core, so `200` means two cores:
@@ -428,6 +428,26 @@ Unauthenticated, for load balancers and monitoring.
 | `GET /api/health` | Version, uptime and dependency states   |
 
 ---
+
+## Restarting after a crash
+
+`PATCH /servers/:id` takes `autoRestart`. With it on, a crash brings the server
+back on its own — but not indefinitely:
+
+- A crash **less than a minute** after starting counts against a budget of three.
+  Spend it and the server is left stopped, with one notification saying so.
+  Repeating that message on every later crash would be noise, so it is sent once.
+- A run that lasts **a minute or more** clears the budget. A server that runs for
+  a week and then falls over gets its restart, however often it failed before.
+- **Running out of memory is never retried.** It will happen again the moment it
+  starts, and the fix is a limit only the owner can raise — restarting is just a
+  louder failure.
+- Starting or restarting it yourself clears the budget: that is the owner saying
+  to try again. Automatic restarts do not go through that path, so they cannot
+  clear their own.
+
+`crashedAt`, `lastStartAt` and the attempt counter are what this is computed
+from, so no timer runs and nothing is lost if the panel restarts.
 
 ## Websockets
 

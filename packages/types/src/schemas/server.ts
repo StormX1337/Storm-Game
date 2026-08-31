@@ -45,6 +45,8 @@ export type CreateServerInput = z.infer<typeof createServerSchema>;
 export const updateServerSchema = z.object({
   name: z.string().trim().min(1).max(100).optional(),
   description: z.string().trim().max(2000).nullable().optional(),
+  /** Bring the server back up on its own after it crashes. */
+  autoRestart: z.boolean().optional(),
   ownerId: cuidLikeId.optional(),
   limits: serverLimitsSchema.partial().optional(),
 });
