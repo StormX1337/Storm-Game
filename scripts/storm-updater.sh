@@ -134,7 +134,11 @@ WantedBy=multi-user.target
 UNIT
 
   systemctl daemon-reload
-  systemctl enable --now storm-updater
+  systemctl enable storm-updater
+  # restart, not `enable --now`: on a reinstall the service is already running,
+  # and --now leaves it running on the unit file it started with. Whatever this
+  # install just changed would then not take effect until the next reboot.
+  systemctl restart storm-updater
 
   # Compose already mounts this directory and already points the API at it, so
   # there is nothing to edit by hand — the API just has to be restarted to see
