@@ -13,6 +13,8 @@ declare module 'fastify' {
   interface FastifyInstance {
     mail: {
       send: (message: MailMessage) => Promise<void>;
+      /** Opens a connection and authenticates, without sending anything. */
+      verify: () => Promise<void>;
       enabled: boolean;
     };
   }
@@ -40,12 +42,18 @@ const layout = (title: string, body: string, action?: { label: string; url: stri
   </td></tr></table>
 </body></html>`;
 
-export function renderMail(title: string, paragraphs: string[], action?: { label: string; url: string }): {
+export function renderMail(
+  title: string,
+  paragraphs: string[],
+  action?: { label: string; url: string },
+): {
   html: string;
   text: string;
 } {
   const body = paragraphs.map((p) => `<p style="margin:0 0 14px">${p}</p>`).join('');
-  const text = [title, '', ...paragraphs, action ? `\n${action.label}: ${action.url}` : ''].join('\n');
+  const text = [title, '', ...paragraphs, action ? `\n${action.label}: ${action.url}` : ''].join(
+    '\n',
+  );
   return { html: layout(title, body, action), text };
 }
 
@@ -66,6 +74,10 @@ export default fp(
 
     app.decorate('mail', {
       enabled: transporter !== null,
+      async verify() {
+        if (!transporter) throw new Error('SMTP is not configured (set SMTP_HOST).');
+        await transporter.verify();
+      },
       async send(message: MailMessage) {
         if (!transporter) {
           // Without SMTP configured the panel still works; the link is logged so

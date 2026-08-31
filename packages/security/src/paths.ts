@@ -69,6 +69,9 @@ export async function assertNoSymlinkEscape(root: string, target: string): Promi
 export function sanitizeFilename(name: string): string {
   const base = path.basename(name.replace(/\\/g, '/'));
   const cleaned = base
+    // Control characters are the point: a filename carrying \n or \x1b can
+    // forge log lines and confuse anything that later shells out on it.
+    // eslint-disable-next-line no-control-regex
     .replace(/[\0-\x1f\x7f]/g, '')
     .replace(/^\.+/, '')
     .trim();

@@ -123,7 +123,10 @@ async function runTask(
       break;
     }
     case ScheduleAction.BACKUP: {
-      const server = await app.servers.findWithRelations(serverId);
+      // Not for the record it returns — it throws if the server was deleted
+      // between the schedule being written and this run, which is the check
+      // we want before writing a backup row for it.
+      await app.servers.findWithRelations(serverId);
       const storage = await app.prisma.backupStorage.findFirst({
         where: { isActive: true },
         orderBy: { isDefault: 'desc' },
@@ -134,7 +137,9 @@ async function runTask(
         data: {
           serverId,
           storageId: storage.id,
-          name: payload || `${scheduleName} — ${new Date().toISOString().slice(0, 16).replace('T', ' ')}`,
+          name:
+            payload ||
+            `${scheduleName} — ${new Date().toISOString().slice(0, 16).replace('T', ' ')}`,
           isAutomatic: true,
         },
       });

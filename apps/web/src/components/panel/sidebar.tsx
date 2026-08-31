@@ -19,6 +19,7 @@ import {
   Shield,
   KeyRound,
   Users,
+  Webhook,
   X,
 } from 'lucide-react';
 import { cn, ScrollArea } from '@storm/ui';
@@ -52,14 +53,36 @@ const SECTIONS: NavSection[] = [
     title: 'Administration',
     adminOnly: true,
     items: [
-      { href: '/admin', label: 'Overview', icon: Gauge, exact: true, permission: 'admin.dashboard' },
+      {
+        href: '/admin',
+        label: 'Overview',
+        icon: Gauge,
+        exact: true,
+        permission: 'admin.dashboard',
+      },
       { href: '/admin/servers', label: 'All servers', icon: Server, permission: 'admin.servers' },
       { href: '/admin/users', label: 'Users', icon: Users, permission: 'users.manage' },
       { href: '/admin/nodes', label: 'Nodes', icon: Network, permission: 'nodes.manage' },
-      { href: '/admin/templates', label: 'Game templates', icon: Package, permission: 'templates.manage' },
-      { href: '/admin/databases', label: 'Database hosts', icon: Database, permission: 'databasehosts.manage' },
-      { href: '/admin/backups', label: 'Backup storage', icon: HardDrive, permission: 'backupstorage.manage' },
+      {
+        href: '/admin/templates',
+        label: 'Game templates',
+        icon: Package,
+        permission: 'templates.manage',
+      },
+      {
+        href: '/admin/databases',
+        label: 'Database hosts',
+        icon: Database,
+        permission: 'databasehosts.manage',
+      },
+      {
+        href: '/admin/backups',
+        label: 'Backup storage',
+        icon: HardDrive,
+        permission: 'backupstorage.manage',
+      },
       { href: '/admin/audit', label: 'Audit log', icon: Shield, permission: 'audit.view' },
+      { href: '/admin/webhooks', label: 'Webhooks', icon: Webhook, permission: 'webhooks.manage' },
       { href: '/admin/settings', label: 'Settings', icon: Settings, permission: 'settings.manage' },
       { href: '/admin/updates', label: 'Updates', icon: Download, permission: 'panel.update' },
     ],

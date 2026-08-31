@@ -2,11 +2,11 @@
   "name": "storm-panel",
   "version": "1.0.0",
   "private": true,
-  "description": "Storm Panel \u2014 a modern game server hosting control panel",
+  "description": "Storm Panel — a modern game server hosting control panel",
   "license": "MIT",
   "packageManager": "pnpm@10.33.0",
   "engines": {
-    "node": ">=20.11.0"
+    "node": ">=20.12.0"
   },
   "scripts": {
     "build": "pnpm run build:packages && pnpm --filter @storm/api run build && pnpm --filter @storm/node-agent run build && pnpm --filter @storm/web run build",
@@ -16,7 +16,7 @@
     "dev:web": "pnpm --filter @storm/web run dev",
     "dev:agent": "pnpm --filter @storm/node-agent run dev",
     "typecheck": "pnpm -r --no-bail typecheck",
-    "lint": "pnpm -r --no-bail lint",
+    "lint": "eslint .",
     "format": "prettier --write \"**/*.{ts,tsx,js,mjs,json,md,css,yml}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,mjs,json,md,css,yml}\"",
     "test": "pnpm -r --no-bail test",
@@ -28,15 +28,22 @@
     "db:seed": "pnpm --filter @storm/database run seed",
     "db:studio": "pnpm --filter @storm/database run studio",
     "storm": "node --import tsx apps/api/src/cli/index.ts",
-    "clean": "rm -rf node_modules **/node_modules **/dist apps/web/.next"
+    "clean": "rm -rf node_modules **/node_modules **/dist apps/web/.next",
+    "lint:fix": "eslint . --fix"
   },
   "devDependencies": {
+    "@eslint/js": "9.18.0",
+    "@next/eslint-plugin-next": "15.1.4",
     "@playwright/test": "1.49.1",
     "@types/node": "22.10.5",
     "concurrently": "9.1.2",
+    "eslint": "9.18.0",
+    "eslint-plugin-react-hooks": "5.1.0",
+    "globals": "15.14.0",
     "prettier": "3.4.2",
     "tsx": "4.19.2",
-    "typescript": "5.7.3"
+    "typescript": "5.7.3",
+    "typescript-eslint": "8.20.0"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

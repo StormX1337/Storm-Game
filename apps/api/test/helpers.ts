@@ -1,7 +1,22 @@
 import { randomUUID } from 'node:crypto';
+import { existsSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import process from 'node:process';
 import type { FastifyInstance } from 'fastify';
 import { loadApiEnv, type ApiEnv } from '@storm/config';
 import { buildApp } from '../src/app.js';
+
+// The app needs DATABASE_URL, JWT_SECRET, ENCRYPTION_KEY and COOKIE_SECRET to
+// build at all, and a developer who has run the installer already has them in
+// the repository .env. Reading it here means `pnpm test` works from a fresh
+// checkout instead of failing with four "Required" lines. Anything already in
+// the environment wins, so pointing DATABASE_URL at a scratch database on the
+// command line still does what it looks like it does.
+const repoEnv = path.resolve(fileURLToPath(import.meta.url), '../../../../.env');
+if (existsSync(repoEnv)) {
+  process.loadEnvFile(repoEnv);
+}
 
 /**
  * Integration tests run against the real Postgres and Redis the developer

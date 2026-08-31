@@ -18,13 +18,13 @@ that keep it consistent.
 
 ## Prerequisites
 
-| | Version | Why |
-| --- | --- | --- |
-| Node | 20 or 22 | The API and agent target Node 20 |
-| pnpm | 10 | Workspaces; `npm`/`yarn` will not resolve the links |
-| PostgreSQL | 16 | Prisma schema targets 16 |
-| Redis | 7 | Sessions, queues, rate limits |
-| Docker | 24+ | Only needed to run the node agent |
+|            | Version      | Why                                                 |
+| ---------- | ------------ | --------------------------------------------------- |
+| Node       | 20.12+ or 22 | The API and agent target Node 20                    |
+| pnpm       | 10           | Workspaces; `npm`/`yarn` will not resolve the links |
+| PostgreSQL | 16           | Prisma schema targets 16                            |
+| Redis      | 7            | Sessions, queues, rate limits                       |
+| Docker     | 24+          | Only needed to run the node agent                   |
 
 ```bash
 corepack enable && corepack prepare pnpm@10 --activate
@@ -83,11 +83,11 @@ pnpm dev
 
 Starts three processes:
 
-| | Port | Notes |
-| --- | --- | --- |
-| API | 8080 | `tsx watch`, restarts on change |
-| Web | 3000 | `next dev`, hot reload; proxies `/api` to 8080 |
-| Node agent | 8081 | Only useful with Docker available |
+|            | Port | Notes                                          |
+| ---------- | ---- | ---------------------------------------------- |
+| API        | 8080 | `tsx watch`, restarts on change                |
+| Web        | 3000 | `next dev`, hot reload; proxies `/api` to 8080 |
+| Node agent | 8081 | Only useful with Docker available              |
 
 Sign in at `http://localhost:3000` with the `ADMIN_*` credentials.
 
@@ -164,7 +164,7 @@ Take `POST /api/v1/servers/:id/power`:
 3. **`routes/servers.routes.ts`** — `params()`/`body()` run the zod schema from
    `@storm/types`. Invalid input becomes a 422 with per-field messages.
 4. **`app.requirePermission(...)`** — checks the permission the route declares.
-5. **`services/server.service.ts`** — resolves the server *for this user*
+5. **`services/server.service.ts`** — resolves the server _for this user_
    (owner, sub-user or an admin with `servers.view.all`). A server the caller
    may not see is a 404, never a 403.
 6. **`services/node-client.ts`** — signs the outbound call to the agent with
@@ -180,7 +180,7 @@ Every step is enforceable on its own; none of them trusts the one before it.
 
 **TypeScript** is strict, with `noUncheckedIndexedAccess`. `any` needs a reason
 next to it. Prefer a zod schema over a hand-written interface when the value
-crosses a boundary — the schema is the type *and* the validator.
+crosses a boundary — the schema is the type _and_ the validator.
 
 **Imports** use the `.js` extension in the API and agent (NodeNext resolution)
 and no extension in the web app and UI package (bundler resolution). Follow the
@@ -205,8 +205,19 @@ is what lets the CLI reuse the same code paths without a running API.
 
 **Comments** explain why. The code already says what.
 
-**Formatting** — `pnpm format` (Prettier), `pnpm lint` (ESLint). Both run in
-CI.
+**Formatting** — `pnpm format` (Prettier), `pnpm lint` (ESLint), `pnpm lint:fix`
+for the fixable half. Both run in CI.
+
+ESLint is one flat config at the repository root, `eslint.config.mjs`, covering
+every package. Type-aware rules are deliberately off — `pnpm typecheck` already
+runs tsc with `strict` and `noUncheckedIndexedAccess` over each project, so
+repeating that work in the linter would only make it slow. What is left is the
+class of mistake the compiler accepts: unused bindings, `==`, React hook
+dependencies, Next-specific footguns.
+
+Bindings intended to stay unused are prefixed with `_`. Where a rule is wrong
+for a specific line — a regex that matches control characters on purpose, for
+instance — disable it there with a `--` reason, not repo-wide.
 
 ---
 
@@ -246,11 +257,19 @@ TOTP, SSRF — with no I/O.
 **Integration** tests in `apps/api/test` build the real Fastify app against a
 real database and drive it with `app.inject()`. They cover registration, login,
 2FA, refresh rotation and reuse detection, permissions per role, server access
-boundaries and validation. Point `DATABASE_URL` at a scratch database first:
+boundaries and validation.
+
+They read the repository `.env` for `DATABASE_URL`, `JWT_SECRET`,
+`ENCRYPTION_KEY` and `COOKIE_SECRET`, so `pnpm test` works straight after
+installation. Anything already exported wins, which is how you point them at a
+scratch database instead of the one you develop against:
 
 ```bash
 DATABASE_URL=postgresql://storm:storm@127.0.0.1:5432/storm_test pnpm test
 ```
+
+They write and delete their own rows under a per-run namespace, but they are
+not read-only — do not aim them at a database with anything in it you want.
 
 **Component** tests in `apps/web/test` run the real components in jsdom with
 Testing Library, driven by Vitest:

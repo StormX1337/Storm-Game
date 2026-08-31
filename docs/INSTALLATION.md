@@ -21,11 +21,11 @@ untrusted game code.
 
 **Panel host**
 
-| | Minimum | Comfortable |
-| --- | --- | --- |
-| CPU | 2 cores | 4 cores |
-| Memory | 2 GB | 4 GB |
-| Disk | 20 GB | 40 GB SSD |
+|        | Minimum | Comfortable |
+| ------ | ------- | ----------- |
+| CPU    | 2 cores | 4 cores     |
+| Memory | 2 GB    | 4 GB        |
+| Disk   | 20 GB   | 40 GB SSD   |
 
 Software: a 64-bit Linux with Docker Engine 24+ and the Compose plugin. The
 panel itself is stateless; PostgreSQL and Redis run as containers beside it.
@@ -38,12 +38,12 @@ access. The installer handles Docker.
 
 **Network**
 
-| Port | Where | Purpose |
-| --- | --- | --- |
-| 80 / 443 | panel | The panel and its API |
-| 8081 | node | Agent API — reachable from the panel |
-| 2022 | node | SFTP — reachable from your customers |
-| game ports | node | Whatever ranges you allocate |
+| Port       | Where | Purpose                              |
+| ---------- | ----- | ------------------------------------ |
+| 80 / 443   | panel | The panel and its API                |
+| 8081       | node  | Agent API — reachable from the panel |
+| 2022       | node  | SFTP — reachable from your customers |
+| game ports | node  | Whatever ranges you allocate         |
 
 The panel must reach each node on 8081, and each node must reach the panel on
 443 (heartbeats and SFTP credential checks). Nothing needs to reach the
@@ -104,9 +104,11 @@ in.
 
 > **Leave `ADMIN_PASSWORD` blank** if you would rather not have a password in a
 > file. Create the account afterwards instead:
+>
 > ```bash
 > docker compose exec api node apps/api/dist/cli/index.js admin create --role OWNER
 > ```
+>
 > Either way, delete or blank the value once the account exists — it is only
 > read on first boot.
 
@@ -128,14 +130,14 @@ Worth knowing, because it is where a private fork usually first goes wrong:
 
 ### What Compose brings up
 
-| Service | Image | Notes |
-| --- | --- | --- |
-| `postgres` | postgres:16-alpine | Data in the `storm_postgres` volume |
-| `redis` | redis:7-alpine | Sessions, queues, rate limits |
-| `migrate` | built from `docker/api.Dockerfile` | Runs once, then exits 0 |
-| `api` | built from `docker/api.Dockerfile` | Fastify + BullMQ workers |
-| `web` | built from `docker/web.Dockerfile` | Next.js standalone |
-| `nginx` | nginx:1.27-alpine | One origin for both |
+| Service    | Image                              | Notes                               |
+| ---------- | ---------------------------------- | ----------------------------------- |
+| `postgres` | postgres:16-alpine                 | Data in the `storm_postgres` volume |
+| `redis`    | redis:7-alpine                     | Sessions, queues, rate limits       |
+| `migrate`  | built from `docker/api.Dockerfile` | Runs once, then exits 0             |
+| `api`      | built from `docker/api.Dockerfile` | Fastify + BullMQ workers            |
+| `web`      | built from `docker/web.Dockerfile` | Next.js standalone                  |
+| `nginx`    | nginx:1.27-alpine                  | One origin for both                 |
 
 Two optional profiles: `--profile storage` adds MinIO for S3-compatible
 backups, `--profile agent` runs a node agent on the panel host.
@@ -229,18 +231,18 @@ docker compose up -d
 
 In the panel: **Admin → Nodes → Add node**.
 
-| Field | Meaning |
-| --- | --- |
-| Name | How it appears in the panel, e.g. `fsn-1` |
-| Location | Free text shown to customers when they pick a region |
-| Hostname | The DNS name the panel connects to — **and** the address customers use for SFTP |
-| IP address | The node's public address |
-| Scheme | `https` if the agent has a certificate, `http` if it does not. Get this wrong and the panel reports the node unreachable |
-| Daemon port | 8081 unless you changed it |
-| SFTP port | 2022 unless you changed it |
-| Memory / disk | What the node may allocate, in MB. Reserve room for the host |
-| Overcommit | Percentage you allow beyond that — `0` for none, `25` to allow a quarter more than the node physically has |
-| Maintenance mode | On means the node keeps running its servers but is not offered for new ones |
+| Field            | Meaning                                                                                                                  |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Name             | How it appears in the panel, e.g. `fsn-1`                                                                                |
+| Location         | Free text shown to customers when they pick a region                                                                     |
+| Hostname         | The DNS name the panel connects to — **and** the address customers use for SFTP                                          |
+| IP address       | The node's public address                                                                                                |
+| Scheme           | `https` if the agent has a certificate, `http` if it does not. Get this wrong and the panel reports the node unreachable |
+| Daemon port      | 8081 unless you changed it                                                                                               |
+| SFTP port        | 2022 unless you changed it                                                                                               |
+| Memory / disk    | What the node may allocate, in MB. Reserve room for the host                                                             |
+| Overcommit       | Percentage you allow beyond that — `0` for none, `25` to allow a quarter more than the node physically has               |
+| Maintenance mode | On means the node keeps running its servers but is not offered for new ones                                              |
 
 Saving it mints a token pair: a token id, a token, and an HMAC secret. The
 token is stored as a digest and the secret encrypted at rest, so **the panel
@@ -375,8 +377,21 @@ SMTP_SECURE=false           # true only for implicit TLS on 465
 MAIL_FROM=Storm Panel <no-reply@example.com>
 ```
 
+After restarting the API, press **Send test email** on **Admin → Settings**. It
+connects, authenticates and sends one message to your own address, and reports
+the SMTP server's own error if any step fails — which is faster than waiting for
+a customer's password reset to go missing.
+
 Then **Admin → Settings → Require email verification** if you want new accounts
 to confirm their address.
+
+### Webhooks
+
+**Admin → Webhooks → Add endpoint**: a name, an HTTPS URL, and the events you
+want. The signing secret is shown once, on creation — copy it then, because the
+panel stores it encrypted and will not show it again. **Test** sends one real
+signed delivery so you can confirm the receiver accepts it before relying on it.
+Payloads and signature verification are in [API.md](API.md#webhooks).
 
 ### S3-compatible backup storage
 

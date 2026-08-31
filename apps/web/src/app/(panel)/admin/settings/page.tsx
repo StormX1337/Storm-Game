@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Save, Settings2 } from 'lucide-react';
+import { Save, Send, Settings2 } from 'lucide-react';
 import {
   Button,
   Card,
@@ -47,6 +47,14 @@ export default function AdminSettingsPage() {
   React.useEffect(() => {
     if (data) setForm(data);
   }, [data]);
+
+  const testMail = useMutation({
+    mutationFn: () => api.post<{ sentTo: string; tookMs: number }>('/admin/settings/mail/test', {}),
+    onSuccess: (result) =>
+      toast.success('Email sent', `Delivered to ${result.sentTo} in ${result.tookMs} ms.`),
+    // The SMTP error is the useful part, so it goes through unedited.
+    onError: (error) => toast.error('Could not send the test', errorMessage(error)),
+  });
 
   const save = useMutation({
     mutationFn: () => api.patch<PanelSettings>('/admin/settings', form ?? {}),
@@ -143,6 +151,34 @@ export default function AdminSettingsPage() {
       </Card>
 
       <Card>
+        <CardHeader className="flex-row items-start justify-between gap-3">
+          <div>
+            <CardTitle>Email</CardTitle>
+            <CardDescription>
+              Verification and password-reset links go out over SMTP. Without it the panel still
+              works and writes the links to the API log instead.
+            </CardDescription>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => testMail.mutate()}
+            loading={testMail.isPending}
+          >
+            <Send />
+            Send test email
+          </Button>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">
+            The test goes to your own address only. If SMTP is misconfigured you get the
+            server&apos;s own error back — which is what tells you whether it is the credentials,
+            the port or the hostname.
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card>
         <CardHeader>
           <CardTitle>Default account limits</CardTitle>
           <CardDescription>
@@ -151,16 +187,32 @@ export default function AdminSettingsPage() {
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-3">
           <Field label="Servers">
-            <Input type="number" value={form.defaultServerLimit} onChange={number('defaultServerLimit')} />
+            <Input
+              type="number"
+              value={form.defaultServerLimit}
+              onChange={number('defaultServerLimit')}
+            />
           </Field>
           <Field label="Memory (MiB)">
-            <Input type="number" value={form.defaultMemoryLimit} onChange={number('defaultMemoryLimit')} />
+            <Input
+              type="number"
+              value={form.defaultMemoryLimit}
+              onChange={number('defaultMemoryLimit')}
+            />
           </Field>
           <Field label="Disk (MiB)">
-            <Input type="number" value={form.defaultDiskLimit} onChange={number('defaultDiskLimit')} />
+            <Input
+              type="number"
+              value={form.defaultDiskLimit}
+              onChange={number('defaultDiskLimit')}
+            />
           </Field>
           <Field label="Backups per server">
-            <Input type="number" value={form.defaultBackupLimit} onChange={number('defaultBackupLimit')} />
+            <Input
+              type="number"
+              value={form.defaultBackupLimit}
+              onChange={number('defaultBackupLimit')}
+            />
           </Field>
           <Field label="Databases per server">
             <Input

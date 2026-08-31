@@ -1,15 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import {
-  ArrowDown,
-  ChevronRight,
-  Download,
-  Eraser,
-  Search,
-  Wifi,
-  WifiOff,
-} from 'lucide-react';
+import { ArrowDown, ChevronRight, Download, Eraser, Search, Wifi, WifiOff } from 'lucide-react';
 import { Button, Card, Input, cn, useToast } from '@storm/ui';
 import type { ServerStatus } from '@storm/types';
 import type { ConsoleLine, SocketState } from '@/hooks/use-server-socket';
@@ -22,9 +14,10 @@ import type { ConsoleLine, SocketState } from '@/hooks/use-server-socket';
  * bold/dim/underline attributes are honoured — cursor movement and screen
  * clearing are dropped, since this is a log view, not a terminal emulator.
  */
+/* eslint-disable no-control-regex -- matching escape sequences is the job */
 const ANSI_PATTERN = /\x1b\[([0-9;]*)m/g;
-// eslint-disable-next-line no-control-regex -- deliberately matching control sequences
 const ANSI_STRIP = /\x1b\[[0-9;?]*[a-zA-Z]/g;
+/* eslint-enable no-control-regex */
 
 const FOREGROUND: Record<number, string> = {
   30: '#5c6370',
@@ -148,7 +141,9 @@ export function ServerConsole({
     if (!value) return;
 
     onCommand(value);
-    historyRef.current = [...historyRef.current.filter((entry) => entry !== value), value].slice(-50);
+    historyRef.current = [...historyRef.current.filter((entry) => entry !== value), value].slice(
+      -50,
+    );
     setHistoryIndex(-1);
     setCommand('');
   };
@@ -318,7 +313,10 @@ export function ServerConsole({
         ) : null}
       </div>
 
-      <form onSubmit={submit} className="flex items-center gap-2 border-t border-border bg-card p-2.5">
+      <form
+        onSubmit={submit}
+        className="flex items-center gap-2 border-t border-border bg-card p-2.5"
+      >
         <ChevronRight className="ml-1 h-4 w-4 shrink-0 text-primary" />
         <Input
           value={command}

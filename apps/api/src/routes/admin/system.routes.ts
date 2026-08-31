@@ -18,17 +18,172 @@ import {
   type AdminOverview,
   type NodeLiveStats,
 } from '@storm/types';
-import { generateToken } from '@storm/security';
+import { assertSafeUrl, generateToken, signWebhook } from '@storm/security';
+import { request as undiciRequest } from 'undici';
 import { readSettings, writeSettings } from '@storm/database';
 import { body, params, query } from '../../lib/validation.js';
 import { ok, paginated, pageArgs } from '../../lib/response.js';
 import { badRequest, conflict, notFound } from '../../lib/errors.js';
 import { toAuditLog } from '../../lib/transformers.js';
+import { renderMail } from '../../services/mail.service.js';
 
 const idParam = z.object({ id: z.string().min(1).max(64) });
 
 export default async function adminSystemRoutes(app: FastifyInstance): Promise<void> {
   app.addHook('preHandler', app.authenticate);
+
+  /* -------------------------------------------------------- webhooks -- */
+
+  app.post(
+    '/webhooks/:id/test',
+    {
+      config: { rateLimit: { max: 10, timeWindow: '5 minutes' } },
+      preHandler: app.requirePermission(Permission.WEBHOOKS_MANAGE),
+      schema: { tags: ['Admin'], summary: 'Send a signed test delivery' },
+    },
+    async (request) => {
+      const { id } = params(request, idParam);
+      const hook = await app.prisma.webhook.findUnique({ where: { id } });
+      if (!hook) throw notFound('Webhook was not found');
+
+      const secret = app.encrypter.tryDecrypt(hook.secretEnc) ?? '';
+      const payload = {
+        event: 'panel.test',
+        deliveredAt: new Date().toISOString(),
+        message:
+          'A test delivery from Storm Panel. Verify the signature the same way you would a real one.',
+      };
+      const body = JSON.stringify(payload);
+      const timestamp = Math.floor(Date.now() / 1000);
+      const started = Date.now();
+
+      let status = 0;
+      let error: string | null = null;
+      let responseBody = '';
+
+      try {
+        // Re-checked here exactly as at delivery time: a hostname that has
+        // started resolving to something internal must not become a way to
+        // probe the panel's own network from the admin area.
+        await assertSafeUrl(hook.url);
+
+        const response = await undiciRequest(hook.url, {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            'user-agent': 'StormPanel-Webhook/1.0',
+            'x-storm-event': 'panel.test',
+            'x-storm-signature': signWebhook(secret, timestamp, body),
+            'x-storm-delivery': `test_${timestamp}`,
+          },
+          body,
+          headersTimeout: 10_000,
+          bodyTimeout: 10_000,
+        });
+
+        status = response.statusCode;
+        // A snippet is enough to recognise "that is my endpoint" or an error
+        // page from something else entirely.
+        responseBody = (await response.body.text()).slice(0, 300);
+        if (status >= 400) error = `The endpoint responded with ${status}`;
+      } catch (cause) {
+        error = cause instanceof Error ? cause.message : String(cause);
+      }
+
+      // Recorded like any other delivery, so a test appears in the same history
+      // an operator is already reading.
+      await app.prisma.webhookDelivery.create({
+        data: {
+          webhookId: hook.id,
+          event: 'panel.test',
+          payload: payload as object,
+          status: error ? 'FAILED' : 'SUCCESS',
+          responseCode: status || null,
+          error: error?.slice(0, 500) ?? null,
+        },
+      });
+
+      await app.audit.log(request, {
+        action: 'admin.webhook_tested',
+        targetType: 'webhook',
+        targetId: hook.id,
+        targetLabel: hook.name,
+        metadata: { status, ok: !error },
+      });
+
+      return ok({
+        ok: !error,
+        status: status || null,
+        error,
+        responseBody,
+        tookMs: Date.now() - started,
+      });
+    },
+  );
+
+  /* ------------------------------------------------------------ mail -- */
+
+  app.post(
+    '/settings/mail/test',
+    {
+      // Sending costs money and reputation, and a loop here would be someone
+      // else's spam problem.
+      config: { rateLimit: { max: 5, timeWindow: '10 minutes' } },
+      preHandler: app.requirePermission(Permission.SETTINGS_MANAGE),
+      schema: { tags: ['Admin'], summary: 'Prove the SMTP configuration works' },
+    },
+    async (request) => {
+      const user = request.currentUser();
+
+      if (!app.mail.enabled) {
+        throw badRequest(
+          'No SMTP server is configured. Set SMTP_HOST and restart the API; until then, verification and reset links are written to the API log.',
+        );
+      }
+
+      // Deliberately only to the caller's own address. A field for "send to
+      // anyone" turns an admin session into a relay for whatever the panel
+      // will render.
+      const started = Date.now();
+      try {
+        await app.mail.verify();
+      } catch (cause) {
+        // The SMTP error is the whole value here: "535 authentication failed"
+        // says what to fix, "could not connect" says something else entirely.
+        throw badRequest(
+          `The SMTP server rejected the connection: ${cause instanceof Error ? cause.message : String(cause)}`,
+        );
+      }
+
+      const settings = await readSettings(app.prisma);
+      const { html, text } = renderMail('Test email', [
+        `This is a test from <strong>${settings.panelName}</strong>, sent because you asked for one in the administration area.`,
+        'If it reached you, password resets and email verification will reach your customers too.',
+      ]);
+
+      try {
+        await app.mail.send({
+          to: user.email,
+          subject: `${settings.panelName}: test email`,
+          html,
+          text,
+        });
+      } catch (cause) {
+        throw badRequest(
+          `Connected, but sending failed: ${cause instanceof Error ? cause.message : String(cause)}`,
+        );
+      }
+
+      await app.audit.log(request, {
+        action: 'admin.mail_tested',
+        targetType: 'settings',
+        targetId: 'mail',
+        targetLabel: user.email,
+      });
+
+      return ok({ sentTo: user.email, tookMs: Date.now() - started });
+    },
+  );
 
   /* --------------------------------------------------------- updates -- */
 
@@ -94,33 +249,26 @@ export default async function adminSystemRoutes(app: FastifyInstance): Promise<v
       const weekAgo = new Date(Date.now() - 7 * 86400_000);
       const activeCutoff = new Date(Date.now() - 15 * 60_000);
 
-      const [
-        totalUsers,
-        onlineUsers,
-        suspendedUsers,
-        newUsers,
-        serverCounts,
-        nodes,
-        recentEvents,
-      ] = await Promise.all([
-        app.prisma.user.count(),
-        app.prisma.session.findMany({
-          where: { revokedAt: null, lastUsedAt: { gte: activeCutoff } },
-          distinct: ['userId'],
-          select: { userId: true },
-        }),
-        app.prisma.user.count({ where: { suspendedAt: { not: null } } }),
-        app.prisma.user.count({ where: { createdAt: { gte: weekAgo } } }),
-        app.prisma.server.groupBy({ by: ['status'], _count: { _all: true } }),
-        app.prisma.node.findMany({
-          include: { servers: { select: { memoryLimit: true, diskLimit: true } } },
-        }),
-        app.prisma.auditLog.findMany({
-          include: { actor: true },
-          orderBy: { createdAt: 'desc' },
-          take: 15,
-        }),
-      ]);
+      const [totalUsers, onlineUsers, suspendedUsers, newUsers, serverCounts, nodes, recentEvents] =
+        await Promise.all([
+          app.prisma.user.count(),
+          app.prisma.session.findMany({
+            where: { revokedAt: null, lastUsedAt: { gte: activeCutoff } },
+            distinct: ['userId'],
+            select: { userId: true },
+          }),
+          app.prisma.user.count({ where: { suspendedAt: { not: null } } }),
+          app.prisma.user.count({ where: { createdAt: { gte: weekAgo } } }),
+          app.prisma.server.groupBy({ by: ['status'], _count: { _all: true } }),
+          app.prisma.node.findMany({
+            include: { servers: { select: { memoryLimit: true, diskLimit: true } } },
+          }),
+          app.prisma.auditLog.findMany({
+            include: { actor: true },
+            orderBy: { createdAt: 'desc' },
+            take: 15,
+          }),
+        ]);
 
       const byStatus = new Map(serverCounts.map((row) => [row.status, row._count._all]));
       const total = serverCounts.reduce((sum, row) => sum + row._count._all, 0);
@@ -170,7 +318,8 @@ export default async function adminSystemRoutes(app: FastifyInstance): Promise<v
         servers: {
           total,
           online: byStatus.get(ServerStatus.ONLINE) ?? 0,
-          offline: (byStatus.get(ServerStatus.OFFLINE) ?? 0) + (byStatus.get(ServerStatus.CRASHED) ?? 0),
+          offline:
+            (byStatus.get(ServerStatus.OFFLINE) ?? 0) + (byStatus.get(ServerStatus.CRASHED) ?? 0),
           suspended: byStatus.get(ServerStatus.SUSPENDED) ?? 0,
         },
         nodes: {
@@ -272,7 +421,10 @@ export default async function adminSystemRoutes(app: FastifyInstance): Promise<v
 
   app.get(
     '/backup-storages',
-    { preHandler: app.requirePermission(Permission.BACKUP_STORAGE_MANAGE), schema: { tags: ['Admin'] } },
+    {
+      preHandler: app.requirePermission(Permission.BACKUP_STORAGE_MANAGE),
+      schema: { tags: ['Admin'] },
+    },
     async () => {
       const storages = await app.prisma.backupStorage.findMany({
         include: { _count: { select: { backups: true } } },
@@ -301,7 +453,10 @@ export default async function adminSystemRoutes(app: FastifyInstance): Promise<v
 
   app.post(
     '/backup-storages',
-    { preHandler: app.requirePermission(Permission.BACKUP_STORAGE_MANAGE), schema: { tags: ['Admin'] } },
+    {
+      preHandler: app.requirePermission(Permission.BACKUP_STORAGE_MANAGE),
+      schema: { tags: ['Admin'] },
+    },
     async (request, reply) => {
       const input = body(request, createBackupStorageSchema);
       if (input.driver !== 'LOCAL' && (!input.bucket || !input.accessKey || !input.secretKey)) {
@@ -343,7 +498,10 @@ export default async function adminSystemRoutes(app: FastifyInstance): Promise<v
 
   app.patch(
     '/backup-storages/:id',
-    { preHandler: app.requirePermission(Permission.BACKUP_STORAGE_MANAGE), schema: { tags: ['Admin'] } },
+    {
+      preHandler: app.requirePermission(Permission.BACKUP_STORAGE_MANAGE),
+      schema: { tags: ['Admin'] },
+    },
     async (request) => {
       const { id } = params(request, idParam);
       const input = body(request, updateBackupStorageSchema);
@@ -381,7 +539,10 @@ export default async function adminSystemRoutes(app: FastifyInstance): Promise<v
 
   app.delete(
     '/backup-storages/:id',
-    { preHandler: app.requirePermission(Permission.BACKUP_STORAGE_MANAGE), schema: { tags: ['Admin'] } },
+    {
+      preHandler: app.requirePermission(Permission.BACKUP_STORAGE_MANAGE),
+      schema: { tags: ['Admin'] },
+    },
     async (request) => {
       const { id } = params(request, idParam);
       const storage = await app.prisma.backupStorage.findUnique({
@@ -400,7 +561,10 @@ export default async function adminSystemRoutes(app: FastifyInstance): Promise<v
 
   app.get(
     '/database-hosts',
-    { preHandler: app.requirePermission(Permission.DATABASE_HOSTS_MANAGE), schema: { tags: ['Admin'] } },
+    {
+      preHandler: app.requirePermission(Permission.DATABASE_HOSTS_MANAGE),
+      schema: { tags: ['Admin'] },
+    },
     async () => {
       const hosts = await app.prisma.databaseHost.findMany({
         include: { node: true, _count: { select: { databases: true } } },
@@ -427,7 +591,10 @@ export default async function adminSystemRoutes(app: FastifyInstance): Promise<v
 
   app.post(
     '/database-hosts',
-    { preHandler: app.requirePermission(Permission.DATABASE_HOSTS_MANAGE), schema: { tags: ['Admin'] } },
+    {
+      preHandler: app.requirePermission(Permission.DATABASE_HOSTS_MANAGE),
+      schema: { tags: ['Admin'] },
+    },
     async (request, reply) => {
       const input = body(request, createDatabaseHostSchema);
 
@@ -462,7 +629,10 @@ export default async function adminSystemRoutes(app: FastifyInstance): Promise<v
 
   app.patch(
     '/database-hosts/:id',
-    { preHandler: app.requirePermission(Permission.DATABASE_HOSTS_MANAGE), schema: { tags: ['Admin'] } },
+    {
+      preHandler: app.requirePermission(Permission.DATABASE_HOSTS_MANAGE),
+      schema: { tags: ['Admin'] },
+    },
     async (request) => {
       const { id } = params(request, idParam);
       const input = body(request, updateDatabaseHostSchema);
@@ -495,7 +665,10 @@ export default async function adminSystemRoutes(app: FastifyInstance): Promise<v
 
   app.post(
     '/database-hosts/:id/test',
-    { preHandler: app.requirePermission(Permission.DATABASE_HOSTS_MANAGE), schema: { tags: ['Admin'] } },
+    {
+      preHandler: app.requirePermission(Permission.DATABASE_HOSTS_MANAGE),
+      schema: { tags: ['Admin'] },
+    },
     async (request) => {
       const { id } = params(request, idParam);
       const host = await app.prisma.databaseHost.findUnique({ where: { id } });
@@ -506,7 +679,10 @@ export default async function adminSystemRoutes(app: FastifyInstance): Promise<v
 
   app.delete(
     '/database-hosts/:id',
-    { preHandler: app.requirePermission(Permission.DATABASE_HOSTS_MANAGE), schema: { tags: ['Admin'] } },
+    {
+      preHandler: app.requirePermission(Permission.DATABASE_HOSTS_MANAGE),
+      schema: { tags: ['Admin'] },
+    },
     async (request) => {
       const { id } = params(request, idParam);
       const host = await app.prisma.databaseHost.findUnique({
@@ -652,7 +828,11 @@ export default async function adminSystemRoutes(app: FastifyInstance): Promise<v
       await app.prisma.webhook.delete({ where: { id } }).catch(() => {
         throw notFound('Webhook was not found', ErrorCode.NOT_FOUND);
       });
-      await app.audit.log(request, { action: 'admin.webhook_deleted', targetType: 'webhook', targetId: id });
+      await app.audit.log(request, {
+        action: 'admin.webhook_deleted',
+        targetType: 'webhook',
+        targetId: id,
+      });
       return ok({ deleted: true });
     },
   );

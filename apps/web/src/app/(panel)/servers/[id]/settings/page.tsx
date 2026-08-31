@@ -3,29 +3,19 @@
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, RefreshCw, Save, Trash2, UserPlus, Users, X } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
+import { AlertTriangle, RefreshCw, Save, Trash2 } from 'lucide-react';
 import {
-  Badge,
   Button,
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-  Checkbox,
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
   Field,
   Input,
-  Label,
   useConfirm,
   useToast,
 } from '@storm/ui';
-import { CUSTOMER_PERMISSIONS } from '@storm/types';
 import { api, errorMessage } from '@/lib/api';
 import { formatDate } from '@/lib/format';
 import { useServer } from '@/components/panel/server-context';
@@ -39,7 +29,6 @@ export default function ServerSettingsPage() {
 
   const [name, setName] = React.useState(server.name);
   const [description, setDescription] = React.useState(server.description ?? '');
-
 
   const rename = useMutation({
     mutationFn: () =>
@@ -125,8 +114,7 @@ export default function ServerSettingsPage() {
               onClick={() => rename.mutate()}
               loading={rename.isPending}
               disabled={
-                !name.trim() ||
-                (name === server.name && description === (server.description ?? ''))
+                !name.trim() || (name === server.name && description === (server.description ?? ''))
               }
             >
               <Save />
@@ -203,7 +191,6 @@ export default function ServerSettingsPage() {
       <p className="text-center text-xs text-muted-foreground">
         Server created {formatDate(server.createdAt)} · UUID {server.uuid}
       </p>
-
     </div>
   );
 }

@@ -2,20 +2,11 @@
 
 import * as React from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  CalendarClock,
-  Clock,
-  MoreVertical,
-  Play,
-  Plus,
-  Trash2,
-  X,
-} from 'lucide-react';
+import { CalendarClock, Clock, MoreVertical, Play, Plus, Trash2, X } from 'lucide-react';
 import {
   Badge,
   Button,
   Card,
-  CardContent,
   Dialog,
   DialogContent,
   DialogDescription,
@@ -55,18 +46,37 @@ const ACTIONS: { value: ScheduleAction; label: string; needsPayload?: string }[]
   { value: 'POWER_STOP', label: 'Stop the server' },
   { value: 'POWER_RESTART', label: 'Restart the server' },
   { value: 'POWER_KILL', label: 'Kill the server' },
-  { value: 'COMMAND', label: 'Send a console command', needsPayload: 'say Restarting in 5 minutes' },
+  {
+    value: 'COMMAND',
+    label: 'Send a console command',
+    needsPayload: 'say Restarting in 5 minutes',
+  },
   { value: 'BACKUP', label: 'Create a backup', needsPayload: 'Optional backup name' },
   { value: 'NOTIFY', label: 'Send a notification', needsPayload: 'Message to send' },
 ];
 
 /** Ready-made cadences: most schedules are one of these. */
 const PRESETS = [
-  { label: 'Every day at 04:00', cron: { minute: '0', hour: '4', dayOfMonth: '*', month: '*', dayOfWeek: '*' } },
-  { label: 'Every 6 hours', cron: { minute: '0', hour: '*/6', dayOfMonth: '*', month: '*', dayOfWeek: '*' } },
-  { label: 'Every hour', cron: { minute: '0', hour: '*', dayOfMonth: '*', month: '*', dayOfWeek: '*' } },
-  { label: 'Every 30 minutes', cron: { minute: '*/30', hour: '*', dayOfMonth: '*', month: '*', dayOfWeek: '*' } },
-  { label: 'Weekly on Sunday at 03:00', cron: { minute: '0', hour: '3', dayOfMonth: '*', month: '*', dayOfWeek: '0' } },
+  {
+    label: 'Every day at 04:00',
+    cron: { minute: '0', hour: '4', dayOfMonth: '*', month: '*', dayOfWeek: '*' },
+  },
+  {
+    label: 'Every 6 hours',
+    cron: { minute: '0', hour: '*/6', dayOfMonth: '*', month: '*', dayOfWeek: '*' },
+  },
+  {
+    label: 'Every hour',
+    cron: { minute: '0', hour: '*', dayOfMonth: '*', month: '*', dayOfWeek: '*' },
+  },
+  {
+    label: 'Every 30 minutes',
+    cron: { minute: '*/30', hour: '*', dayOfMonth: '*', month: '*', dayOfWeek: '*' },
+  },
+  {
+    label: 'Weekly on Sunday at 03:00',
+    cron: { minute: '0', hour: '3', dayOfMonth: '*', month: '*', dayOfWeek: '0' },
+  },
 ];
 
 interface TaskDraft {
@@ -246,7 +256,9 @@ export default function SchedulesPage() {
               </div>
 
               <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 border-t border-border pt-3 text-xs text-muted-foreground">
-                <span>Last run: {schedule.lastRunAt ? formatRelative(schedule.lastRunAt) : 'never'}</span>
+                <span>
+                  Last run: {schedule.lastRunAt ? formatRelative(schedule.lastRunAt) : 'never'}
+                </span>
                 <span>Next run: {schedule.nextRunAt ? formatDate(schedule.nextRunAt) : '—'}</span>
                 <span>Timezone: {schedule.timezone}</span>
               </div>
@@ -415,7 +427,9 @@ function ScheduleDialog({
                 <Field key={key} label={label}>
                   <Input
                     value={cron[key]}
-                    onChange={(event) => setCron((current) => ({ ...current, [key]: event.target.value }))}
+                    onChange={(event) =>
+                      setCron((current) => ({ ...current, [key]: event.target.value }))
+                    }
                     className="text-center font-mono"
                   />
                 </Field>
@@ -446,11 +460,15 @@ function ScheduleDialog({
               return (
                 <Card key={index} className="p-3">
                   <div className="flex items-start gap-2">
-                    <span className="mt-2 font-mono text-xs text-muted-foreground">{index + 1}</span>
+                    <span className="mt-2 font-mono text-xs text-muted-foreground">
+                      {index + 1}
+                    </span>
                     <div className="min-w-0 flex-1 space-y-2">
                       <Select
                         value={task.action}
-                        onValueChange={(value) => updateTask(index, { action: value as ScheduleAction })}
+                        onValueChange={(value) =>
+                          updateTask(index, { action: value as ScheduleAction })
+                        }
                       >
                         <SelectTrigger>
                           <SelectValue />

@@ -110,7 +110,10 @@ export class FilesService {
     return fs.readFile(target, 'utf8');
   }
 
-  async openStream(uuid: string, requested: string): Promise<{ stream: Readable; size: number; name: string }> {
+  async openStream(
+    uuid: string,
+    requested: string,
+  ): Promise<{ stream: Readable; size: number; name: string }> {
     const target = await this.paths.resolveChecked(uuid, requested);
     const stat = await fs.stat(target).catch(() => null);
     if (!stat) throw notFound('That file does not exist');
@@ -152,7 +155,8 @@ export class FilesService {
     const destination = await this.paths.resolveChecked(uuid, to);
 
     if (!(await this.exists(source))) throw notFound('That file does not exist');
-    if (await this.exists(destination)) throw badRequest('Something already exists at the destination');
+    if (await this.exists(destination))
+      throw badRequest('Something already exists at the destination');
 
     await fs.mkdir(path.dirname(destination), { recursive: true });
     await fs.rename(source, destination);
@@ -214,7 +218,9 @@ export class FilesService {
     files: string[],
     archiveName?: string,
   ): Promise<string> {
-    const directory = await this.paths.resolveChecked(uuid, requested);
+    // Validated for its own sake: the directory being compressed has to be
+    // inside the server root even though only `target` is written to.
+    await this.paths.resolveChecked(uuid, requested);
     const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
     const name = sanitizeFilename(archiveName ?? `archive-${stamp}.zip`);
     const finalName = name.endsWith('.zip') ? name : `${name}.zip`;
@@ -314,7 +320,8 @@ export class FilesService {
               isSymlink: info.isSymbolicLink(),
               mimeType: info.isDirectory()
                 ? 'inode/directory'
-                : (MIME_TYPES[path.extname(entry.name).toLowerCase()] ?? 'application/octet-stream'),
+                : (MIME_TYPES[path.extname(entry.name).toLowerCase()] ??
+                  'application/octet-stream'),
               mode: (info.mode & 0o777).toString(8).padStart(3, '0'),
               modifiedAt: info.mtime.toISOString(),
               createdAt: info.birthtime.toISOString(),

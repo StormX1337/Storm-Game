@@ -27,11 +27,6 @@ import {
   CardTitle,
   Field,
   Input,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
   Skeleton,
   cn,
   useToast,
@@ -286,7 +281,8 @@ export default function CreateServerPage() {
                     nodeId === node.id
                       ? 'border-primary bg-primary/[0.06] ring-1 ring-primary'
                       : 'border-border hover:border-primary/40 hover:bg-secondary/40',
-                    !usable && 'cursor-not-allowed opacity-50 hover:border-border hover:bg-transparent',
+                    !usable &&
+                      'cursor-not-allowed opacity-50 hover:border-border hover:bg-transparent',
                   )}
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3">

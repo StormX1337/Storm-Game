@@ -119,16 +119,16 @@ export default function NetworkPage() {
                     <TableCell>
                       <button
                         type="button"
-                        onClick={() =>
-                          void copy(`${allocation.ip}:${allocation.port}`, 'Address')
-                        }
+                        onClick={() => void copy(`${allocation.ip}:${allocation.port}`, 'Address')}
                         className="flex items-center gap-1.5 font-mono text-sm transition-colors hover:text-primary"
                       >
                         {allocation.ip}:{allocation.port}
                         <Copy className="h-3 w-3" />
                       </button>
                       {allocation.alias ? (
-                        <span className="block text-xs text-muted-foreground">{allocation.alias}</span>
+                        <span className="block text-xs text-muted-foreground">
+                          {allocation.alias}
+                        </span>
                       ) : null}
                     </TableCell>
                     <TableCell>
@@ -184,38 +184,6 @@ export default function NetworkPage() {
           )}
         </CardContent>
       </Card>
-
-    </div>
-  );
-}
-
-function Row({
-  label,
-  value,
-  onCopy,
-}: {
-  label: string;
-  value: string;
-  onCopy?: (value: string, label: string) => Promise<void>;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-2">
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className="flex min-w-0 items-center gap-1.5">
-        <span className="truncate font-mono text-xs" title={value}>
-          {value}
-        </span>
-        {onCopy ? (
-          <button
-            type="button"
-            onClick={() => void onCopy(value, label)}
-            className="shrink-0 rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground"
-            aria-label={`Copy ${label}`}
-          >
-            <Copy className="h-3 w-3" />
-          </button>
-        ) : null}
-      </dd>
     </div>
   );
 }

@@ -25,7 +25,10 @@ async function signIn(page: Page, identifier: string, password: string): Promise
 }
 
 async function signOut(page: Page): Promise<void> {
-  await page.getByRole('button', { name: /account menu/i }).first().click();
+  await page
+    .getByRole('button', { name: /account menu/i })
+    .first()
+    .click();
   await page.getByRole('menuitem', { name: 'Sign out' }).click();
   await page.waitForURL(/\/login/, { timeout: 30_000 });
 }
@@ -195,12 +198,16 @@ test.describe('panel', () => {
 
     await serverTab(page, 'SFTP').click();
     await page.waitForURL(/\/sftp$/, { timeout: 30_000 });
-    await expect(page.getByRole('heading', { name: 'SFTP access' })).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole('heading', { name: 'SFTP access' })).toBeVisible({
+      timeout: 20_000,
+    });
     await expect(page.getByRole('button', { name: 'Rotate password' })).toBeVisible();
 
     await serverTab(page, 'Team').click();
     await page.waitForURL(/\/subusers$/, { timeout: 30_000 });
-    await expect(page.getByRole('heading', { name: 'Shared access' })).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole('heading', { name: 'Shared access' })).toBeVisible({
+      timeout: 20_000,
+    });
     await expect(page.getByRole('button', { name: 'Add user' })).toBeVisible();
   });
 
@@ -218,7 +225,9 @@ test.describe('panel', () => {
     await expect(page.getByRole('button', { name: 'Refresh' })).toBeVisible();
     // Either a listing or an explicit empty state — never a crash.
     await expect(
-      page.getByRole('columnheader', { name: 'Name' }).or(page.getByText(/This folder is empty|No files match/)),
+      page
+        .getByRole('columnheader', { name: 'Name' })
+        .or(page.getByText(/This folder is empty|No files match/)),
     ).toBeVisible({ timeout: 25_000 });
   });
 
@@ -256,6 +265,8 @@ test.describe('administration', () => {
       ['/admin/databases', /Database hosts/],
       ['/admin/backups', /Backup storage/],
       ['/admin/settings', /Settings/],
+      ['/admin/webhooks', /Webhooks/],
+      ['/admin/updates', /Updates/],
     ];
 
     for (const [path, heading] of sections) {
@@ -271,7 +282,9 @@ test.describe('administration', () => {
 
     // A template's name appears both in its card heading and in its slug line,
     // so match the first occurrence rather than demanding a unique one.
-    await expect(page.getByText('Minecraft: Java Edition').first()).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText('Minecraft: Java Edition').first()).toBeVisible({
+      timeout: 20_000,
+    });
     await expect(page.getByText('Counter-Strike 2').first()).toBeVisible();
     await expect(page.getByText('Valheim').first()).toBeVisible();
   });
