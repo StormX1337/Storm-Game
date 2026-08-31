@@ -155,6 +155,32 @@ describe('Minecraft install script', () => {
 });
 
 describe('every template', () => {
+  it('offers an image its default is actually one of', () => {
+    // A default outside the declared set is an image the panel will not let
+    // anyone switch back to once they leave it — the API only accepts declared
+    // ones.
+    for (const template of SEED_TEMPLATES) {
+      assert.ok(
+        Object.values(template.dockerImages).includes(template.defaultImage),
+        `${template.slug} defaults to ${template.defaultImage}, which it does not declare`,
+      );
+    }
+  });
+
+  it('declares more than one image where the runtime version matters', () => {
+    // Minecraft raises its minimum Java with the game version and refuses to
+    // start on anything older, so a single image means a server that cannot be
+    // fixed from the panel.
+    const minecraft = SEED_TEMPLATES.find((t) => t.slug === 'minecraft-java');
+    assert.ok(minecraft);
+    const images = Object.values(minecraft.dockerImages);
+    assert.ok(images.length > 1, 'only one Java version on offer');
+    assert.ok(
+      images.some((image) => /temurin:2[5-9]/.test(image)),
+      `nothing newer than Java 24 on offer: ${images.join(', ')}`,
+    );
+  });
+
   it('has no retired PaperMC v2 URL left in it', () => {
     for (const template of SEED_TEMPLATES) {
       assert.doesNotMatch(

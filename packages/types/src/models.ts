@@ -80,7 +80,19 @@ export interface ServerSummary {
   suspended: boolean;
   installed: boolean;
   node: { id: string; name: string; location: string; status: NodeStatus };
-  template: { id: string; name: string; slug: string; game: string; category: string } | null;
+  template: {
+    id: string;
+    name: string;
+    slug: string;
+    game: string;
+    category: string;
+    /**
+     * Label to image, e.g. { 'Java 25': 'eclipse-temurin:25-jre' }. The startup
+     * tab offers these and the API accepts only these, so a customer cannot
+     * point their container at an arbitrary registry.
+     */
+    dockerImages: Record<string, string>;
+  } | null;
   owner: { id: string; username: string; email: string } | null;
   primaryAllocation: AllocationSummary | null;
   limits: ServerLimits;

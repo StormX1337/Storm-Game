@@ -117,6 +117,7 @@ export function toServerSummary(server: Row): ServerSummary {
           slug: server.template.slug,
           game: server.template.game,
           category: server.template.category,
+          dockerImages: (server.template.dockerImages ?? {}) as Record<string, string>,
         }
       : null,
     owner: server.owner

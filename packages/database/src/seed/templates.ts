@@ -83,13 +83,19 @@ export const SEED_TEMPLATES: SeedTemplate[] = [
     category: 'Minecraft',
     description:
       'Vanilla, Paper, Purpur and Fabric compatible Minecraft Java Edition server running on Temurin JRE.',
+    // Minecraft raises its minimum Java with the game version, and the server
+    // refuses to start on anything older — 26.1 wants 25. Old versions are the
+    // mirror image: 1.16 and earlier will not run on a modern JRE. So the whole
+    // range stays on offer and the newest is the default, since "latest" is
+    // what most people install.
     dockerImages: {
+      'Java 25': 'eclipse-temurin:25-jre',
       'Java 21': 'eclipse-temurin:21-jre',
       'Java 17': 'eclipse-temurin:17-jre',
       'Java 11': 'eclipse-temurin:11-jre',
       'Java 8': 'eclipse-temurin:8-jre',
     },
-    defaultImage: 'eclipse-temurin:21-jre',
+    defaultImage: 'eclipse-temurin:25-jre',
     startupCommand:
       'java -Xms128M -Xmx{{SERVER_MEMORY}}M -Dterminal.jline=false -Dterminal.ansi=true -jar {{SERVER_JARFILE}} nogui',
     stopCommand: 'stop',

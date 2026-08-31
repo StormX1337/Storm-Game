@@ -39,11 +39,16 @@ export default function StartupPage() {
   const variablesEditable = can('servers.variables') && !server.suspended;
 
   const images = React.useMemo(() => {
-    // The panel only offers images the template declares, so a customer cannot
-    // point their container at an arbitrary registry.
-    const declared = new Set<string>([server.dockerImage]);
-    return [...declared];
-  }, [server.dockerImage]);
+    // Only what the template declares, so a customer cannot point their
+    // container at an arbitrary registry — the API enforces the same list.
+    // The server's current image is included even if the template has since
+    // dropped it, so the selector always shows what is actually running.
+    const declared = server.template?.dockerImages ?? {};
+    const byImage = new Map<string, string>();
+    for (const [label, image] of Object.entries(declared)) byImage.set(image, label);
+    if (!byImage.has(server.dockerImage)) byImage.set(server.dockerImage, server.dockerImage);
+    return [...byImage].map(([image, label]) => ({ image, label }));
+  }, [server.dockerImage, server.template]);
 
   const saveStartup = useMutation({
     mutationFn: () =>
@@ -111,8 +116,17 @@ export default function StartupPage() {
               </SelectTrigger>
               <SelectContent>
                 {images.map((entry) => (
-                  <SelectItem key={entry} value={entry}>
-                    {entry}
+                  <SelectItem key={entry.image} value={entry.image}>
+                    {entry.label === entry.image ? (
+                      entry.image
+                    ) : (
+                      <span className="flex items-baseline gap-2">
+                        {entry.label}
+                        <span className="font-mono text-2xs text-muted-foreground">
+                          {entry.image}
+                        </span>
+                      </span>
+                    )}
                   </SelectItem>
                 ))}
               </SelectContent>
