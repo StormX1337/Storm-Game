@@ -36,7 +36,9 @@ export function verifySignature(
 }
 
 export function hashBody(body: string): string {
-  return createHmac('sha256', 'storm-body').update(body ?? '').digest('hex');
+  return createHmac('sha256', 'storm-body')
+    .update(body ?? '')
+    .digest('hex');
 }
 
 /** Signature header used for outbound webhooks (`t=<ts>,v1=<hmac>`). */

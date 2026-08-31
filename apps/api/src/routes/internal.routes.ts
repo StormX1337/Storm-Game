@@ -278,7 +278,11 @@ export default async function internalRoutes(app: FastifyInstance): Promise<void
     '/servers',
     {
       config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
-      schema: { tags: ['Internal'], summary: 'Every server specification for this node', hide: true },
+      schema: {
+        tags: ['Internal'],
+        summary: 'Every server specification for this node',
+        hide: true,
+      },
     },
     async (request) => {
       const node = await authenticateNode(request);
@@ -315,7 +319,8 @@ async function reconcileServerStates(
   for (const entry of reported) {
     const server = byUuid.get(entry.uuid);
     if (!server || server.suspendedAt) continue;
-    if (server.status === ServerStatus.INSTALLING || server.status === ServerStatus.REINSTALLING) continue;
+    if (server.status === ServerStatus.INSTALLING || server.status === ServerStatus.REINSTALLING)
+      continue;
     if (server.status === entry.status) continue;
 
     await app.servers.updateStatus(server.id, entry.status);

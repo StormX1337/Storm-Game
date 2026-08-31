@@ -9,8 +9,16 @@ const permissionEnum = z.enum(ALL_PERMISSIONS as [string, ...string[]]);
 export const userLimitsSchema = z.object({
   serverLimit: z.number().int().min(0).max(10000),
   cpuLimit: z.number().int().min(0).max(100000),
-  memoryLimit: z.number().int().min(0).max(10 * 1024 * 1024),
-  diskLimit: z.number().int().min(0).max(100 * 1024 * 1024),
+  memoryLimit: z
+    .number()
+    .int()
+    .min(0)
+    .max(10 * 1024 * 1024),
+  diskLimit: z
+    .number()
+    .int()
+    .min(0)
+    .max(100 * 1024 * 1024),
   backupLimit: z.number().int().min(0).max(10000),
   databaseLimit: z.number().int().min(0).max(10000),
   allocationLimit: z.number().int().min(0).max(10000),
@@ -114,7 +122,10 @@ export const createTemplateSchema = z.object({
   defaultImage: z.string().trim().min(1).max(255),
   startupCommand: z.string().trim().min(1).max(4000),
   stopCommand: z.string().trim().min(1).max(255).default('^C'),
-  installScript: z.string().max(64 * 1024).default('#!/bin/bash\n'),
+  installScript: z
+    .string()
+    .max(64 * 1024)
+    .default('#!/bin/bash\n'),
   installContainer: z.string().trim().min(1).max(255).default('debian:bookworm-slim'),
   installEntrypoint: z.string().trim().min(1).max(100).default('bash'),
   startupDetection: z.string().max(500).default(''),
@@ -237,8 +248,18 @@ export const updateSettingsSchema = z.object({
   registrationEnabled: z.boolean().optional(),
   requireEmailVerification: z.boolean().optional(),
   defaultServerLimit: z.number().int().min(0).max(10000).optional(),
-  defaultMemoryLimit: z.number().int().min(0).max(10 * 1024 * 1024).optional(),
-  defaultDiskLimit: z.number().int().min(0).max(100 * 1024 * 1024).optional(),
+  defaultMemoryLimit: z
+    .number()
+    .int()
+    .min(0)
+    .max(10 * 1024 * 1024)
+    .optional(),
+  defaultDiskLimit: z
+    .number()
+    .int()
+    .min(0)
+    .max(100 * 1024 * 1024)
+    .optional(),
   defaultBackupLimit: z.number().int().min(0).max(1000).optional(),
   defaultDatabaseLimit: z.number().int().min(0).max(1000).optional(),
   defaultAllocationLimit: z.number().int().min(0).max(1000).optional(),

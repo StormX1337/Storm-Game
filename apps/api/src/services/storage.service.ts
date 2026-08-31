@@ -4,7 +4,13 @@ import fs from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import type { Readable } from 'node:stream';
 import type { FastifyInstance } from 'fastify';
-import { S3Client, DeleteObjectCommand, HeadObjectCommand, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
+import {
+  S3Client,
+  DeleteObjectCommand,
+  HeadObjectCommand,
+  GetObjectCommand,
+  PutObjectCommand,
+} from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import type { BackupStorage } from '@storm/database';
 import { ErrorCode, type AgentDownloadSource, type AgentUploadTarget } from '@storm/types';
@@ -94,7 +100,11 @@ export class StorageService {
   }
 
   /** Time-limited URL a browser can download a backup from. */
-  async presignDownload(storage: BackupStorage, key: string, filename: string): Promise<string | null> {
+  async presignDownload(
+    storage: BackupStorage,
+    key: string,
+    filename: string,
+  ): Promise<string | null> {
     if (this.isLocal(storage)) return null;
     const client = this.clientFor(storage);
     return getSignedUrl(
@@ -134,7 +144,11 @@ export class StorageService {
   async openLocal(key: string): Promise<Readable> {
     const target = resolveSafePath(this.app.env.BACKUP_LOCAL_PATH, key);
     await fs.access(target).catch(() => {
-      throw new AppError(404, ErrorCode.BACKUP_NOT_FOUND, 'That backup archive is no longer on disk');
+      throw new AppError(
+        404,
+        ErrorCode.BACKUP_NOT_FOUND,
+        'That backup archive is no longer on disk',
+      );
     });
     return createReadStream(target);
   }

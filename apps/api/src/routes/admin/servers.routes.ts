@@ -63,42 +63,50 @@ export default async function adminServerRoutes(app: FastifyInstance): Promise<v
     return paginated(servers.map(toServerSummary), total, q.page, q.perPage);
   });
 
-  app.post('/:id/transfer', { schema: { tags: ['Admin'], summary: 'Change a server owner' } }, async (request) => {
-    const { id } = params(request, idParam);
-    const { ownerId } = body(request, z.object({ ownerId: z.string().min(1).max(64) }));
+  app.post(
+    '/:id/transfer',
+    { schema: { tags: ['Admin'], summary: 'Change a server owner' } },
+    async (request) => {
+      const { id } = params(request, idParam);
+      const { ownerId } = body(request, z.object({ ownerId: z.string().min(1).max(64) }));
 
-    const [server, owner] = await Promise.all([
-      app.prisma.server.findUnique({ where: { id } }),
-      app.prisma.user.findUnique({ where: { id: ownerId } }),
-    ]);
-    if (!server) throw notFound('Server was not found', ErrorCode.SERVER_NOT_FOUND);
-    if (!owner) throw notFound('User was not found', ErrorCode.USER_NOT_FOUND);
+      const [server, owner] = await Promise.all([
+        app.prisma.server.findUnique({ where: { id } }),
+        app.prisma.user.findUnique({ where: { id: ownerId } }),
+      ]);
+      if (!server) throw notFound('Server was not found', ErrorCode.SERVER_NOT_FOUND);
+      if (!owner) throw notFound('User was not found', ErrorCode.USER_NOT_FOUND);
 
-    await app.prisma.server.update({ where: { id }, data: { ownerId } });
-    await app.audit.log(request, {
-      action: 'admin.server_transferred',
-      targetType: 'server',
-      targetId: id,
-      targetLabel: server.name,
-      metadata: { from: server.ownerId, to: ownerId },
-    });
+      await app.prisma.server.update({ where: { id }, data: { ownerId } });
+      await app.audit.log(request, {
+        action: 'admin.server_transferred',
+        targetType: 'server',
+        targetId: id,
+        targetLabel: server.name,
+        metadata: { from: server.ownerId, to: ownerId },
+      });
 
-    return ok({ transferred: true });
-  });
+      return ok({ transferred: true });
+    },
+  );
 
-  app.post('/:id/sync', { schema: { tags: ['Admin'], summary: 'Re-push the container spec to its node' } }, async (request) => {
-    const { id } = params(request, idParam);
-    const server = await app.prisma.server.findUnique({ where: { id } });
-    if (!server) throw notFound('Server was not found', ErrorCode.SERVER_NOT_FOUND);
+  app.post(
+    '/:id/sync',
+    { schema: { tags: ['Admin'], summary: 'Re-push the container spec to its node' } },
+    async (request) => {
+      const { id } = params(request, idParam);
+      const server = await app.prisma.server.findUnique({ where: { id } });
+      if (!server) throw notFound('Server was not found', ErrorCode.SERVER_NOT_FOUND);
 
-    await app.servers.syncToNode(id);
-    await app.audit.log(request, {
-      action: 'admin.server_synced',
-      targetType: 'server',
-      targetId: id,
-      targetLabel: server.name,
-    });
+      await app.servers.syncToNode(id);
+      await app.audit.log(request, {
+        action: 'admin.server_synced',
+        targetType: 'server',
+        targetId: id,
+        targetLabel: server.name,
+      });
 
-    return ok({ synced: true });
-  });
+      return ok({ synced: true });
+    },
+  );
 }

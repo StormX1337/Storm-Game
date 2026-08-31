@@ -18,7 +18,10 @@ function jsonResponse(status: number, body: unknown): Response {
 
 const ok = (data: unknown) => jsonResponse(200, { success: true, data });
 const unauthorized = () =>
-  jsonResponse(401, { success: false, error: { code: 'UNAUTHENTICATED', message: 'Session expired' } });
+  jsonResponse(401, {
+    success: false,
+    error: { code: 'UNAUTHENTICATED', message: 'Session expired' },
+  });
 
 let fetchMock: ReturnType<typeof vi.fn>;
 
@@ -79,7 +82,9 @@ describe('apiRequest', () => {
   it('surfaces the failure when the refresh itself is refused', async () => {
     fetchMock
       .mockResolvedValueOnce(unauthorized())
-      .mockResolvedValueOnce(jsonResponse(401, { success: false, error: { code: 'UNAUTHENTICATED', message: 'no' } }));
+      .mockResolvedValueOnce(
+        jsonResponse(401, { success: false, error: { code: 'UNAUTHENTICATED', message: 'no' } }),
+      );
 
     const error = await api.get('/servers').catch((e: unknown) => e);
     expect(error).toBeInstanceOf(ApiError);

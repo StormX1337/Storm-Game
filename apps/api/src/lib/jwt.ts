@@ -67,10 +67,13 @@ export function verifyJwt(secret: string, token: string, expectedIssuer: string)
   }
 
   const now = Math.floor(Date.now() / 1000);
-  if (typeof payload.exp !== 'number' || payload.exp <= now) throw new JwtError('Token has expired');
-  if (typeof payload.iat !== 'number' || payload.iat > now + 60) throw new JwtError('Token is not yet valid');
+  if (typeof payload.exp !== 'number' || payload.exp <= now)
+    throw new JwtError('Token has expired');
+  if (typeof payload.iat !== 'number' || payload.iat > now + 60)
+    throw new JwtError('Token is not yet valid');
   if (payload.iss !== expectedIssuer) throw new JwtError('Token issuer mismatch');
-  if (typeof payload.sub !== 'string' || payload.sub.length === 0) throw new JwtError('Token subject missing');
+  if (typeof payload.sub !== 'string' || payload.sub.length === 0)
+    throw new JwtError('Token subject missing');
 
   return payload;
 }

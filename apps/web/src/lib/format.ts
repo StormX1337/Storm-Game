@@ -50,7 +50,9 @@ export function formatDate(value: string | Date | null | undefined): string {
   if (!value) return '—';
   const date = typeof value === 'string' ? new Date(value) : value;
   if (Number.isNaN(date.getTime())) return '—';
-  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date);
+  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(
+    date,
+  );
 }
 
 export function formatDateShort(value: string | Date | null | undefined): string {
@@ -81,7 +83,10 @@ export function formatRelative(value: string | Date | null | undefined): string 
 
 export type StatusTone = 'success' | 'warning' | 'destructive' | 'muted' | 'default';
 
-export const SERVER_STATUS_META: Record<ServerStatus, { label: string; tone: StatusTone; pulse?: boolean }> = {
+export const SERVER_STATUS_META: Record<
+  ServerStatus,
+  { label: string; tone: StatusTone; pulse?: boolean }
+> = {
   INSTALLING: { label: 'Installing', tone: 'default', pulse: true },
   INSTALL_FAILED: { label: 'Install failed', tone: 'destructive' },
   STARTING: { label: 'Starting', tone: 'warning', pulse: true },
@@ -93,7 +98,10 @@ export const SERVER_STATUS_META: Record<ServerStatus, { label: string; tone: Sta
   REINSTALLING: { label: 'Reinstalling', tone: 'default', pulse: true },
 };
 
-export const NODE_STATUS_META: Record<NodeStatus, { label: string; tone: StatusTone; pulse?: boolean }> = {
+export const NODE_STATUS_META: Record<
+  NodeStatus,
+  { label: string; tone: StatusTone; pulse?: boolean }
+> = {
   ONLINE: { label: 'Online', tone: 'success' },
   OFFLINE: { label: 'Offline', tone: 'destructive' },
   DEGRADED: { label: 'Degraded', tone: 'warning', pulse: true },
@@ -102,13 +110,19 @@ export const NODE_STATUS_META: Record<NodeStatus, { label: string; tone: StatusT
 
 /** Turns `server:power.start` or `admin.user_created` into readable prose. */
 export function humaniseEvent(event: string): string {
-  const cleaned = event.replace(/^(server|admin|auth|account|file|backup|schedule|database):?\.?/, '');
+  const cleaned = event.replace(
+    /^(server|admin|auth|account|file|backup|schedule|database):?\.?/,
+    '',
+  );
   const words = cleaned.replace(/[._:]/g, ' ').trim();
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
 export function initials(name: string): string {
-  const parts = name.trim().split(/[\s.@_-]+/).filter(Boolean);
+  const parts = name
+    .trim()
+    .split(/[\s.@_-]+/)
+    .filter(Boolean);
   if (parts.length === 0) return '??';
   if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase();
   return `${parts[0]![0]}${parts[1]![0]}`.toUpperCase();

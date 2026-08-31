@@ -22,7 +22,10 @@ const idParam = z.object({ id: z.string().min(1).max(64) });
 
 export default async function adminNodeRoutes(app: FastifyInstance): Promise<void> {
   app.addHook('preHandler', app.authenticate);
-  app.addHook('preHandler', app.requirePermission(Permission.NODES_MANAGE, Permission.ALLOCATIONS_MANAGE));
+  app.addHook(
+    'preHandler',
+    app.requirePermission(Permission.NODES_MANAGE, Permission.ALLOCATIONS_MANAGE),
+  );
 
   /* ------------------------------------------------------------ nodes -- */
 
@@ -54,33 +57,40 @@ export default async function adminNodeRoutes(app: FastifyInstance): Promise<voi
     return paginated(nodes.map(toNodeSummary), total, q.page, q.perPage);
   });
 
-  app.post('/', { schema: { tags: ['Admin: Nodes'], summary: 'Register a node' } }, async (request, reply) => {
-    const input = body(request, createNodeSchema);
+  app.post(
+    '/',
+    { schema: { tags: ['Admin: Nodes'], summary: 'Register a node' } },
+    async (request, reply) => {
+      const input = body(request, createNodeSchema);
 
-    const existing = await app.prisma.node.findUnique({ where: { name: input.name } });
-    if (existing) throw conflict('A node with that name already exists');
+      const existing = await app.prisma.node.findUnique({ where: { name: input.name } });
+      if (existing) throw conflict('A node with that name already exists');
 
-    const node = await app.prisma.node.create({
-      data: { ...input, status: NodeStatus.OFFLINE },
-    });
+      const node = await app.prisma.node.create({
+        data: { ...input, status: NodeStatus.OFFLINE },
+      });
 
-    // A node is useless without credentials, so one token is minted up front.
-    const token = await mintToken(app, node.id, 'initial');
+      // A node is useless without credentials, so one token is minted up front.
+      const token = await mintToken(app, node.id, 'initial');
 
-    await app.audit.log(request, {
-      action: 'admin.node_created',
-      targetType: 'node',
-      targetId: node.id,
-      targetLabel: node.name,
-    });
+      await app.audit.log(request, {
+        action: 'admin.node_created',
+        targetType: 'node',
+        targetId: node.id,
+        targetLabel: node.name,
+      });
 
-    return reply.status(201).send(
-      ok({
-        node: toNodeDetail({ ...node, servers: [], _count: { servers: 0, allocations: 0 } }, null),
-        token,
-      }),
-    );
-  });
+      return reply.status(201).send(
+        ok({
+          node: toNodeDetail(
+            { ...node, servers: [], _count: { servers: 0, allocations: 0 } },
+            null,
+          ),
+          token,
+        }),
+      );
+    },
+  );
 
   app.get('/:id', { schema: { tags: ['Admin: Nodes'] } }, async (request) => {
     const { id } = params(request, idParam);
@@ -165,23 +175,30 @@ export default async function adminNodeRoutes(app: FastifyInstance): Promise<voi
     );
   });
 
-  app.post('/:id/tokens', { schema: { tags: ['Admin: Nodes'], summary: 'Mint a node token' } }, async (request) => {
-    const { id } = params(request, idParam);
-    const input = body(request, z.object({ name: z.string().trim().min(1).max(64).default('default') }));
+  app.post(
+    '/:id/tokens',
+    { schema: { tags: ['Admin: Nodes'], summary: 'Mint a node token' } },
+    async (request) => {
+      const { id } = params(request, idParam);
+      const input = body(
+        request,
+        z.object({ name: z.string().trim().min(1).max(64).default('default') }),
+      );
 
-    const node = await app.prisma.node.findUnique({ where: { id } });
-    if (!node) throw notFound('Node was not found', ErrorCode.NODE_NOT_FOUND);
+      const node = await app.prisma.node.findUnique({ where: { id } });
+      if (!node) throw notFound('Node was not found', ErrorCode.NODE_NOT_FOUND);
 
-    const token = await mintToken(app, id, input.name);
-    await app.audit.log(request, {
-      action: 'admin.node_token_created',
-      targetType: 'node',
-      targetId: id,
-      targetLabel: node.name,
-    });
+      const token = await mintToken(app, id, input.name);
+      await app.audit.log(request, {
+        action: 'admin.node_token_created',
+        targetType: 'node',
+        targetId: id,
+        targetLabel: node.name,
+      });
 
-    return ok(token);
-  });
+      return ok(token);
+    },
+  );
 
   app.delete('/:id/tokens/:tokenId', { schema: { tags: ['Admin: Nodes'] } }, async (request) => {
     const { id, tokenId } = params(request, idParam.extend({ tokenId: z.string().min(1) }));
@@ -197,75 +214,83 @@ export default async function adminNodeRoutes(app: FastifyInstance): Promise<voi
     return ok({ revoked: true });
   });
 
-  app.get('/:id/configuration', { schema: { tags: ['Admin: Nodes'], summary: 'Agent configuration file' } }, async (request) => {
-    const { id } = params(request, idParam);
-    const node = await app.prisma.node.findUnique({ where: { id } });
-    if (!node) throw notFound('Node was not found', ErrorCode.NODE_NOT_FOUND);
+  app.get(
+    '/:id/configuration',
+    { schema: { tags: ['Admin: Nodes'], summary: 'Agent configuration file' } },
+    async (request) => {
+      const { id } = params(request, idParam);
+      const node = await app.prisma.node.findUnique({ where: { id } });
+      if (!node) throw notFound('Node was not found', ErrorCode.NODE_NOT_FOUND);
 
-    // Issuing configuration always mints a fresh token: the old secret cannot
-    // be recovered from the database, only replaced.
-    const token = await mintToken(app, node.id, 'configuration');
+      // Issuing configuration always mints a fresh token: the old secret cannot
+      // be recovered from the database, only replaced.
+      const token = await mintToken(app, node.id, 'configuration');
 
-    const config = [
-      `# Storm Node Agent configuration for ${node.name}`,
-      `# Generated ${new Date().toISOString()}`,
-      `NODE_UUID=${node.uuid}`,
-      `PANEL_URL=${app.env.APP_URL}`,
-      `AGENT_HOST=0.0.0.0`,
-      `AGENT_PORT=${node.agentPort}`,
-      `AGENT_TOKEN_ID=${token.tokenId}`,
-      `AGENT_TOKEN=${token.token}`,
-      `AGENT_SECRET=${token.secret}`,
-      `DATA_DIRECTORY=${node.dataDirectory}`,
-      `BACKUP_DIRECTORY=${node.backupDirectory}`,
-      `SFTP_ENABLED=true`,
-      `SFTP_PORT=${node.sftpPort}`,
-      `DOCKER_NETWORK=storm_net`,
-      `LOG_LEVEL=info`,
-    ].join('\n');
+      const config = [
+        `# Storm Node Agent configuration for ${node.name}`,
+        `# Generated ${new Date().toISOString()}`,
+        `NODE_UUID=${node.uuid}`,
+        `PANEL_URL=${app.env.APP_URL}`,
+        `AGENT_HOST=0.0.0.0`,
+        `AGENT_PORT=${node.agentPort}`,
+        `AGENT_TOKEN_ID=${token.tokenId}`,
+        `AGENT_TOKEN=${token.token}`,
+        `AGENT_SECRET=${token.secret}`,
+        `DATA_DIRECTORY=${node.dataDirectory}`,
+        `BACKUP_DIRECTORY=${node.backupDirectory}`,
+        `SFTP_ENABLED=true`,
+        `SFTP_PORT=${node.sftpPort}`,
+        `DOCKER_NETWORK=storm_net`,
+        `LOG_LEVEL=info`,
+      ].join('\n');
 
-    await app.audit.log(request, {
-      action: 'admin.node_configuration_issued',
-      targetType: 'node',
-      targetId: id,
-      targetLabel: node.name,
-    });
-
-    return ok({ configuration: `${config}\n`, filename: 'storm-agent.env' });
-  });
-
-  app.get('/:id/health', { schema: { tags: ['Admin: Nodes'], summary: 'Query the agent directly' } }, async (request) => {
-    const { id } = params(request, idParam);
-    const node = await app.prisma.node.findUnique({ where: { id } });
-    if (!node) throw notFound('Node was not found', ErrorCode.NODE_NOT_FOUND);
-
-    try {
-      const [info, stats] = await Promise.all([
-        app.agents.request<AgentSystemInfo>(node, '/api/v1/system', { timeoutMs: 8000 }),
-        app.agents.request<AgentSystemStats>(node, '/api/v1/system/stats', { timeoutMs: 8000 }),
-      ]);
-
-      await app.prisma.node.update({
-        where: { id },
-        data: {
-          status: node.maintenanceMode ? NodeStatus.MAINTENANCE : NodeStatus.ONLINE,
-          dockerVersion: info.dockerVersion,
-          agentVersion: info.agentVersion,
-          kernel: info.kernel,
-          os: info.os,
-          cpuModel: info.cpuModel,
-          lastHeartbeatAt: new Date(),
-        },
+      await app.audit.log(request, {
+        action: 'admin.node_configuration_issued',
+        targetType: 'node',
+        targetId: id,
+        targetLabel: node.name,
       });
 
-      return ok({ reachable: true, info, stats });
-    } catch (error) {
-      return ok({
-        reachable: false,
-        error: error instanceof AppError ? error.message : 'The agent did not respond',
-      });
-    }
-  });
+      return ok({ configuration: `${config}\n`, filename: 'storm-agent.env' });
+    },
+  );
+
+  app.get(
+    '/:id/health',
+    { schema: { tags: ['Admin: Nodes'], summary: 'Query the agent directly' } },
+    async (request) => {
+      const { id } = params(request, idParam);
+      const node = await app.prisma.node.findUnique({ where: { id } });
+      if (!node) throw notFound('Node was not found', ErrorCode.NODE_NOT_FOUND);
+
+      try {
+        const [info, stats] = await Promise.all([
+          app.agents.request<AgentSystemInfo>(node, '/api/v1/system', { timeoutMs: 8000 }),
+          app.agents.request<AgentSystemStats>(node, '/api/v1/system/stats', { timeoutMs: 8000 }),
+        ]);
+
+        await app.prisma.node.update({
+          where: { id },
+          data: {
+            status: node.maintenanceMode ? NodeStatus.MAINTENANCE : NodeStatus.ONLINE,
+            dockerVersion: info.dockerVersion,
+            agentVersion: info.agentVersion,
+            kernel: info.kernel,
+            os: info.os,
+            cpuModel: info.cpuModel,
+            lastHeartbeatAt: new Date(),
+          },
+        });
+
+        return ok({ reachable: true, info, stats });
+      } catch (error) {
+        return ok({
+          reachable: false,
+          error: error instanceof AppError ? error.message : 'The agent did not respond',
+        });
+      }
+    },
+  );
 
   /* ------------------------------------------------------ allocations -- */
 
@@ -297,7 +322,11 @@ export default async function adminNodeRoutes(app: FastifyInstance): Promise<voi
       allocations.map((allocation) => ({
         ...toAllocation(allocation),
         server: allocation.server
-          ? { id: allocation.server.id, name: allocation.server.name, shortId: allocation.server.shortId }
+          ? {
+              id: allocation.server.id,
+              name: allocation.server.name,
+              shortId: allocation.server.shortId,
+            }
           : null,
       })),
       total,
@@ -306,70 +335,91 @@ export default async function adminNodeRoutes(app: FastifyInstance): Promise<voi
     );
   });
 
-  app.post('/:id/allocations', { schema: { tags: ['Admin: Allocations'], summary: 'Add ports' } }, async (request, reply) => {
-    const { id } = params(request, idParam);
-    const input = body(request, createAllocationSchema.omit({ nodeId: true }));
+  app.post(
+    '/:id/allocations',
+    { schema: { tags: ['Admin: Allocations'], summary: 'Add ports' } },
+    async (request, reply) => {
+      const { id } = params(request, idParam);
+      const input = body(request, createAllocationSchema.omit({ nodeId: true }));
 
-    const node = await app.prisma.node.findUnique({ where: { id } });
-    if (!node) throw notFound('Node was not found', ErrorCode.NODE_NOT_FOUND);
+      const node = await app.prisma.node.findUnique({ where: { id } });
+      if (!node) throw notFound('Node was not found', ErrorCode.NODE_NOT_FOUND);
 
-    const ports = new Set<number>(input.ports ?? []);
-    if (input.portRangeStart && input.portRangeEnd) {
-      if (input.portRangeEnd < input.portRangeStart) throw badRequest('The port range is inverted');
-      if (input.portRangeEnd - input.portRangeStart > 2000) {
-        throw badRequest('A single request may create at most 2000 ports');
+      const ports = new Set<number>(input.ports ?? []);
+      if (input.portRangeStart && input.portRangeEnd) {
+        if (input.portRangeEnd < input.portRangeStart)
+          throw badRequest('The port range is inverted');
+        if (input.portRangeEnd - input.portRangeStart > 2000) {
+          throw badRequest('A single request may create at most 2000 ports');
+        }
+        for (let port = input.portRangeStart; port <= input.portRangeEnd; port += 1)
+          ports.add(port);
       }
-      for (let port = input.portRangeStart; port <= input.portRangeEnd; port += 1) ports.add(port);
-    }
-    if (ports.size === 0) throw badRequest('Provide either a list of ports or a port range');
+      if (ports.size === 0) throw badRequest('Provide either a list of ports or a port range');
 
-    const result = await app.prisma.serverAllocation.createMany({
-      data: [...ports].map((port) => ({
-        nodeId: id,
-        ip: input.ip,
-        port,
-        protocol: input.protocol,
-        alias: input.alias ?? null,
-      })),
-      // Re-adding an existing port is a no-op rather than an error.
-      skipDuplicates: true,
-    });
+      const result = await app.prisma.serverAllocation.createMany({
+        data: [...ports].map((port) => ({
+          nodeId: id,
+          ip: input.ip,
+          port,
+          protocol: input.protocol,
+          alias: input.alias ?? null,
+        })),
+        // Re-adding an existing port is a no-op rather than an error.
+        skipDuplicates: true,
+      });
 
-    await app.audit.log(request, {
-      action: 'admin.allocations_created',
-      targetType: 'node',
-      targetId: id,
-      targetLabel: node.name,
-      metadata: { ip: input.ip, count: result.count },
-    });
+      await app.audit.log(request, {
+        action: 'admin.allocations_created',
+        targetType: 'node',
+        targetId: id,
+        targetLabel: node.name,
+        metadata: { ip: input.ip, count: result.count },
+      });
 
-    return reply.status(201).send(ok({ created: result.count, skipped: ports.size - result.count }));
-  });
+      return reply
+        .status(201)
+        .send(ok({ created: result.count, skipped: ports.size - result.count }));
+    },
+  );
 
-  app.delete('/:id/allocations/:allocationId', { schema: { tags: ['Admin: Allocations'] } }, async (request) => {
-    const { id, allocationId } = params(request, idParam.extend({ allocationId: z.string().min(1) }));
+  app.delete(
+    '/:id/allocations/:allocationId',
+    { schema: { tags: ['Admin: Allocations'] } },
+    async (request) => {
+      const { id, allocationId } = params(
+        request,
+        idParam.extend({ allocationId: z.string().min(1) }),
+      );
 
-    const allocation = await app.prisma.serverAllocation.findFirst({
-      where: { id: allocationId, nodeId: id },
-    });
-    if (!allocation) throw notFound('Allocation was not found');
-    if (allocation.serverId) throw conflict('That port is assigned to a server');
+      const allocation = await app.prisma.serverAllocation.findFirst({
+        where: { id: allocationId, nodeId: id },
+      });
+      if (!allocation) throw notFound('Allocation was not found');
+      if (allocation.serverId) throw conflict('That port is assigned to a server');
 
-    await app.prisma.serverAllocation.delete({ where: { id: allocationId } });
-    return ok({ deleted: true });
-  });
+      await app.prisma.serverAllocation.delete({ where: { id: allocationId } });
+      return ok({ deleted: true });
+    },
+  );
 
-  app.post('/:id/allocations/prune', { schema: { tags: ['Admin: Allocations'], summary: 'Delete unassigned ports' } }, async (request) => {
-    const { id } = params(request, idParam);
-    const result = await app.prisma.serverAllocation.deleteMany({ where: { nodeId: id, serverId: null } });
-    await app.audit.log(request, {
-      action: 'admin.allocations_pruned',
-      targetType: 'node',
-      targetId: id,
-      metadata: { count: result.count },
-    });
-    return ok({ deleted: result.count });
-  });
+  app.post(
+    '/:id/allocations/prune',
+    { schema: { tags: ['Admin: Allocations'], summary: 'Delete unassigned ports' } },
+    async (request) => {
+      const { id } = params(request, idParam);
+      const result = await app.prisma.serverAllocation.deleteMany({
+        where: { nodeId: id, serverId: null },
+      });
+      await app.audit.log(request, {
+        action: 'admin.allocations_pruned',
+        targetType: 'node',
+        targetId: id,
+        metadata: { count: result.count },
+      });
+      return ok({ deleted: result.count });
+    },
+  );
 }
 
 /**

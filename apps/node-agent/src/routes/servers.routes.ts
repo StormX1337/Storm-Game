@@ -124,7 +124,9 @@ export default async function serverRoutes(app: FastifyInstance): Promise<void> 
 
   app.post('/servers/:uuid/power', async (request) => {
     const { uuid } = uuidParam.parse(request.params);
-    const { action } = z.object({ action: z.enum(['start', 'stop', 'restart', 'kill']) }).parse(request.body);
+    const { action } = z
+      .object({ action: z.enum(['start', 'stop', 'restart', 'kill']) })
+      .parse(request.body);
 
     const stopCommand = app.console.stopCommandFor(uuid);
 
@@ -165,7 +167,9 @@ export default async function serverRoutes(app: FastifyInstance): Promise<void> 
 
   app.get('/servers/:uuid/logs', async (request) => {
     const { uuid } = uuidParam.parse(request.params);
-    const { lines } = z.object({ lines: z.coerce.number().int().min(1).max(5000).default(200) }).parse(request.query);
+    const { lines } = z
+      .object({ lines: z.coerce.number().int().min(1).max(5000).default(200) })
+      .parse(request.query);
     return ok(await app.docker.logs(uuid, lines));
   });
 
@@ -201,7 +205,9 @@ export default async function serverRoutes(app: FastifyInstance): Promise<void> 
 
   app.get('/servers/:uuid/files/list', async (request) => {
     const { uuid } = uuidParam.parse(request.params);
-    const { path: target } = z.object({ path: z.string().max(4096).default('/') }).parse(request.query);
+    const { path: target } = z
+      .object({ path: z.string().max(4096).default('/') })
+      .parse(request.query);
     return ok(await app.files.list(uuid, normalizeDisplayPath(target)));
   });
 
@@ -282,7 +288,9 @@ export default async function serverRoutes(app: FastifyInstance): Promise<void> 
 
   app.post('/servers/:uuid/files/delete', async (request) => {
     const { uuid } = uuidParam.parse(request.params);
-    const input = z.object({ paths: z.array(z.string().min(1).max(4096)).min(1).max(500) }).parse(request.body);
+    const input = z
+      .object({ paths: z.array(z.string().min(1).max(4096)).min(1).max(500) })
+      .parse(request.body);
 
     const removed = await app.files.remove(uuid, input.paths.map(normalizeDisplayPath));
     return ok({ deleted: removed });
@@ -323,7 +331,11 @@ export default async function serverRoutes(app: FastifyInstance): Promise<void> 
       .object({ path: z.string().min(1).max(4096), file: z.string().min(1).max(255) })
       .parse(request.body);
 
-    const extracted = await app.files.decompress(uuid, normalizeDisplayPath(input.path), input.file);
+    const extracted = await app.files.decompress(
+      uuid,
+      normalizeDisplayPath(input.path),
+      input.file,
+    );
     return ok({ extracted });
   });
 

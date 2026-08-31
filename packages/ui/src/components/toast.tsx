@@ -18,7 +18,9 @@ export interface Toast {
 
 interface ToastContextValue {
   toasts: Toast[];
-  push: (toast: Omit<Toast, 'id' | 'level' | 'duration'> & Partial<Pick<Toast, 'level' | 'duration'>>) => string;
+  push: (
+    toast: Omit<Toast, 'id' | 'level' | 'duration'> & Partial<Pick<Toast, 'level' | 'duration'>>,
+  ) => string;
   dismiss: (id: string) => void;
   success: (title: string, description?: string) => string;
   error: (title: string, description?: string) => string;
@@ -27,7 +29,11 @@ interface ToastContextValue {
   /** Shows a loading toast and swaps it for the outcome when the promise settles. */
   promise: <T>(
     promise: Promise<T>,
-    messages: { loading: string; success: string | ((value: T) => string); error: string | ((error: unknown) => string) },
+    messages: {
+      loading: string;
+      success: string | ((value: T) => string);
+      error: string | ((error: unknown) => string);
+    },
   ) => Promise<T>;
 }
 
@@ -81,7 +87,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }): Reac
   );
 
   const update = React.useCallback((id: string, patch: Partial<Toast>) => {
-    setToasts((current) => current.map((toast) => (toast.id === id ? { ...toast, ...patch } : toast)));
+    setToasts((current) =>
+      current.map((toast) => (toast.id === id ? { ...toast, ...patch } : toast)),
+    );
   }, []);
 
   React.useEffect(() => {
@@ -114,7 +122,8 @@ export function ToastProvider({ children }: { children: React.ReactNode }): Reac
           );
           return result;
         } catch (error) {
-          const title = typeof messages.error === 'function' ? messages.error(error) : messages.error;
+          const title =
+            typeof messages.error === 'function' ? messages.error(error) : messages.error;
           update(id, { title, level: 'error', duration: 8000 });
           timers.current.set(
             id,
@@ -151,7 +160,13 @@ const LEVEL_COLOUR: Record<ToastLevel, string> = {
   loading: 'text-muted-foreground',
 };
 
-function ToastViewport({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id: string) => void }) {
+function ToastViewport({
+  toasts,
+  onDismiss,
+}: {
+  toasts: Toast[];
+  onDismiss: (id: string) => void;
+}) {
   return (
     <div
       className="pointer-events-none fixed bottom-4 right-4 z-[100] flex w-full max-w-sm flex-col gap-2"
@@ -167,7 +182,11 @@ function ToastViewport({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id:
             style={{ animation: 'storm-fade-in 180ms ease-out' }}
           >
             <Icon
-              className={cn('mt-0.5 h-4 w-4 shrink-0', LEVEL_COLOUR[toast.level], toast.level === 'loading' && 'animate-spin')}
+              className={cn(
+                'mt-0.5 h-4 w-4 shrink-0',
+                LEVEL_COLOUR[toast.level],
+                toast.level === 'loading' && 'animate-spin',
+              )}
             />
             <div className="min-w-0 flex-1 space-y-0.5">
               <p className="text-sm font-medium leading-snug">{toast.title}</p>

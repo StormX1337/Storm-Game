@@ -277,7 +277,9 @@ function CreateHostDialog({ onClose, onCreated }: { onClose: () => void; onCreat
               <Input
                 type="number"
                 value={form.port}
-                onChange={(event) => setForm((c) => ({ ...c, port: Number(event.target.value) || 0 }))}
+                onChange={(event) =>
+                  setForm((c) => ({ ...c, port: Number(event.target.value) || 0 }))
+                }
                 className="w-24"
               />
             </Field>

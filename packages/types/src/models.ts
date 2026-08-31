@@ -263,7 +263,13 @@ export interface ActivityLogView {
 }
 
 export interface DashboardOverview {
-  servers: { total: number; online: number; offline: number; suspended: number; installing: number };
+  servers: {
+    total: number;
+    online: number;
+    offline: number;
+    suspended: number;
+    installing: number;
+  };
   resources: {
     cpuAllocated: number;
     memoryAllocated: number;

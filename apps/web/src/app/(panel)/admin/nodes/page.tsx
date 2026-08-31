@@ -333,7 +333,8 @@ function CreateNodeDialog({
   const set = (key: keyof typeof form) => (event: React.ChangeEvent<HTMLInputElement>) =>
     setForm((current) => ({
       ...current,
-      [key]: typeof current[key] === 'number' ? Number(event.target.value) || 0 : event.target.value,
+      [key]:
+        typeof current[key] === 'number' ? Number(event.target.value) || 0 : event.target.value,
     }));
 
   return (
@@ -358,8 +359,17 @@ function CreateNodeDialog({
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Hostname" hint="FQDN the panel connects to" error={fieldErrors.hostname} required>
-              <Input value={form.hostname} onChange={set('hostname')} placeholder="node1.example.com" />
+            <Field
+              label="Hostname"
+              hint="FQDN the panel connects to"
+              error={fieldErrors.hostname}
+              required
+            >
+              <Input
+                value={form.hostname}
+                onChange={set('hostname')}
+                placeholder="node1.example.com"
+              />
             </Field>
             <Field label="IP address" error={fieldErrors.ip} required>
               <Input value={form.ip} onChange={set('ip')} placeholder="203.0.113.10" />
@@ -433,9 +443,9 @@ function ConfigurationDialog({ node, onClose }: { node: NodeSummary; onClose: ()
         <DialogHeader>
           <DialogTitle>Agent configuration for {node.name}</DialogTitle>
           <DialogDescription>
-            Save this as <code className="font-mono text-xs">/etc/storm/agent.env</code> on the node.
-            A new token is issued each time this is opened, which invalidates nothing but means the
-            newest configuration is the one to deploy.
+            Save this as <code className="font-mono text-xs">/etc/storm/agent.env</code> on the
+            node. A new token is issued each time this is opened, which invalidates nothing but
+            means the newest configuration is the one to deploy.
           </DialogDescription>
         </DialogHeader>
 
@@ -536,7 +546,8 @@ function AllocationsDialog({
   });
 
   const prune = useMutation({
-    mutationFn: () => api.post<{ deleted: number }>(`/admin/nodes/${node.id}/allocations/prune`, {}),
+    mutationFn: () =>
+      api.post<{ deleted: number }>(`/admin/nodes/${node.id}/allocations/prune`, {}),
     onSuccess: (result) => {
       toast.success(`${result.deleted} unassigned port(s) removed`);
       void queryClient.invalidateQueries({ queryKey: ['admin', 'nodes', node.id, 'allocations'] });

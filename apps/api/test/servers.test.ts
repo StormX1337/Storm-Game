@@ -8,7 +8,13 @@ import {
   validateAgainstRules,
 } from '../src/services/server.service.js';
 import { cronExpression, describeCron, isValidCron, nextRunAt } from '../src/lib/cron.js';
-import { createTestApp, deleteUser, registerUser, uniqueSuffix, type RegisteredUser } from './helpers.js';
+import {
+  createTestApp,
+  deleteUser,
+  registerUser,
+  uniqueSuffix,
+  type RegisteredUser,
+} from './helpers.js';
 
 describe('server lifecycle', () => {
   let app: FastifyInstance;
@@ -61,7 +67,9 @@ describe('server lifecycle', () => {
     });
     nodeId = node.id;
 
-    const template = await app.prisma.gameTemplate.findFirstOrThrow({ where: { slug: 'minecraft-java' } });
+    const template = await app.prisma.gameTemplate.findFirstOrThrow({
+      where: { slug: 'minecraft-java' },
+    });
     templateId = template.id;
   });
 
@@ -127,7 +135,9 @@ describe('server lifecycle', () => {
     });
 
     assert.equal(response.statusCode, 201);
-    const server = response.json<{ data: { id: string; shortId: string; primaryAllocation: { port: number } } }>().data;
+    const server = response.json<{
+      data: { id: string; shortId: string; primaryAllocation: { port: number } };
+    }>().data;
 
     assert.equal(server.primaryAllocation.port, 25565);
     assert.equal(server.shortId.length, 8);
@@ -235,10 +245,7 @@ describe('server lifecycle', () => {
     });
 
     assert.equal(second.statusCode, 409);
-    assert.equal(
-      second.json<{ error: { code: string } }>().error.code,
-      'RESOURCE_LIMIT_REACHED',
-    );
+    assert.equal(second.json<{ error: { code: string } }>().error.code, 'RESOURCE_LIMIT_REACHED');
   });
 
   it('rejects a variable that fails its template rules', async () => {
@@ -319,7 +326,10 @@ describe('template variable rules', () => {
   it('enforces in and regex', () => {
     assert.equal(validateAgainstRules('paper', 'required|in:paper,purpur,vanilla'), null);
     assert.ok(validateAgainstRules('spigot', 'required|in:paper,purpur,vanilla'));
-    assert.equal(validateAgainstRules('server.jar', 'required|regex:^[A-Za-z0-9_.-]+\\.jar$'), null);
+    assert.equal(
+      validateAgainstRules('server.jar', 'required|regex:^[A-Za-z0-9_.-]+\\.jar$'),
+      null,
+    );
     assert.ok(validateAgainstRules('evil.sh', 'required|regex:^[A-Za-z0-9_.-]+\\.jar$'));
   });
 
@@ -384,7 +394,10 @@ describe('cron scheduling', () => {
   it('describes common cadences in plain English', () => {
     const base = { cronDayOfMonth: '*', cronMonth: '*', cronDayOfWeek: '*', timezone: 'UTC' };
     assert.equal(describeCron({ ...base, cronMinute: '0', cronHour: '4' }), 'Daily at 04:00');
-    assert.equal(describeCron({ ...base, cronMinute: '0', cronHour: '*/6' }), 'Every 6 hours at :00');
+    assert.equal(
+      describeCron({ ...base, cronMinute: '0', cronHour: '*/6' }),
+      'Every 6 hours at :00',
+    );
     assert.equal(describeCron({ ...base, cronMinute: '*/30', cronHour: '*' }), 'Every 30 minutes');
   });
 
@@ -447,9 +460,7 @@ describe('template config files', () => {
       context,
     );
 
-    assert.deepEqual(files, [
-      { path: 'e.properties', parser: 'properties', find: { ok: '4096' } },
-    ]);
+    assert.deepEqual(files, [{ path: 'e.properties', parser: 'properties', find: { ok: '4096' } }]);
   });
 
   it('returns nothing for a template with no mappings', () => {

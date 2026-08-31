@@ -31,11 +31,7 @@ export class SystemService {
       return this.cachedInfo.value;
     }
 
-    const [cpu, osInfo, disks] = await Promise.all([
-      si.cpu(),
-      si.osInfo(),
-      si.fsSize(),
-    ]);
+    const [cpu, osInfo, disks] = await Promise.all([si.cpu(), si.osInfo(), si.fsSize()]);
 
     const dockerVersion = await this.docker.version().catch(() => 'unavailable');
     const mount = this.mountFor(disks);
@@ -114,7 +110,9 @@ export class SystemService {
    * Picks the filesystem the server data actually lives on — reporting `/`
    * would be wrong on nodes with a dedicated data volume.
    */
-  private mountFor(disks: si.Systeminformation.FsSizeData[]): si.Systeminformation.FsSizeData | undefined {
+  private mountFor(
+    disks: si.Systeminformation.FsSizeData[],
+  ): si.Systeminformation.FsSizeData | undefined {
     const candidates = disks
       .filter((disk) => this.dataDirectory.startsWith(disk.mount))
       .sort((a, b) => b.mount.length - a.mount.length);

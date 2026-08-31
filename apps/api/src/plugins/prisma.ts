@@ -8,15 +8,18 @@ declare module 'fastify' {
   }
 }
 
-export default fp(async function prismaPlugin(app: FastifyInstance) {
-  const prisma = createPrismaClient({
-    databaseUrl: app.env.DATABASE_URL,
-    logQueries: app.env.LOG_LEVEL === 'trace',
-  });
+export default fp(
+  async function prismaPlugin(app: FastifyInstance) {
+    const prisma = createPrismaClient({
+      databaseUrl: app.env.DATABASE_URL,
+      logQueries: app.env.LOG_LEVEL === 'trace',
+    });
 
-  await prisma.$connect();
-  app.decorate('prisma', prisma);
-  app.addHook('onClose', async () => {
-    await prisma.$disconnect();
-  });
-}, { name: 'storm-prisma' });
+    await prisma.$connect();
+    app.decorate('prisma', prisma);
+    app.addHook('onClose', async () => {
+      await prisma.$disconnect();
+    });
+  },
+  { name: 'storm-prisma' },
+);

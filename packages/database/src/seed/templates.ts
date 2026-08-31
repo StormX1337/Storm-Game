@@ -143,7 +143,16 @@ echo "[storm] Install complete."
     startupDetection: '\\)! For help, type',
     crashDetection: 'Exception in server tick loop|Failed to start the minecraft server',
     defaultPorts: [25565],
-    supportedVersions: ['1.21.4', '1.21.1', '1.20.6', '1.20.4', '1.19.4', '1.18.2', '1.16.5', '1.12.2'],
+    supportedVersions: [
+      '1.21.4',
+      '1.21.1',
+      '1.20.6',
+      '1.20.4',
+      '1.19.4',
+      '1.18.2',
+      '1.16.5',
+      '1.12.2',
+    ],
     configFiles: {
       'server.properties': {
         parser: 'properties',
@@ -220,7 +229,8 @@ echo "[storm] Install complete."
     slug: 'minecraft-bedrock',
     game: 'Minecraft Bedrock',
     category: 'Minecraft',
-    description: 'Official Mojang Bedrock dedicated server for console, mobile and Windows 10 players.',
+    description:
+      'Official Mojang Bedrock dedicated server for console, mobile and Windows 10 players.',
     dockerImages: { 'Debian Bookworm': 'debian:bookworm-slim' },
     defaultImage: 'debian:bookworm-slim',
     startupCommand: 'LD_LIBRARY_PATH=. ./bedrock_server',
@@ -305,7 +315,8 @@ echo "[storm] Install complete."
     slug: 'counter-strike-2',
     game: 'Counter-Strike 2',
     category: 'Valve',
-    description: 'Counter-Strike 2 dedicated server (SteamCMD app 730). Requires a Game Server Login Token.',
+    description:
+      'Counter-Strike 2 dedicated server (SteamCMD app 730). Requires a Game Server Login Token.',
     dockerImages: { 'Debian Bookworm': 'debian:bookworm-slim' },
     defaultImage: 'debian:bookworm-slim',
     startupCommand:
@@ -777,7 +788,8 @@ fi`,
     slug: 'garrys-mod',
     game: "Garry's Mod",
     category: 'Valve',
-    description: "Garry's Mod dedicated server (SteamCMD app 4020) with workshop collection support.",
+    description:
+      "Garry's Mod dedicated server (SteamCMD app 4020) with workshop collection support.",
     dockerImages: { 'Debian Bookworm': 'debian:bookworm-slim' },
     defaultImage: 'debian:bookworm-slim',
     startupCommand:

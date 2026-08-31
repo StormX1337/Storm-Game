@@ -3,9 +3,22 @@ import { cuidLikeId, serverPathSchema } from './common.js';
 
 export const serverLimitsSchema = z.object({
   cpuLimit: z.number().int().min(0).max(6400),
-  memoryLimit: z.number().int().min(64).max(1024 * 1024),
-  diskLimit: z.number().int().min(128).max(10 * 1024 * 1024),
-  swapLimit: z.number().int().min(-1).max(1024 * 1024).default(0),
+  memoryLimit: z
+    .number()
+    .int()
+    .min(64)
+    .max(1024 * 1024),
+  diskLimit: z
+    .number()
+    .int()
+    .min(128)
+    .max(10 * 1024 * 1024),
+  swapLimit: z
+    .number()
+    .int()
+    .min(-1)
+    .max(1024 * 1024)
+    .default(0),
   ioWeight: z.number().int().min(10).max(1000).default(500),
   networkLimitMbps: z.number().int().min(0).max(100000).default(0),
   pidsLimit: z.number().int().min(16).max(4096).default(512),

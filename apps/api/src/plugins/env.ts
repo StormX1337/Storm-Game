@@ -10,8 +10,11 @@ declare module 'fastify' {
   }
 }
 
-export default fp(async function envPlugin(app: FastifyInstance, opts: { env?: ApiEnv }) {
-  const env = opts.env ?? loadApiEnv();
-  app.decorate('env', env);
-  app.decorate('encrypter', new Encrypter(env.ENCRYPTION_KEY));
-}, { name: 'storm-env' });
+export default fp(
+  async function envPlugin(app: FastifyInstance, opts: { env?: ApiEnv }) {
+    const env = opts.env ?? loadApiEnv();
+    app.decorate('env', env);
+    app.decorate('encrypter', new Encrypter(env.ENCRYPTION_KEY));
+  },
+  { name: 'storm-env' },
+);

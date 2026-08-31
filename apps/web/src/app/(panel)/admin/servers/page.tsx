@@ -62,7 +62,9 @@ export default function AdminServersPage() {
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight">All servers</h1>
         <p className="text-sm text-muted-foreground">
-          {data ? `${data.meta.total} server${data.meta.total === 1 ? '' : 's'} across the fleet` : 'Loading…'}
+          {data
+            ? `${data.meta.total} server${data.meta.total === 1 ? '' : 's'} across the fleet`
+            : 'Loading…'}
         </p>
       </div>
 

@@ -26,7 +26,10 @@ declare module 'fastify' {
     console: ConsoleService;
     system: SystemService;
     panel: PanelClient;
-    paths: ServerPaths & { removeRoot: (uuid: string) => Promise<void>; wipe: (uuid: string) => Promise<void> };
+    paths: ServerPaths & {
+      removeRoot: (uuid: string) => Promise<void>;
+      wipe: (uuid: string) => Promise<void>;
+    };
   }
 }
 
@@ -148,7 +151,10 @@ async function main(): Promise<void> {
       success: false,
       error: {
         code: 'INTERNAL_ERROR',
-        message: error.statusCode && error.statusCode < 500 ? error.message : 'The agent failed to handle that request',
+        message:
+          error.statusCode && error.statusCode < 500
+            ? error.message
+            : 'The agent failed to handle that request',
       },
     });
   });

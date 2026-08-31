@@ -47,7 +47,10 @@ import { api, errorMessage } from '@/lib/api';
 import { formatBytes, formatDate, formatRelative } from '@/lib/format';
 import { useServer } from '@/components/panel/server-context';
 
-const STATUS_VARIANT: Record<BackupStatus, 'success' | 'warning' | 'destructive' | 'muted' | 'default'> = {
+const STATUS_VARIANT: Record<
+  BackupStatus,
+  'success' | 'warning' | 'destructive' | 'muted' | 'default'
+> = {
   COMPLETED: 'success',
   PENDING: 'muted',
   RUNNING: 'warning',

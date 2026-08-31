@@ -86,12 +86,16 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
         include: { role: { include: { permissions: true } } },
       });
 
-      await app.audit.log(request, {
-        action: 'auth.registered',
-        targetType: 'user',
-        targetId: user.id,
-        targetLabel: user.username,
-      }, user.id);
+      await app.audit.log(
+        request,
+        {
+          action: 'auth.registered',
+          targetType: 'user',
+          targetId: user.id,
+          targetLabel: user.username,
+        },
+        user.id,
+      );
 
       if (settings.requireEmailVerification) {
         await sendVerificationEmail(app, user.id, user.email, settings.panelUrl);
@@ -143,12 +147,16 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
         data: { lastLoginAt: new Date(), lastLoginIp: context.ip },
       });
 
-      await app.audit.log(request, {
-        action: 'auth.login',
-        targetType: 'user',
-        targetId: user.id,
-        targetLabel: user.username,
-      }, user.id);
+      await app.audit.log(
+        request,
+        {
+          action: 'auth.login',
+          targetType: 'user',
+          targetId: user.id,
+          targetLabel: user.username,
+        },
+        user.id,
+      );
 
       if (isNewDevice) {
         await app.notifications.push(user.id, {
@@ -180,7 +188,12 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
 
   app.post(
     '/refresh',
-    { schema: { tags: ['Authentication'], summary: 'Exchange a refresh token for a new access token' } },
+    {
+      schema: {
+        tags: ['Authentication'],
+        summary: 'Exchange a refresh token for a new access token',
+      },
+    },
     async (request, reply) => {
       const cookieToken = request.cookies[COOKIE_NAMES.refreshToken];
       const bodyToken = (request.body as { refreshToken?: string } | undefined)?.refreshToken;
@@ -202,7 +215,9 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
     async (request, reply) => {
       const token = request.cookies[COOKIE_NAMES.refreshToken];
       if (token) {
-        const session = await app.prisma.session.findUnique({ where: { tokenHash: hashToken(token) } });
+        const session = await app.prisma.session.findUnique({
+          where: { tokenHash: hashToken(token) },
+        });
         if (session) await app.auth.revokeSession(session.id);
       } else if (request.user?.sessionId) {
         await app.auth.revokeSession(request.user.sessionId);
@@ -219,7 +234,10 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
     '/me',
     {
       preHandler: app.authenticate,
-      schema: { tags: ['Authentication'], summary: 'Current user profile and effective permissions' },
+      schema: {
+        tags: ['Authentication'],
+        summary: 'Current user profile and effective permissions',
+      },
     },
     async (request) => {
       const current = request.currentUser();
@@ -236,7 +254,10 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
 
   app.post(
     '/forgot-password',
-    { config: { rateLimit: { max: 5, timeWindow: '15 minutes' } }, schema: { tags: ['Authentication'] } },
+    {
+      config: { rateLimit: { max: 5, timeWindow: '15 minutes' } },
+      schema: { tags: ['Authentication'] },
+    },
     async (request) => {
       const { email } = body(request, forgotPasswordSchema);
       const user = await app.prisma.user.findUnique({ where: { email } });
@@ -265,7 +286,11 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
           { label: 'Choose a new password', url },
         );
         await app.queues.enqueueMail({ to: user.email, subject: 'Reset your password', ...mail });
-        await app.audit.log(request, { action: 'auth.password_reset_requested', targetType: 'user', targetId: user.id }, user.id);
+        await app.audit.log(
+          request,
+          { action: 'auth.password_reset_requested', targetType: 'user', targetId: user.id },
+          user.id,
+        );
       }
 
       return ok({ sent: true });
@@ -274,7 +299,10 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
 
   app.post(
     '/reset-password',
-    { config: { rateLimit: { max: 10, timeWindow: '15 minutes' } }, schema: { tags: ['Authentication'] } },
+    {
+      config: { rateLimit: { max: 10, timeWindow: '15 minutes' } },
+      schema: { tags: ['Authentication'] },
+    },
     async (request) => {
       const input = body(request, resetPasswordSchema);
       const record = await app.prisma.verificationToken.findUnique({
@@ -282,8 +310,17 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
         include: { user: true },
       });
 
-      if (!record || record.type !== 'PASSWORD_RESET' || record.usedAt || record.expiresAt < new Date()) {
-        throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'That reset link is invalid or has expired');
+      if (
+        !record ||
+        record.type !== 'PASSWORD_RESET' ||
+        record.usedAt ||
+        record.expiresAt < new Date()
+      ) {
+        throw new AppError(
+          400,
+          ErrorCode.VALIDATION_ERROR,
+          'That reset link is invalid or has expired',
+        );
       }
 
       await app.prisma.$transaction([
@@ -308,7 +345,11 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
         message: 'Your password was reset and all sessions were signed out.',
         level: 'WARNING',
       });
-      await app.audit.log(request, { action: 'auth.password_reset', targetType: 'user', targetId: record.userId }, record.userId);
+      await app.audit.log(
+        request,
+        { action: 'auth.password_reset', targetType: 'user', targetId: record.userId },
+        record.userId,
+      );
 
       return ok({ reset: true });
     },
@@ -334,7 +375,11 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
         message: `Your password was changed. ${revoked} other session(s) were signed out.`,
         level: 'WARNING',
       });
-      await app.audit.log(request, { action: 'auth.password_changed', targetType: 'user', targetId: user.id });
+      await app.audit.log(request, {
+        action: 'auth.password_changed',
+        targetType: 'user',
+        targetId: user.id,
+      });
 
       return ok({ changed: true, sessionsRevoked: revoked });
     },
@@ -344,22 +389,44 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
 
   app.post(
     '/verify-email',
-    { config: { rateLimit: { max: 10, timeWindow: '15 minutes' } }, schema: { tags: ['Authentication'] } },
+    {
+      config: { rateLimit: { max: 10, timeWindow: '15 minutes' } },
+      schema: { tags: ['Authentication'] },
+    },
     async (request) => {
       const { token } = body(request, verifyEmailSchema);
       const record = await app.prisma.verificationToken.findUnique({
         where: { tokenHash: hashToken(token) },
       });
 
-      if (!record || record.type !== 'EMAIL_VERIFICATION' || record.usedAt || record.expiresAt < new Date()) {
-        throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'That verification link is invalid or has expired');
+      if (
+        !record ||
+        record.type !== 'EMAIL_VERIFICATION' ||
+        record.usedAt ||
+        record.expiresAt < new Date()
+      ) {
+        throw new AppError(
+          400,
+          ErrorCode.VALIDATION_ERROR,
+          'That verification link is invalid or has expired',
+        );
       }
 
       await app.prisma.$transaction([
-        app.prisma.user.update({ where: { id: record.userId }, data: { emailVerifiedAt: new Date() } }),
-        app.prisma.verificationToken.update({ where: { id: record.id }, data: { usedAt: new Date() } }),
+        app.prisma.user.update({
+          where: { id: record.userId },
+          data: { emailVerifiedAt: new Date() },
+        }),
+        app.prisma.verificationToken.update({
+          where: { id: record.id },
+          data: { usedAt: new Date() },
+        }),
       ]);
-      await app.audit.log(request, { action: 'auth.email_verified', targetType: 'user', targetId: record.userId }, record.userId);
+      await app.audit.log(
+        request,
+        { action: 'auth.email_verified', targetType: 'user', targetId: record.userId },
+        record.userId,
+      );
 
       return ok({ verified: true });
     },
@@ -412,7 +479,11 @@ async function sendVerificationEmail(
 }
 
 /** True when this IP has not been seen on a previous session for the user. */
-async function isUnrecognisedDevice(app: FastifyInstance, userId: string, ip: string): Promise<boolean> {
+async function isUnrecognisedDevice(
+  app: FastifyInstance,
+  userId: string,
+  ip: string,
+): Promise<boolean> {
   const seen = await app.prisma.session.findFirst({
     where: { userId, ip },
     select: { id: true },

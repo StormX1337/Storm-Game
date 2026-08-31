@@ -2,7 +2,13 @@ import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import type { FastifyInstance } from 'fastify';
 import { hashPassword } from '@storm/security';
-import { createTestApp, deleteUser, registerUser, uniqueSuffix, type RegisteredUser } from './helpers.js';
+import {
+  createTestApp,
+  deleteUser,
+  registerUser,
+  uniqueSuffix,
+  type RegisteredUser,
+} from './helpers.js';
 
 /**
  * Authorisation is the part of a hosting panel where a bug is a breach, so
@@ -321,7 +327,12 @@ describe('permissions and tenancy', () => {
       method: 'PATCH',
       url: '/api/v1/account',
       headers: { authorization: `Bearer ${customer.accessToken}` },
-      payload: { firstName: 'Legit', role: 'OWNER', serverLimit: 9999, extraPermissions: ['admin.servers'] },
+      payload: {
+        firstName: 'Legit',
+        role: 'OWNER',
+        serverLimit: 9999,
+        extraPermissions: ['admin.servers'],
+      },
     });
     assert.equal(response.statusCode, 200);
 

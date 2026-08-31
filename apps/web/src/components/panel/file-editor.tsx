@@ -120,12 +120,22 @@ export function FileEditor({
           </div>
           <div className="flex shrink-0 items-center gap-2">
             {!readOnly ? (
-              <Button size="sm" onClick={() => save.mutate()} disabled={!dirty} loading={save.isPending}>
+              <Button
+                size="sm"
+                onClick={() => save.mutate()}
+                disabled={!dirty}
+                loading={save.isPending}
+              >
                 <Save />
                 Save
               </Button>
             ) : null}
-            <Button variant="ghost" size="icon-sm" onClick={() => void requestClose()} aria-label="Close">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => void requestClose()}
+              aria-label="Close"
+            >
               <X />
             </Button>
           </div>

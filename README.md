@@ -152,16 +152,16 @@ pnpm db:seed        # roles, permissions, templates, settings
 pnpm dev            # api :8080, web :3000, agent :8081
 ```
 
-| Command | What it does |
-| --- | --- |
-| `pnpm dev` | Run the API, panel and agent together |
-| `pnpm build` | Build every package and app |
-| `pnpm typecheck` | TypeScript across the whole workspace |
-| `pnpm test` | Unit, component and integration tests |
-| `pnpm test:e2e` | Playwright browser tests against a running stack |
-| `pnpm db:migrate` | Create a migration from schema changes |
-| `pnpm db:studio` | Prisma Studio |
-| `pnpm storm <cmd>` | The panel CLI |
+| Command            | What it does                                     |
+| ------------------ | ------------------------------------------------ |
+| `pnpm dev`         | Run the API, panel and agent together            |
+| `pnpm build`       | Build every package and app                      |
+| `pnpm typecheck`   | TypeScript across the whole workspace            |
+| `pnpm test`        | Unit, component and integration tests            |
+| `pnpm test:e2e`    | Playwright browser tests against a running stack |
+| `pnpm db:migrate`  | Create a migration from schema changes           |
+| `pnpm db:studio`   | Prisma Studio                                    |
+| `pnpm storm <cmd>` | The panel CLI                                    |
 
 `docs/DEVELOPMENT.md` has the details.
 
@@ -211,17 +211,17 @@ Full detail and the threat model: `docs/SECURITY.md`.
 
 ## Documentation
 
-| Document | Contents |
-| --- | --- |
-| [INSTALLATION.md](docs/INSTALLATION.md) | Production install, TLS, first node |
-| [DEVELOPMENT.md](docs/DEVELOPMENT.md) | Local setup, layout, conventions |
-| [DEPLOYMENT.md](docs/DEPLOYMENT.md) | Scaling, backups, upgrades, monitoring |
-| [SECURITY.md](docs/SECURITY.md) | Threat model and controls |
-| [API.md](docs/API.md) | REST API reference and examples |
-| [NODE-AGENT.md](docs/NODE-AGENT.md) | Agent protocol and operations |
-| [GAME-TEMPLATES.md](docs/GAME-TEMPLATES.md) | Writing and editing templates |
-| [BACKUPS.md](docs/BACKUPS.md) | Storage drivers, retention, restores |
-| [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Diagnosing common problems |
+| Document                                      | Contents                               |
+| --------------------------------------------- | -------------------------------------- |
+| [INSTALLATION.md](docs/INSTALLATION.md)       | Production install, TLS, first node    |
+| [DEVELOPMENT.md](docs/DEVELOPMENT.md)         | Local setup, layout, conventions       |
+| [DEPLOYMENT.md](docs/DEPLOYMENT.md)           | Scaling, backups, upgrades, monitoring |
+| [SECURITY.md](docs/SECURITY.md)               | Threat model and controls              |
+| [API.md](docs/API.md)                         | REST API reference and examples        |
+| [NODE-AGENT.md](docs/NODE-AGENT.md)           | Agent protocol and operations          |
+| [GAME-TEMPLATES.md](docs/GAME-TEMPLATES.md)   | Writing and editing templates          |
+| [BACKUPS.md](docs/BACKUPS.md)                 | Storage drivers, retention, restores   |
+| [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Diagnosing common problems             |
 
 An OpenAPI browser is served at `/api/docs` when `ENABLE_SWAGGER` is on.
 

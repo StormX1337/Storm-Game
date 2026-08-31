@@ -4,7 +4,12 @@ export function ok<T>(data: T, meta?: PaginationMeta): ApiSuccess<T> {
   return meta ? { success: true, data, meta } : { success: true, data };
 }
 
-export function paginated<T>(items: T[], total: number, page: number, perPage: number): ApiSuccess<T[]> {
+export function paginated<T>(
+  items: T[],
+  total: number,
+  page: number,
+  perPage: number,
+): ApiSuccess<T[]> {
   return {
     success: true,
     data: items,

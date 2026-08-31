@@ -178,7 +178,10 @@ export class SftpService {
 
         fs.open(target, mode, 0o644, (error, fd) => {
           if (error) {
-            sftp.status(reqid, error.code === 'ENOENT' ? STATUS_CODE.NO_SUCH_FILE : STATUS_CODE.FAILURE);
+            sftp.status(
+              reqid,
+              error.code === 'ENOENT' ? STATUS_CODE.NO_SUCH_FILE : STATUS_CODE.FAILURE,
+            );
             return;
           }
           const handle = makeHandle();

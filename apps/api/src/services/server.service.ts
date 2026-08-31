@@ -14,6 +14,17 @@ import {
 import { AppError, conflict, notFound, unprocessable } from '../lib/errors.js';
 import { SERVER_INCLUDE } from './server-access.service.js';
 
+/**
+ * What this reads off a template variable — a structural subset, so both a
+ * Prisma row and the trimmed shape the routes hand over satisfy it.
+ */
+interface TemplateVariableRow {
+  envVariable: string;
+  defaultValue: string;
+  rules: string;
+  userEditable: boolean;
+}
+
 const RESERVED_ENV = new Set([
   'PATH',
   'LD_PRELOAD',
@@ -51,7 +62,11 @@ export class ServerService {
    * Everything up to the agent call happens inside one transaction so a failure
    * cannot leave an allocation claimed by a server that does not exist.
    */
-  async create(input: CreateServerInput, ownerId: string, actorId: string): Promise<ServerWithRelations> {
+  async create(
+    input: CreateServerInput,
+    ownerId: string,
+    actorId: string,
+  ): Promise<ServerWithRelations> {
     const [owner, node, template] = await Promise.all([
       this.prisma.user.findUnique({ where: { id: ownerId } }),
       this.prisma.node.findUnique({ where: { id: input.nodeId } }),
@@ -146,7 +161,9 @@ export class ServerService {
     });
 
     if (!input.skipInstall) {
-      await this.app.queues.enqueueInstall(server.id, { startOnCompletion: input.startOnCompletion });
+      await this.app.queues.enqueueInstall(server.id, {
+        startOnCompletion: input.startOnCompletion,
+      });
     }
 
     return full;
@@ -158,7 +175,11 @@ export class ServerService {
       const existing = await this.prisma.server.findUnique({ where: { shortId: candidate } });
       if (!existing) return candidate;
     }
-    throw new AppError(500, ErrorCode.INTERNAL_ERROR, 'Could not allocate a unique server identifier');
+    throw new AppError(
+      500,
+      ErrorCode.INTERNAL_ERROR,
+      'Could not allocate a unique server identifier',
+    );
   }
 
   /**
@@ -226,21 +247,30 @@ export class ServerService {
         `This account may own at most ${owner.serverLimit} servers`,
       );
     }
-    if (owner.memoryLimit > 0 && (existing._sum.memoryLimit ?? 0) + input.limits.memoryLimit > owner.memoryLimit) {
+    if (
+      owner.memoryLimit > 0 &&
+      (existing._sum.memoryLimit ?? 0) + input.limits.memoryLimit > owner.memoryLimit
+    ) {
       throw new AppError(
         409,
         ErrorCode.RESOURCE_LIMIT_REACHED,
         `This account may allocate at most ${owner.memoryLimit} MiB of memory`,
       );
     }
-    if (owner.diskLimit > 0 && (existing._sum.diskLimit ?? 0) + input.limits.diskLimit > owner.diskLimit) {
+    if (
+      owner.diskLimit > 0 &&
+      (existing._sum.diskLimit ?? 0) + input.limits.diskLimit > owner.diskLimit
+    ) {
       throw new AppError(
         409,
         ErrorCode.RESOURCE_LIMIT_REACHED,
         `This account may allocate at most ${owner.diskLimit} MiB of disk`,
       );
     }
-    if (owner.cpuLimit > 0 && (existing._sum.cpuLimit ?? 0) + input.limits.cpuLimit > owner.cpuLimit) {
+    if (
+      owner.cpuLimit > 0 &&
+      (existing._sum.cpuLimit ?? 0) + input.limits.cpuLimit > owner.cpuLimit
+    ) {
       throw new AppError(
         409,
         ErrorCode.RESOURCE_LIMIT_REACHED,
@@ -250,7 +280,12 @@ export class ServerService {
   }
 
   /** Overcommit-aware capacity check for the target node. */
-  async assertNodeHasCapacity(node: Node, memoryMb: number, diskMb: number, excludeServerId?: string): Promise<void> {
+  async assertNodeHasCapacity(
+    node: Node,
+    memoryMb: number,
+    diskMb: number,
+    excludeServerId?: string,
+  ): Promise<void> {
     const allocated = await this.prisma.server.aggregate({
       where: { nodeId: node.id, ...(excludeServerId ? { NOT: { id: excludeServerId } } : {}) },
       _sum: { memoryLimit: true, diskLimit: true },
@@ -284,8 +319,11 @@ export class ServerService {
    * customers editing a server never get to change them, and reserved process
    * variables like PATH or LD_PRELOAD are rejected outright.
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Prisma variable rows
-  buildEnvironment(templateVariables: any[], submitted: Record<string, string>, allowLocked: boolean): Record<string, string> {
+  buildEnvironment(
+    templateVariables: TemplateVariableRow[],
+    submitted: Record<string, string>,
+    allowLocked: boolean,
+  ): Record<string, string> {
     const environment: Record<string, string> = {};
     const errors: Record<string, string[]> = {};
 
@@ -446,10 +484,7 @@ const CONFIG_PARSERS = new Set<ConfigFileParser>(['properties', 'ini', 'json', '
  * A malformed entry is dropped rather than thrown: an operator's typo in one
  * template should not make every server on it unstartable.
  */
-export function buildConfigFiles(
-  raw: unknown,
-  context: Record<string, string>,
-): AgentConfigFile[] {
+export function buildConfigFiles(raw: unknown, context: Record<string, string>): AgentConfigFile[] {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return [];
 
   const files: AgentConfigFile[] = [];
@@ -488,7 +523,10 @@ export function renderTemplate(input: string, context: Record<string, string>): 
  * (`required|string|max:64|in:a,b|regex:^x$`).
  */
 export function validateAgainstRules(value: string, rules: string): string | null {
-  const parts = rules.split('|').map((rule) => rule.trim()).filter(Boolean);
+  const parts = rules
+    .split('|')
+    .map((rule) => rule.trim())
+    .filter(Boolean);
   const required = parts.includes('required');
 
   if (!required && value === '') return null;
@@ -504,7 +542,8 @@ export function validateAgainstRules(value: string, rules: string): string | nul
         if (Number.isNaN(Number(value))) return 'Must be a number';
         break;
       case 'boolean':
-        if (!['true', 'false', '0', '1'].includes(value.toLowerCase())) return 'Must be true or false';
+        if (!['true', 'false', '0', '1'].includes(value.toLowerCase()))
+          return 'Must be true or false';
         break;
       case 'max':
         if (value.length > Number(argument)) return `Must be at most ${argument} characters`;

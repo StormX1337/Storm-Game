@@ -92,7 +92,10 @@ describe('sign-in form', () => {
     await user.click(screen.getByRole('button', { name: 'Sign in' }));
 
     await waitFor(() => expect(mocks.post).toHaveBeenCalledTimes(2));
-    expect(mocks.post).toHaveBeenLastCalledWith('/auth/login', expect.objectContaining({ totp: '123456' }));
+    expect(mocks.post).toHaveBeenLastCalledWith(
+      '/auth/login',
+      expect.objectContaining({ totp: '123456' }),
+    );
   });
 
   it('says something useful when the panel cannot be reached at all', async () => {

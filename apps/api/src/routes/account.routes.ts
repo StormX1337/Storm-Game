@@ -38,55 +38,71 @@ export default async function accountRoutes(app: FastifyInstance): Promise<void>
 
   /* --------------------------------------------------------- profile -- */
 
-  app.get('/', { schema: { tags: ['Account'], summary: 'Get the current profile' } }, async (request) => {
-    const current = request.currentUser();
-    const user = await app.prisma.user.findUniqueOrThrow({
-      where: { id: current.id },
-      include: { role: { include: { permissions: true } }, twoFactor: true },
-    });
-    const serverCount = await app.prisma.server.count({ where: { ownerId: current.id } });
-    return ok(toUserDetail(user, serverCount));
-  });
+  app.get(
+    '/',
+    { schema: { tags: ['Account'], summary: 'Get the current profile' } },
+    async (request) => {
+      const current = request.currentUser();
+      const user = await app.prisma.user.findUniqueOrThrow({
+        where: { id: current.id },
+        include: { role: { include: { permissions: true } }, twoFactor: true },
+      });
+      const serverCount = await app.prisma.server.count({ where: { ownerId: current.id } });
+      return ok(toUserDetail(user, serverCount));
+    },
+  );
 
-  app.patch('/', { schema: { tags: ['Account'], summary: 'Update the current profile' } }, async (request) => {
-    const current = request.currentUser();
-    const input = body(request, updateProfileSchema);
+  app.patch(
+    '/',
+    { schema: { tags: ['Account'], summary: 'Update the current profile' } },
+    async (request) => {
+      const current = request.currentUser();
+      const input = body(request, updateProfileSchema);
 
-    if (input.email && input.email !== current.email) {
-      const taken = await app.prisma.user.findUnique({ where: { email: input.email } });
-      if (taken) throw badRequest('That email address is already in use');
-    }
+      if (input.email && input.email !== current.email) {
+        const taken = await app.prisma.user.findUnique({ where: { email: input.email } });
+        if (taken) throw badRequest('That email address is already in use');
+      }
 
-    const settings = await readSettings(app.prisma);
-    const emailChanged = Boolean(input.email && input.email !== current.email);
+      const settings = await readSettings(app.prisma);
+      const emailChanged = Boolean(input.email && input.email !== current.email);
 
-    const user = await app.prisma.user.update({
-      where: { id: current.id },
-      data: {
-        ...(input.firstName !== undefined ? { firstName: input.firstName } : {}),
-        ...(input.lastName !== undefined ? { lastName: input.lastName } : {}),
-        ...(input.avatarUrl !== undefined ? { avatarUrl: input.avatarUrl } : {}),
-        ...(input.email ? { email: input.email } : {}),
-        // Changing the address always re-opens verification.
-        ...(emailChanged && settings.requireEmailVerification ? { emailVerifiedAt: null } : {}),
-      },
-      include: { role: { include: { permissions: true } }, twoFactor: true },
-    });
+      const user = await app.prisma.user.update({
+        where: { id: current.id },
+        data: {
+          ...(input.firstName !== undefined ? { firstName: input.firstName } : {}),
+          ...(input.lastName !== undefined ? { lastName: input.lastName } : {}),
+          ...(input.avatarUrl !== undefined ? { avatarUrl: input.avatarUrl } : {}),
+          ...(input.email ? { email: input.email } : {}),
+          // Changing the address always re-opens verification.
+          ...(emailChanged && settings.requireEmailVerification ? { emailVerifiedAt: null } : {}),
+        },
+        include: { role: { include: { permissions: true } }, twoFactor: true },
+      });
 
-    await app.audit.log(request, { action: 'account.updated', targetType: 'user', targetId: current.id });
-    return ok(toUserDetail(user, 0));
-  });
+      await app.audit.log(request, {
+        action: 'account.updated',
+        targetType: 'user',
+        targetId: current.id,
+      });
+      return ok(toUserDetail(user, 0));
+    },
+  );
 
   /* -------------------------------------------------------- sessions -- */
 
-  app.get('/sessions', { schema: { tags: ['Account'], summary: 'List active sessions' } }, async (request) => {
-    const current = request.currentUser();
-    const sessions = await app.prisma.session.findMany({
-      where: { userId: current.id, revokedAt: null, expiresAt: { gt: new Date() } },
-      orderBy: { lastUsedAt: 'desc' },
-    });
-    return ok(sessions.map((session) => toSessionSummary(session, current.sessionId)));
-  });
+  app.get(
+    '/sessions',
+    { schema: { tags: ['Account'], summary: 'List active sessions' } },
+    async (request) => {
+      const current = request.currentUser();
+      const sessions = await app.prisma.session.findMany({
+        where: { userId: current.id, revokedAt: null, expiresAt: { gt: new Date() } },
+        orderBy: { lastUsedAt: 'desc' },
+      });
+      return ok(sessions.map((session) => toSessionSummary(session, current.sessionId)));
+    },
+  );
 
   app.delete('/sessions/:id', { schema: { tags: ['Account'] } }, async (request) => {
     const current = request.currentUser();
@@ -96,61 +112,82 @@ export default async function accountRoutes(app: FastifyInstance): Promise<void>
     if (!session || session.userId !== current.id) throw notFound('Session was not found');
 
     await app.auth.revokeSession(id);
-    await app.audit.log(request, { action: 'account.session_revoked', targetType: 'session', targetId: id });
+    await app.audit.log(request, {
+      action: 'account.session_revoked',
+      targetType: 'session',
+      targetId: id,
+    });
     return ok({ revoked: true });
   });
 
-  app.delete('/sessions', { schema: { tags: ['Account'], summary: 'Sign out everywhere else' } }, async (request) => {
-    const current = request.currentUser();
-    const count = await app.auth.revokeAllSessions(current.id, current.sessionId ?? undefined);
-    await app.audit.log(request, { action: 'account.sessions_revoked', metadata: { count } });
-    return ok({ revoked: count });
-  });
+  app.delete(
+    '/sessions',
+    { schema: { tags: ['Account'], summary: 'Sign out everywhere else' } },
+    async (request) => {
+      const current = request.currentUser();
+      const count = await app.auth.revokeAllSessions(current.id, current.sessionId ?? undefined);
+      await app.audit.log(request, { action: 'account.sessions_revoked', metadata: { count } });
+      return ok({ revoked: count });
+    },
+  );
 
   /* ------------------------------------------------------------- 2FA -- */
 
-  app.post('/2fa/setup', { schema: { tags: ['Account'], summary: 'Begin TOTP enrolment' } }, async (request) => {
-    const current = request.currentUser();
-    const existing = await app.prisma.twoFactorAuth.findUnique({ where: { userId: current.id } });
-    if (existing?.enabled) throw badRequest('Two-factor authentication is already enabled');
+  app.post(
+    '/2fa/setup',
+    { schema: { tags: ['Account'], summary: 'Begin TOTP enrolment' } },
+    async (request) => {
+      const current = request.currentUser();
+      const existing = await app.prisma.twoFactorAuth.findUnique({ where: { userId: current.id } });
+      if (existing?.enabled) throw badRequest('Two-factor authentication is already enabled');
 
-    const settings = await readSettings(app.prisma);
-    const secret = generateTotpSecret();
-    await app.auth.beginTwoFactorEnrolment(current.id, secret);
+      const settings = await readSettings(app.prisma);
+      const secret = generateTotpSecret();
+      await app.auth.beginTwoFactorEnrolment(current.id, secret);
 
-    return ok({
-      secret,
-      otpauthUrl: buildTotpUri(secret, current.email, settings.panelName),
-    });
-  });
+      return ok({
+        secret,
+        otpauthUrl: buildTotpUri(secret, current.email, settings.panelName),
+      });
+    },
+  );
 
-  app.post('/2fa/enable', { schema: { tags: ['Account'], summary: 'Confirm and enable TOTP' } }, async (request) => {
-    const current = request.currentUser();
-    const input = body(request, enableTwoFactorSchema);
+  app.post(
+    '/2fa/enable',
+    { schema: { tags: ['Account'], summary: 'Confirm and enable TOTP' } },
+    async (request) => {
+      const current = request.currentUser();
+      const input = body(request, enableTwoFactorSchema);
 
-    await app.auth.assertPassword(current.id, input.password);
+      await app.auth.assertPassword(current.id, input.password);
 
-    const record = await app.prisma.twoFactorAuth.findUnique({ where: { userId: current.id } });
-    if (!record) throw badRequest('Start the setup flow before enabling two-factor authentication');
-    if (record.enabled) throw badRequest('Two-factor authentication is already enabled');
+      const record = await app.prisma.twoFactorAuth.findUnique({ where: { userId: current.id } });
+      if (!record)
+        throw badRequest('Start the setup flow before enabling two-factor authentication');
+      if (record.enabled) throw badRequest('Two-factor authentication is already enabled');
 
-    const secret = app.encrypter.tryDecrypt(record.secretEnc);
-    if (!secret || !verifyTotp(secret, input.code)) {
-      throw badRequest('That code is not valid. Check your device clock and try again.');
-    }
+      const secret = app.encrypter.tryDecrypt(record.secretEnc);
+      if (!secret || !verifyTotp(secret, input.code)) {
+        throw badRequest('That code is not valid. Check your device clock and try again.');
+      }
 
-    const backupCodes = await app.auth.completeTwoFactorEnrolment(current.id);
-    await app.notifications.push(current.id, {
-      type: NotificationType.SECURITY_EVENT,
-      title: 'Two-factor authentication enabled',
-      message: 'Your account is now protected with an authenticator app.',
-      level: 'SUCCESS',
-    });
-    await app.audit.log(request, { action: 'account.2fa_enabled', targetType: 'user', targetId: current.id });
+      const backupCodes = await app.auth.completeTwoFactorEnrolment(current.id);
+      await app.notifications.push(current.id, {
+        type: NotificationType.SECURITY_EVENT,
+        title: 'Two-factor authentication enabled',
+        message: 'Your account is now protected with an authenticator app.',
+        level: 'SUCCESS',
+      });
+      await app.audit.log(request, {
+        action: 'account.2fa_enabled',
+        targetType: 'user',
+        targetId: current.id,
+      });
 
-    // Backup codes are shown exactly once — only their hashes are stored.
-    return ok({ enabled: true, backupCodes });
-  });
+      // Backup codes are shown exactly once — only their hashes are stored.
+      return ok({ enabled: true, backupCodes });
+    },
+  );
 
   app.post('/2fa/disable', { schema: { tags: ['Account'] } }, async (request) => {
     const current = request.currentUser();
@@ -167,23 +204,31 @@ export default async function accountRoutes(app: FastifyInstance): Promise<void>
       message: 'Two-factor authentication was turned off for your account.',
       level: 'WARNING',
     });
-    await app.audit.log(request, { action: 'account.2fa_disabled', targetType: 'user', targetId: current.id });
+    await app.audit.log(request, {
+      action: 'account.2fa_disabled',
+      targetType: 'user',
+      targetId: current.id,
+    });
 
     return ok({ enabled: false });
   });
 
-  app.post('/2fa/backup-codes', { schema: { tags: ['Account'], summary: 'Regenerate backup codes' } }, async (request) => {
-    const current = request.currentUser();
-    const input = body(request, z.object({ password: z.string().min(1).max(256) }));
-    await app.auth.assertPassword(current.id, input.password);
+  app.post(
+    '/2fa/backup-codes',
+    { schema: { tags: ['Account'], summary: 'Regenerate backup codes' } },
+    async (request) => {
+      const current = request.currentUser();
+      const input = body(request, z.object({ password: z.string().min(1).max(256) }));
+      await app.auth.assertPassword(current.id, input.password);
 
-    const record = await app.prisma.twoFactorAuth.findUnique({ where: { userId: current.id } });
-    if (!record?.enabled) throw badRequest('Two-factor authentication is not enabled');
+      const record = await app.prisma.twoFactorAuth.findUnique({ where: { userId: current.id } });
+      if (!record?.enabled) throw badRequest('Two-factor authentication is not enabled');
 
-    const backupCodes = await app.auth.completeTwoFactorEnrolment(current.id);
-    await app.audit.log(request, { action: 'account.2fa_backup_codes_regenerated' });
-    return ok({ backupCodes });
-  });
+      const backupCodes = await app.auth.completeTwoFactorEnrolment(current.id);
+      await app.audit.log(request, { action: 'account.2fa_backup_codes_regenerated' });
+      return ok({ backupCodes });
+    },
+  );
 
   /* -------------------------------------------------------- api keys -- */
 
@@ -206,36 +251,46 @@ export default async function accountRoutes(app: FastifyInstance): Promise<void>
     );
   });
 
-  app.post('/api-keys', { schema: { tags: ['Account'], summary: 'Create a personal API key' } }, async (request) => {
-    const current = request.currentUser();
-    const input = body(request, createApiKeySchema);
+  app.post(
+    '/api-keys',
+    { schema: { tags: ['Account'], summary: 'Create a personal API key' } },
+    async (request) => {
+      const current = request.currentUser();
+      const input = body(request, createApiKeySchema);
 
-    // A key can never grant more than the user already holds.
-    const permissions = input.permissions.filter((permission) => current.permissions.has(permission));
-    if (input.permissions.length > 0 && permissions.length === 0) {
-      throw forbidden('None of those permissions are available on your account');
-    }
+      // A key can never grant more than the user already holds.
+      const permissions = input.permissions.filter((permission) =>
+        current.permissions.has(permission),
+      );
+      if (input.permissions.length > 0 && permissions.length === 0) {
+        throw forbidden('None of those permissions are available on your account');
+      }
 
-    const keyId = generateToken(8).slice(0, 12);
-    const secret = generateToken(32);
+      const keyId = generateToken(8).slice(0, 12);
+      const secret = generateToken(32);
 
-    await app.prisma.apiKey.create({
-      data: {
-        userId: current.id,
-        name: input.name,
-        keyId,
-        keyHash: hashToken(secret),
-        permissions,
-        expiresAt: input.expiresInDays
-          ? new Date(Date.now() + input.expiresInDays * 86400_000)
-          : null,
-      },
-    });
+      await app.prisma.apiKey.create({
+        data: {
+          userId: current.id,
+          name: input.name,
+          keyId,
+          keyHash: hashToken(secret),
+          permissions,
+          expiresAt: input.expiresInDays
+            ? new Date(Date.now() + input.expiresInDays * 86400_000)
+            : null,
+        },
+      });
 
-    await app.audit.log(request, { action: 'account.api_key_created', targetType: 'api_key', targetLabel: input.name });
-    // The full token is returned once and never stored in plaintext.
-    return ok({ token: `storm_${keyId}.${secret}`, keyId, name: input.name, permissions });
-  });
+      await app.audit.log(request, {
+        action: 'account.api_key_created',
+        targetType: 'api_key',
+        targetLabel: input.name,
+      });
+      // The full token is returned once and never stored in plaintext.
+      return ok({ token: `storm_${keyId}.${secret}`, keyId, name: input.name, permissions });
+    },
+  );
 
   app.delete('/api-keys/:id', { schema: { tags: ['Account'] } }, async (request) => {
     const current = request.currentUser();
@@ -245,7 +300,11 @@ export default async function accountRoutes(app: FastifyInstance): Promise<void>
     if (!key || key.userId !== current.id) throw notFound('API key was not found');
 
     await app.prisma.apiKey.update({ where: { id }, data: { revokedAt: new Date() } });
-    await app.audit.log(request, { action: 'account.api_key_revoked', targetType: 'api_key', targetId: id });
+    await app.audit.log(request, {
+      action: 'account.api_key_revoked',
+      targetType: 'api_key',
+      targetId: id,
+    });
     return ok({ revoked: true });
   });
 
@@ -253,7 +312,10 @@ export default async function accountRoutes(app: FastifyInstance): Promise<void>
 
   app.get('/notifications', { schema: { tags: ['Account'] } }, async (request) => {
     const current = request.currentUser();
-    const q = query(request, paginationQuerySchema.extend({ unreadOnly: z.coerce.boolean().default(false) }));
+    const q = query(
+      request,
+      paginationQuerySchema.extend({ unreadOnly: z.coerce.boolean().default(false) }),
+    );
 
     const where = { userId: current.id, ...(q.unreadOnly ? { readAt: null } : {}) };
     const [items, total, unread] = await Promise.all([
@@ -302,31 +364,35 @@ export default async function accountRoutes(app: FastifyInstance): Promise<void>
 
   /* -------------------------------------------------------- activity -- */
 
-  app.get('/activity', { schema: { tags: ['Account'], summary: 'Recent account activity' } }, async (request) => {
-    const current = request.currentUser();
-    const q = query(request, paginationQuerySchema);
+  app.get(
+    '/activity',
+    { schema: { tags: ['Account'], summary: 'Recent account activity' } },
+    async (request) => {
+      const current = request.currentUser();
+      const q = query(request, paginationQuerySchema);
 
-    const [items, total] = await Promise.all([
-      app.prisma.auditLog.findMany({
-        where: { actorId: current.id },
-        orderBy: { createdAt: 'desc' },
-        ...pageArgs(q.page, q.perPage),
-      }),
-      app.prisma.auditLog.count({ where: { actorId: current.id } }),
-    ]);
+      const [items, total] = await Promise.all([
+        app.prisma.auditLog.findMany({
+          where: { actorId: current.id },
+          orderBy: { createdAt: 'desc' },
+          ...pageArgs(q.page, q.perPage),
+        }),
+        app.prisma.auditLog.count({ where: { actorId: current.id } }),
+      ]);
 
-    return paginated(
-      items.map((log) => ({
-        id: log.id,
-        action: log.action,
-        ip: log.ip,
-        targetType: log.targetType,
-        targetLabel: log.targetLabel,
-        createdAt: log.createdAt.toISOString(),
-      })),
-      total,
-      q.page,
-      q.perPage,
-    );
-  });
+      return paginated(
+        items.map((log) => ({
+          id: log.id,
+          action: log.action,
+          ip: log.ip,
+          targetType: log.targetType,
+          targetLabel: log.targetLabel,
+          createdAt: log.createdAt.toISOString(),
+        })),
+        total,
+        q.page,
+        q.perPage,
+      );
+    },
+  );
 }

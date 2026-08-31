@@ -143,7 +143,8 @@ async function friendlyStatus(response: Response): Promise<string> {
 }
 
 export const api = {
-  get: <T>(path: string, options?: RequestOptions) => apiRequest<T>(path, { ...options, method: 'GET' }),
+  get: <T>(path: string, options?: RequestOptions) =>
+    apiRequest<T>(path, { ...options, method: 'GET' }),
   post: <T>(path: string, body?: unknown, options?: RequestOptions) =>
     apiRequest<T>(path, { ...options, method: 'POST', body }),
   put: <T>(path: string, body?: unknown, options?: RequestOptions) =>
@@ -196,7 +197,12 @@ export async function apiPaginated<T>(
 
   return {
     items: payload.data,
-    meta: payload.meta ?? { page: 1, perPage: payload.data.length, total: payload.data.length, totalPages: 1 },
+    meta: payload.meta ?? {
+      page: 1,
+      perPage: payload.data.length,
+      total: payload.data.length,
+      totalPages: 1,
+    },
   };
 }
 

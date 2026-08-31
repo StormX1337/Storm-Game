@@ -10,7 +10,8 @@ export class AgentError extends Error {
   }
 }
 
-export const badRequest = (message: string, code = 'VALIDATION_ERROR') => new AgentError(400, code, message);
+export const badRequest = (message: string, code = 'VALIDATION_ERROR') =>
+  new AgentError(400, code, message);
 export const unauthorized = (message = 'Invalid node credentials') =>
   new AgentError(401, 'UNAUTHENTICATED', message);
 export const forbidden = (message: string) => new AgentError(403, 'FORBIDDEN', message);

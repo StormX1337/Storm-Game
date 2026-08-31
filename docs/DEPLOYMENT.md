@@ -56,14 +56,14 @@ nodes unchanged
 
 **Panel host**
 
-| Servers under management | CPU | Memory | Disk |
-| --- | --- | --- | --- |
-| < 50 | 2 | 2 GB | 20 GB |
-| 50–250 | 4 | 4 GB | 40 GB |
-| 250–1000 | 8 | 8 GB | 80 GB |
-| 1000+ | Scale out, see below | | |
+| Servers under management | CPU                  | Memory | Disk  |
+| ------------------------ | -------------------- | ------ | ----- |
+| < 50                     | 2                    | 2 GB   | 20 GB |
+| 50–250                   | 4                    | 4 GB   | 40 GB |
+| 250–1000                 | 8                    | 8 GB   | 80 GB |
+| 1000+                    | Scale out, see below |        |       |
 
-The panel's load is roughly proportional to *concurrent websocket viewers*, not
+The panel's load is roughly proportional to _concurrent websocket viewers_, not
 to server count. A thousand idle servers cost almost nothing; a hundred open
 consoles cost real memory.
 
@@ -124,7 +124,7 @@ create the server on the target node from the same template, restore into it,
 then delete the original. There is no one-click migration — moving gigabytes
 between machines is not something to hide behind a button that might time out.
 `Admin → Servers → <server> → Transfer` is a different thing: it changes a
-server's *owner*, not its node.
+server's _owner_, not its node.
 
 **Draining a node** — turn on **maintenance mode** in the node's settings. The
 panel stops offering it for new servers while everything already on it keeps
@@ -142,7 +142,7 @@ DATABASE_URL=postgresql://user:pass@db.example.com:5432/storm?sslmode=require&co
 ```
 
 - **Connection limit.** Prisma opens a pool per API instance. `instances ×
-  connection_limit` must stay under the server's `max_connections`. Use PgBouncer
+connection_limit` must stay under the server's `max_connections`. Use PgBouncer
   in transaction mode above a handful of instances.
 - **Backups.** Managed: enable point-in-time recovery. Self-hosted: `pg_dump`
   on a timer, off-host, and restore it somewhere occasionally.
@@ -197,27 +197,27 @@ A sample vhost is in [INSTALLATION.md](INSTALLATION.md#2-put-tls-in-front-of-it)
 
 **Endpoints**
 
-| | For |
-| --- | --- |
-| `GET /health` | Load balancer liveness |
-| `GET /ready` | Readiness — fails when the database or Redis is down |
-| `GET /api/health` | Version, uptime, dependency states |
+|                   | For                                                  |
+| ----------------- | ---------------------------------------------------- |
+| `GET /health`     | Load balancer liveness                               |
+| `GET /ready`      | Readiness — fails when the database or Redis is down |
+| `GET /api/health` | Version, uptime, dependency states                   |
 
 Point your load balancer at `/ready`, not `/health`: a process that is up but
 cannot reach its database should not receive traffic.
 
 **Alert on**
 
-| Signal | Threshold |
-| --- | --- |
-| `/ready` failing | 2 consecutive checks |
-| Node offline | Any node, immediately |
-| Disk on a node | > 85% |
-| Memory allocated on a node | > 90% |
-| Failed backups | Any, in 24h |
-| 5xx rate | > 1% over 5 minutes |
-| Queue depth | Growing for 15 minutes |
-| PostgreSQL connections | > 80% of max |
+| Signal                     | Threshold              |
+| -------------------------- | ---------------------- |
+| `/ready` failing           | 2 consecutive checks   |
+| Node offline               | Any node, immediately  |
+| Disk on a node             | > 85%                  |
+| Memory allocated on a node | > 90%                  |
+| Failed backups             | Any, in 24h            |
+| 5xx rate                   | > 1% over 5 minutes    |
+| Queue depth                | Growing for 15 minutes |
+| PostgreSQL connections     | > 80% of max           |
 
 A node going offline is the alert that matters most — every server on it is
 unreachable, and the panel cannot tell customers why.
@@ -339,12 +339,12 @@ Watch it work with `journalctl -u storm-updater -f`.
 
 **What matters**
 
-| | Where | Lose it and |
-| --- | --- | --- |
-| Database | PostgreSQL | The panel forgets everything |
-| `ENCRYPTION_KEY` | `.env` | Every stored secret is unreadable |
-| Server data | Nodes | Customers lose their worlds |
-| Backups | Node disk or S3 | The safety net is gone |
+|                  | Where           | Lose it and                       |
+| ---------------- | --------------- | --------------------------------- |
+| Database         | PostgreSQL      | The panel forgets everything      |
+| `ENCRYPTION_KEY` | `.env`          | Every stored secret is unreadable |
+| Server data      | Nodes           | Customers lose their worlds       |
+| Backups          | Node disk or S3 | The safety net is gone            |
 
 `ENCRYPTION_KEY` is the one people forget. A database backup without it cannot
 decrypt node tokens, database host passwords, SFTP passwords or 2FA seeds.
@@ -380,7 +380,7 @@ docker compose start api web
 
 Servers created after the dump will exist on nodes but not in the database, and
 the panel has no record to rebuild them from — this is why the dump schedule
-matters. For servers the panel *does* know about, `Admin → Servers → <server> →
+matters. For servers the panel _does_ know about, `Admin → Servers → <server> →
 Sync` re-pushes the container spec to its node, which repairs a node whose
 containers have drifted from what the panel expects.
 

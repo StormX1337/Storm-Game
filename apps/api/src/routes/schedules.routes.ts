@@ -35,53 +35,57 @@ export default async function scheduleRoutes(app: FastifyInstance): Promise<void
     );
   });
 
-  app.post('/:id/schedules', { schema: { tags: ['Schedules'], summary: 'Create a schedule' } }, async (request, reply) => {
-    const user = request.currentUser();
-    const { id } = params(request, idParam);
-    const input = body(request, createScheduleSchema);
-    const access = await app.serverAccess.require(user, id, Permission.SERVERS_SCHEDULES_MANAGE);
-    ServerAccessService.assertNotSuspended(access);
+  app.post(
+    '/:id/schedules',
+    { schema: { tags: ['Schedules'], summary: 'Create a schedule' } },
+    async (request, reply) => {
+      const user = request.currentUser();
+      const { id } = params(request, idParam);
+      const input = body(request, createScheduleSchema);
+      const access = await app.serverAccess.require(user, id, Permission.SERVERS_SCHEDULES_MANAGE);
+      ServerAccessService.assertNotSuspended(access);
 
-    const count = await app.prisma.schedule.count({ where: { serverId: access.server.id } });
-    if (count >= MAX_SCHEDULES_PER_SERVER) {
-      throw badRequest(`A server may have at most ${MAX_SCHEDULES_PER_SERVER} schedules`);
-    }
-    if (!isValidCron(input)) throw badRequest('That cron expression is not valid');
+      const count = await app.prisma.schedule.count({ where: { serverId: access.server.id } });
+      if (count >= MAX_SCHEDULES_PER_SERVER) {
+        throw badRequest(`A server may have at most ${MAX_SCHEDULES_PER_SERVER} schedules`);
+      }
+      if (!isValidCron(input)) throw badRequest('That cron expression is not valid');
 
-    const schedule = await app.prisma.schedule.create({
-      data: {
-        serverId: access.server.id,
-        name: input.name,
-        cronMinute: input.cronMinute,
-        cronHour: input.cronHour,
-        cronDayOfMonth: input.cronDayOfMonth,
-        cronMonth: input.cronMonth,
-        cronDayOfWeek: input.cronDayOfWeek,
-        timezone: input.timezone,
-        isActive: input.isActive,
-        onlyWhenOnline: input.onlyWhenOnline,
-        nextRunAt: nextRunAt(input),
-        tasks: {
-          create: input.tasks.map((task, index) => ({
-            action: task.action,
-            payload: task.payload,
-            timeOffsetSec: task.timeOffsetSec,
-            sequence: index,
-            continueOnFailure: task.continueOnFailure,
-          })),
+      const schedule = await app.prisma.schedule.create({
+        data: {
+          serverId: access.server.id,
+          name: input.name,
+          cronMinute: input.cronMinute,
+          cronHour: input.cronHour,
+          cronDayOfMonth: input.cronDayOfMonth,
+          cronMonth: input.cronMonth,
+          cronDayOfWeek: input.cronDayOfWeek,
+          timezone: input.timezone,
+          isActive: input.isActive,
+          onlyWhenOnline: input.onlyWhenOnline,
+          nextRunAt: nextRunAt(input),
+          tasks: {
+            create: input.tasks.map((task, index) => ({
+              action: task.action,
+              payload: task.payload,
+              timeOffsetSec: task.timeOffsetSec,
+              sequence: index,
+              continueOnFailure: task.continueOnFailure,
+            })),
+          },
         },
-      },
-      include: { tasks: { orderBy: { sequence: 'asc' } } },
-    });
+        include: { tasks: { orderBy: { sequence: 'asc' } } },
+      });
 
-    await app.audit.activity(request, {
-      serverId: access.server.id,
-      event: 'schedule:created',
-      metadata: { scheduleId: schedule.id, name: schedule.name },
-    });
+      await app.audit.activity(request, {
+        serverId: access.server.id,
+        event: 'schedule:created',
+        metadata: { scheduleId: schedule.id, name: schedule.name },
+      });
 
-    return reply.status(201).send(ok(toScheduleSummary(schedule)));
-  });
+      return reply.status(201).send(ok(toScheduleSummary(schedule)));
+    },
+  );
 
   app.patch('/:id/schedules/:scheduleId', { schema: { tags: ['Schedules'] } }, async (request) => {
     const user = request.currentUser();
@@ -140,25 +144,29 @@ export default async function scheduleRoutes(app: FastifyInstance): Promise<void
     return ok(toScheduleSummary(schedule));
   });
 
-  app.post('/:id/schedules/:scheduleId/run', { schema: { tags: ['Schedules'], summary: 'Run a schedule now' } }, async (request) => {
-    const user = request.currentUser();
-    const { id, scheduleId } = params(request, scheduleParam);
-    const access = await app.serverAccess.require(user, id, Permission.SERVERS_SCHEDULES_MANAGE);
-    ServerAccessService.assertNotSuspended(access);
+  app.post(
+    '/:id/schedules/:scheduleId/run',
+    { schema: { tags: ['Schedules'], summary: 'Run a schedule now' } },
+    async (request) => {
+      const user = request.currentUser();
+      const { id, scheduleId } = params(request, scheduleParam);
+      const access = await app.serverAccess.require(user, id, Permission.SERVERS_SCHEDULES_MANAGE);
+      ServerAccessService.assertNotSuspended(access);
 
-    const schedule = await app.prisma.schedule.findFirst({
-      where: { id: scheduleId, serverId: access.server.id },
-    });
-    if (!schedule) throw notFound('Schedule was not found');
+      const schedule = await app.prisma.schedule.findFirst({
+        where: { id: scheduleId, serverId: access.server.id },
+      });
+      if (!schedule) throw notFound('Schedule was not found');
 
-    await app.queues.enqueueSchedule(scheduleId);
-    await app.audit.activity(request, {
-      serverId: access.server.id,
-      event: 'schedule:manual_run',
-      metadata: { scheduleId },
-    });
-    return ok({ queued: true });
-  });
+      await app.queues.enqueueSchedule(scheduleId);
+      await app.audit.activity(request, {
+        serverId: access.server.id,
+        event: 'schedule:manual_run',
+        metadata: { scheduleId },
+      });
+      return ok({ queued: true });
+    },
+  );
 
   app.delete('/:id/schedules/:scheduleId', { schema: { tags: ['Schedules'] } }, async (request) => {
     const user = request.currentUser();

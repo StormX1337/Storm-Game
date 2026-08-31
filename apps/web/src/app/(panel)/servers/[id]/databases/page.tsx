@@ -50,7 +50,8 @@ export default function DatabasesPage() {
   };
 
   const create = useMutation({
-    mutationFn: () => api.post<ServerDatabaseView>(`/servers/${server.id}/databases`, { name: name.trim() }),
+    mutationFn: () =>
+      api.post<ServerDatabaseView>(`/servers/${server.id}/databases`, { name: name.trim() }),
     onSuccess: (database) => {
       toast.success('Database created', database.name);
       if (database.password) {
@@ -64,7 +65,8 @@ export default function DatabasesPage() {
   });
 
   const rotate = useMutation({
-    mutationFn: (id: string) => api.post<ServerDatabaseView>(`/servers/${server.id}/databases/${id}/rotate`, {}),
+    mutationFn: (id: string) =>
+      api.post<ServerDatabaseView>(`/servers/${server.id}/databases/${id}/rotate`, {}),
     onSuccess: (database) => {
       toast.success('Password rotated');
       if (database.password) {
@@ -201,7 +203,11 @@ export default function DatabasesPage() {
                 </div>
 
                 <dl className="mt-3 grid gap-2 border-t border-border pt-3 text-sm sm:grid-cols-2">
-                  <CredentialRow label="Host" value={`${database.host}:${database.port}`} onCopy={copy} />
+                  <CredentialRow
+                    label="Host"
+                    value={`${database.host}:${database.port}`}
+                    onCopy={copy}
+                  />
                   <CredentialRow label="Database" value={database.name} onCopy={copy} />
                   <CredentialRow label="Username" value={database.username} onCopy={copy} />
                   <CredentialRow
@@ -265,7 +271,11 @@ export default function DatabasesPage() {
             <Button variant="outline" onClick={() => setCreating(false)}>
               Cancel
             </Button>
-            <Button onClick={() => create.mutate()} disabled={!name.trim()} loading={create.isPending}>
+            <Button
+              onClick={() => create.mutate()}
+              disabled={!name.trim()}
+              loading={create.isPending}
+            >
               Create
             </Button>
           </DialogFooter>
@@ -292,7 +302,10 @@ function CredentialRow({
     <div className="flex items-center justify-between gap-2">
       <dt className="shrink-0 text-muted-foreground">{label}</dt>
       <dd className="flex min-w-0 items-center gap-1.5">
-        <span className={`${mono ? 'font-mono text-xs' : ''} ${truncate ? 'truncate' : ''}`} title={value}>
+        <span
+          className={`${mono ? 'font-mono text-xs' : ''} ${truncate ? 'truncate' : ''}`}
+          title={value}
+        >
           {value}
         </span>
         {onCopy ? (

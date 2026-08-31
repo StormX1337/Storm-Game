@@ -44,7 +44,10 @@ export default async function healthRoutes(app: FastifyInstance): Promise<void> 
         app.queues.backups.getActiveCount(),
         app.queues.backups.getFailedCount(),
       ]);
-      checks.queue = { status: 'ok', message: `waiting=${waiting} active=${active} failed=${failed}` };
+      checks.queue = {
+        status: 'ok',
+        message: `waiting=${waiting} active=${active} failed=${failed}`,
+      };
     } catch (error) {
       checks.queue = {
         status: 'error',
@@ -80,16 +83,32 @@ export default async function healthRoutes(app: FastifyInstance): Promise<void> 
 
   app.get('/health', { schema: { tags: ['System'], summary: 'Liveness probe' } }, async () => ({
     success: true,
-    data: { status: 'ok', version: STORM_VERSION, uptime: Math.floor((Date.now() - startedAt) / 1000) },
+    data: {
+      status: 'ok',
+      version: STORM_VERSION,
+      uptime: Math.floor((Date.now() - startedAt) / 1000),
+    },
   }));
 
-  app.get('/ready', { schema: { tags: ['System'], summary: 'Readiness probe' } }, async (_request, reply) => {
-    const report = await probe();
-    return reply.status(report.status === 'ok' ? 200 : 503).send({ success: report.status === 'ok', data: report });
-  });
+  app.get(
+    '/ready',
+    { schema: { tags: ['System'], summary: 'Readiness probe' } },
+    async (_request, reply) => {
+      const report = await probe();
+      return reply
+        .status(report.status === 'ok' ? 200 : 503)
+        .send({ success: report.status === 'ok', data: report });
+    },
+  );
 
-  app.get('/api/health', { schema: { tags: ['System'], summary: 'Detailed health report' } }, async (_request, reply) => {
-    const report = await probe();
-    return reply.status(report.status === 'ok' ? 200 : 503).send({ success: report.status === 'ok', data: report });
-  });
+  app.get(
+    '/api/health',
+    { schema: { tags: ['System'], summary: 'Detailed health report' } },
+    async (_request, reply) => {
+      const report = await probe();
+      return reply
+        .status(report.status === 'ok' ? 200 : 503)
+        .send({ success: report.status === 'ok', data: report });
+    },
+  );
 }

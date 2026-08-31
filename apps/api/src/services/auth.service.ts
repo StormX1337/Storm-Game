@@ -88,15 +88,24 @@ export class AuthService {
 
     if (!user) {
       // Burn comparable time so a missing account is not distinguishable.
-      await verifyPassword('$argon2id$v=19$m=19456,t=2,p=1$c3RvcmA$AAAAAAAAAAAAAAAAAAAAAA', password);
+      await verifyPassword(
+        '$argon2id$v=19$m=19456,t=2,p=1$c3RvcmA$AAAAAAAAAAAAAAAAAAAAAA',
+        password,
+      );
       await this.recordFailedLogin(identifier, context.ip);
-      throw unauthorized('Those credentials do not match our records', ErrorCode.INVALID_CREDENTIALS);
+      throw unauthorized(
+        'Those credentials do not match our records',
+        ErrorCode.INVALID_CREDENTIALS,
+      );
     }
 
     const valid = await verifyPassword(user.passwordHash, password);
     if (!valid) {
       await this.recordFailedLogin(identifier, context.ip);
-      throw unauthorized('Those credentials do not match our records', ErrorCode.INVALID_CREDENTIALS);
+      throw unauthorized(
+        'Those credentials do not match our records',
+        ErrorCode.INVALID_CREDENTIALS,
+      );
     }
 
     if (user.suspendedAt) {
@@ -319,7 +328,11 @@ export class AuthService {
 
   setAuthCookies(reply: FastifyReply, tokens: AuthTokens, rememberMe = false): void {
     const refreshMaxAge = (rememberMe ? this.app.env.JWT_REFRESH_TTL_DAYS : 1) * 86400;
-    reply.setCookie(COOKIE_NAMES.accessToken, tokens.accessToken, this.cookieOptions(tokens.expiresIn));
+    reply.setCookie(
+      COOKIE_NAMES.accessToken,
+      tokens.accessToken,
+      this.cookieOptions(tokens.expiresIn),
+    );
     reply.setCookie(COOKIE_NAMES.refreshToken, tokens.refreshToken, {
       ...this.cookieOptions(refreshMaxAge),
       path: '/',
@@ -327,7 +340,10 @@ export class AuthService {
   }
 
   clearAuthCookies(reply: FastifyReply): void {
-    const base = { path: '/', ...(this.app.env.COOKIE_DOMAIN ? { domain: this.app.env.COOKIE_DOMAIN } : {}) };
+    const base = {
+      path: '/',
+      ...(this.app.env.COOKIE_DOMAIN ? { domain: this.app.env.COOKIE_DOMAIN } : {}),
+    };
     reply.clearCookie(COOKIE_NAMES.accessToken, base);
     reply.clearCookie(COOKIE_NAMES.refreshToken, base);
   }

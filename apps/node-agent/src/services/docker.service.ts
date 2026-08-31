@@ -183,7 +183,11 @@ export class DockerService {
     }
 
     const environment = Object.entries(spec.environment).map(([key, value]) => `${key}=${value}`);
-    environment.push(`STARTUP=${spec.startupCommand}`, 'TERM=xterm-256color', 'HOME=/home/container');
+    environment.push(
+      `STARTUP=${spec.startupCommand}`,
+      'TERM=xterm-256color',
+      'HOME=/home/container',
+    );
 
     const memoryBytes = spec.limits.memoryMb * 1024 * 1024;
     // Docker wants swap expressed as memory+swap; -1 means unlimited.
@@ -400,7 +404,10 @@ export class DockerService {
   }
 
   /** Streams stats for a running container until the returned stop() is called. */
-  async streamStats(uuid: string, onSample: (stats: AgentServerStats) => void): Promise<() => void> {
+  async streamStats(
+    uuid: string,
+    onSample: (stats: AgentServerStats) => void,
+  ): Promise<() => void> {
     const container = this.container(uuid);
     const stream = (await container.stats({ stream: true })) as unknown as NodeJS.ReadableStream;
     let buffer = '';

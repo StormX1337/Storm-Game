@@ -74,7 +74,9 @@ export function ServerCard({
           <MiniMeter
             icon={MemoryStick}
             label="Memory"
-            value={stats ? formatBytes(stats.memoryBytes, 0) : formatMib(server.limits.memoryLimit, 0)}
+            value={
+              stats ? formatBytes(stats.memoryBytes, 0) : formatMib(server.limits.memoryLimit, 0)
+            }
             percent={stats ? usagePercent(stats.memoryBytes, memoryLimitBytes) : 0}
           />
           <MiniMeter

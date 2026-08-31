@@ -81,7 +81,10 @@ export default function NotificationsPage() {
           {data.items.map((notification) => (
             <Card
               key={notification.id}
-              className={cn('p-4 transition-colors', !notification.read && 'border-primary/30 bg-primary/[0.03]')}
+              className={cn(
+                'p-4 transition-colors',
+                !notification.read && 'border-primary/30 bg-primary/[0.03]',
+              )}
             >
               <div className="flex items-start gap-3">
                 <span

@@ -30,8 +30,10 @@ export class AppError extends Error {
 export const badRequest = (message: string, details?: Record<string, string[]>) =>
   new AppError(400, ErrorCode.VALIDATION_ERROR, message, details ? { details } : {});
 
-export const unauthorized = (message = 'Authentication is required', code: string = ErrorCode.UNAUTHENTICATED) =>
-  new AppError(401, code, message);
+export const unauthorized = (
+  message = 'Authentication is required',
+  code: string = ErrorCode.UNAUTHENTICATED,
+) => new AppError(401, code, message);
 
 export const forbidden = (message = 'You do not have permission to do that') =>
   new AppError(403, ErrorCode.FORBIDDEN, message);

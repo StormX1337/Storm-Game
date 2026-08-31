@@ -15,7 +15,11 @@ export async function registerAccountSocket(app: FastifyInstance): Promise<void>
   app.get('/ws', { websocket: true, schema: { hide: true } }, async (socket, request) => {
     let user;
     try {
-      user = await authenticateSocket(app, request.query as Record<string, string>, request.headers.cookie);
+      user = await authenticateSocket(
+        app,
+        request.query as Record<string, string>,
+        request.headers.cookie,
+      );
     } catch {
       socket.close(4401, 'unauthenticated');
       return;
@@ -70,13 +74,20 @@ export async function registerAccountSocket(app: FastifyInstance): Promise<void>
           switch (channel) {
             case REDIS_CHANNELS.notifications: {
               if ((parsed as { userId?: string }).userId !== user.id) return;
-              send(socket, { type: 'notification', notification: (parsed as never as { notification: never }).notification });
+              send(socket, {
+                type: 'notification',
+                notification: (parsed as never as { notification: never }).notification,
+              });
               return;
             }
             case REDIS_CHANNELS.serverStatus: {
               const event = parsed as never as { serverId: string; ownerId: string; status: never };
               if (!(await canSee(event.serverId, event.ownerId))) return;
-              send(socket, { type: 'server:status', serverId: event.serverId, status: event.status });
+              send(socket, {
+                type: 'server:status',
+                serverId: event.serverId,
+                status: event.status,
+              });
               return;
             }
             case REDIS_CHANNELS.serverStats: {

@@ -53,12 +53,12 @@ docker compose logs api | grep <request-id>
 docker compose logs api | head -40
 ```
 
-| Message | Cause |
-| --- | --- |
+| Message                                     | Cause                                                      |
+| ------------------------------------------- | ---------------------------------------------------------- |
 | `JWT_SECRET must be at least 32 characters` | Secrets not generated. Run `./scripts/generate-secrets.sh` |
-| `Can't reach database server` | PostgreSQL not up, or `DATABASE_URL` wrong |
-| `P1000: Authentication failed` | `POSTGRES_PASSWORD` changed after the volume was created |
-| `ECONNREFUSED …:6379` | Redis not up |
+| `Can't reach database server`               | PostgreSQL not up, or `DATABASE_URL` wrong                 |
+| `P1000: Authentication failed`              | `POSTGRES_PASSWORD` changed after the volume was created   |
+| `ECONNREFUSED …:6379`                       | Redis not up                                               |
 
 The password case catches people: PostgreSQL only reads `POSTGRES_PASSWORD` when
 it initialises its data directory. Changing it later changes what the API
@@ -171,13 +171,13 @@ journalctl -u storm-agent -n 100 --no-pager
 curl -s localhost:8081/health
 ```
 
-| Symptom | Cause |
-| --- | --- |
-| Unit not running | Read the journal — usually a malformed `/etc/storm/agent.env` |
-| `Cannot connect to the Docker daemon` | Docker is not running, or the socket path is wrong |
-| `401` from the panel | Token mismatch. Rotate: `storm node token <name>` and update the agent |
-| `ENOTFOUND panel.example.com` | The node cannot resolve the panel — check `PANEL_URL` and DNS |
-| Healthy locally, offline in the panel | The **panel** cannot reach the node |
+| Symptom                                              | Cause                                                                                                                          |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Unit not running                                     | Read the journal — usually a malformed `/etc/storm/agent.env`                                                                  |
+| `Cannot connect to the Docker daemon`                | Docker is not running, or the socket path is wrong                                                                             |
+| `401` from the panel                                 | Token mismatch. Rotate: `storm node token <name>` and update the agent                                                         |
+| `ENOTFOUND panel.example.com`                        | The node cannot resolve the panel — check `PANEL_URL` and DNS                                                                  |
+| Healthy locally, offline in the panel                | The **panel** cannot reach the node                                                                                            |
 | `packet length too long` / TLS errors in the API log | The node is registered as `https` but the agent serves plain HTTP. Fix the scheme on the node, or give the agent a certificate |
 
 That last one is the common case. From the panel host:
@@ -205,13 +205,13 @@ no trailing whitespace, no shell-mangled characters.
 Open the server's console: install output streams there and usually names the
 problem outright.
 
-| Message | Cause |
-| --- | --- |
-| `no space left on device` | The node's disk. `df -h /var/lib/storm` |
-| `curl: (22) … 404` | The install script's download URL has moved |
+| Message                      | Cause                                                   |
+| ---------------------------- | ------------------------------------------------------- |
+| `no space left on device`    | The node's disk. `df -h /var/lib/storm`                 |
+| `curl: (22) … 404`           | The install script's download URL has moved             |
 | `Unable to locate package …` | The install container lacks it — `apt-get update` first |
-| `permission denied` | Writing outside `/mnt/server` |
-| Nothing at all | The panel could not reach the node — see above |
+| `permission denied`          | Writing outside `/mnt/server`                           |
+| Nothing at all               | The panel could not reach the node — see above          |
 
 Reinstall from **Server → Settings → Reinstall**. It re-runs the install script
 over the existing data directory, so worlds survive — but take a backup first
@@ -231,14 +231,14 @@ docker compose exec redis redis-cli LLEN bull:storm-installs:wait
 **Check the console first.** Games say why they will not start, and the answer
 is usually in the first twenty lines.
 
-| Symptom | Cause |
-| --- | --- |
-| Starts, exits at once | The startup command references a file the install did not produce |
-| `Address already in use` | The game is binding its default port, not its allocation. Add a `configFiles` mapping |
-| `Could not reserve enough space for object heap` | Memory limit lower than the JVM's `-Xmx` |
-| Killed after a few seconds | OOM. Raise the memory limit or lower the game's |
-| `EULA` complaints | The install script did not write `eula.txt` |
-| Stuck at `STARTING` forever | `startupDetection` never matches — see [GAME-TEMPLATES.md](GAME-TEMPLATES.md#detection-patterns) |
+| Symptom                                          | Cause                                                                                            |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------ |
+| Starts, exits at once                            | The startup command references a file the install did not produce                                |
+| `Address already in use`                         | The game is binding its default port, not its allocation. Add a `configFiles` mapping            |
+| `Could not reserve enough space for object heap` | Memory limit lower than the JVM's `-Xmx`                                                         |
+| Killed after a few seconds                       | OOM. Raise the memory limit or lower the game's                                                  |
+| `EULA` complaints                                | The install script did not write `eula.txt`                                                      |
+| Stuck at `STARTING` forever                      | `startupDetection` never matches — see [GAME-TEMPLATES.md](GAME-TEMPLATES.md#detection-patterns) |
 
 On the node:
 
@@ -274,12 +274,12 @@ nc -zuv node.example.com 27015           # UDP
 **"Disconnected" straight away.** The websocket is not getting through. In the
 browser's network tab, look for the `ws` request:
 
-| Status | Cause |
-| --- | --- |
-| 400/426 | The proxy is not upgrading the connection. Add the `Upgrade`/`Connection` headers |
-| 401 | Session expired — reload |
-| 403 | No `servers.console` permission |
-| Connects then drops after ~60s | `proxy_read_timeout` too low. Set 3600s |
+| Status                         | Cause                                                                             |
+| ------------------------------ | --------------------------------------------------------------------------------- |
+| 400/426                        | The proxy is not upgrading the connection. Add the `Upgrade`/`Connection` headers |
+| 401                            | Session expired — reload                                                          |
+| 403                            | No `servers.console` permission                                                   |
+| Connects then drops after ~60s | `proxy_read_timeout` too low. Set 3600s                                           |
 
 **Connected but empty.** The server is stopped, or its output buffer is empty
 because it only writes to a log file. Add `logConfig` to the template so the
@@ -293,13 +293,13 @@ instead).
 
 ## File manager problems
 
-| Symptom | Cause |
-| --- | --- |
-| "Path is outside the server directory" | A `..` or a symlink escape. Working as intended |
-| "Permission denied" | Files owned by the wrong uid. Reinstall re-chowns to 1000 |
-| Uploads fail near the end | `client_max_body_size` in your proxy. Set it to 2G |
-| Large file will not open in the editor | Editing is capped. Download it instead |
-| Listing is slow | Thousands of entries in one directory — that is the filesystem, not the panel |
+| Symptom                                | Cause                                                                         |
+| -------------------------------------- | ----------------------------------------------------------------------------- |
+| "Path is outside the server directory" | A `..` or a symlink escape. Working as intended                               |
+| "Permission denied"                    | Files owned by the wrong uid. Reinstall re-chowns to 1000                     |
+| Uploads fail near the end              | `client_max_body_size` in your proxy. Set it to 2G                            |
+| Large file will not open in the editor | Editing is capped. Download it instead                                        |
+| Listing is slow                        | Thousands of entries in one directory — that is the filesystem, not the panel |
 
 Large uploads are better done over SFTP.
 
@@ -311,12 +311,12 @@ Username is `<username>.<serverShortId>` — the plain username alone will not
 authenticate. The password is the SFTP password from **Server → Settings →
 SFTP**, not the panel password.
 
-| Symptom | Cause |
-| --- | --- |
-| "Permission denied" | Wrong username format, or no access to that server |
-| Connection refused | The agent's SFTP is not running, or 2022 is firewalled |
-| Host key changed | The node was rebuilt. Verify, then remove the old key |
-| Connects, no files | Server not installed yet, or genuinely empty |
+| Symptom             | Cause                                                  |
+| ------------------- | ------------------------------------------------------ |
+| "Permission denied" | Wrong username format, or no access to that server     |
+| Connection refused  | The agent's SFTP is not running, or 2022 is firewalled |
+| Host key changed    | The node was rebuilt. Verify, then remove the old key  |
+| Connects, no files  | Server not installed yet, or genuinely empty           |
 
 ```bash
 sftp -P 2022 alice.a1b2c3d4@node.example.com
@@ -371,13 +371,13 @@ docker compose exec postgres psql -U storm -c \
 docker compose exec redis redis-cli INFO stats | grep instantaneous
 ```
 
-| Cause | Fix |
-| --- | --- |
-| Too many open consoles | Each is a websocket. Scale the API out |
-| Database connection pool exhausted | Raise `connection_limit`, or add PgBouncer |
-| Backup jobs competing with requests | Split workers onto their own instance |
-| A node not answering | The panel waits on it. Take it out of rotation |
-| Audit log grown large | It is indexed, but a huge table still costs. Archive old rows |
+| Cause                               | Fix                                                           |
+| ----------------------------------- | ------------------------------------------------------------- |
+| Too many open consoles              | Each is a websocket. Scale the API out                        |
+| Database connection pool exhausted  | Raise `connection_limit`, or add PgBouncer                    |
+| Backup jobs competing with requests | Split workers onto their own instance                         |
+| A node not answering                | The panel waits on it. Take it out of rotation                |
+| Audit log grown large               | It is indexed, but a huge table still costs. Archive old rows |
 
 A single slow node makes the whole admin dashboard feel slow, because it
 aggregates across nodes. The node health page will show which one.
@@ -395,11 +395,11 @@ docker compose logs api | grep -i 'verification\|reset'
 
 With SMTP configured:
 
-| Symptom | Cause |
-| --- | --- |
-| `EAUTH` | Wrong credentials. Gmail needs an app password |
-| `ESOCKET` / timeout | Port blocked, or `SMTP_SECURE` wrong for the port |
-| Accepted but not delivered | SPF, DKIM and DMARC on your sending domain |
+| Symptom                    | Cause                                             |
+| -------------------------- | ------------------------------------------------- |
+| `EAUTH`                    | Wrong credentials. Gmail needs an app password    |
+| `ESOCKET` / timeout        | Port blocked, or `SMTP_SECURE` wrong for the port |
+| Accepted but not delivered | SPF, DKIM and DMARC on your sending domain        |
 
 `SMTP_SECURE=true` means implicit TLS on port 465. For 587, leave it false —
 STARTTLS is negotiated.

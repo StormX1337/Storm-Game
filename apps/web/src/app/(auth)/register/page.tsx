@@ -82,7 +82,9 @@ export default function RegisterPage() {
     <div className="space-y-6 animate-fade-in">
       <div className="space-y-1.5">
         <h1 className="text-2xl font-semibold tracking-tight">Create your account</h1>
-        <p className="text-sm text-muted-foreground">Deploy your first server in a couple of minutes.</p>
+        <p className="text-sm text-muted-foreground">
+          Deploy your first server in a couple of minutes.
+        </p>
       </div>
 
       <form onSubmit={onSubmit} className="space-y-4" noValidate>
@@ -145,7 +147,9 @@ export default function RegisterPage() {
                   />
                 ))}
               </div>
-              <span className="w-12 text-right text-xs text-muted-foreground">{strength.label}</span>
+              <span className="w-12 text-right text-xs text-muted-foreground">
+                {strength.label}
+              </span>
             </div>
           ) : null}
         </Field>

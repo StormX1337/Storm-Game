@@ -1,12 +1,7 @@
 import { Worker } from 'bullmq';
 import type { FastifyInstance } from 'fastify';
 import { QUEUE_NAMES } from '@storm/config';
-import {
-  BackupStatus,
-  NotificationType,
-  WebhookEvent,
-  type AgentBackupResult,
-} from '@storm/types';
+import { BackupStatus, NotificationType, WebhookEvent, type AgentBackupResult } from '@storm/types';
 import type { BackupJobData, RestoreJobData } from '../plugins/queues.js';
 import { concurrency } from './concurrency.js';
 
@@ -38,18 +33,19 @@ async function runBackup(app: FastifyInstance, data: BackupJobData): Promise<voi
   });
 
   try {
-    const upload = await app.storage.uploadTarget(
-      backup.storage,
-      backup.server.uuid,
-      backup.uuid,
-    );
+    const upload = await app.storage.uploadTarget(backup.storage, backup.server.uuid, backup.uuid);
 
     const result = await app.agents.request<AgentBackupResult>(
       backup.server.node,
       `/api/v1/servers/${backup.server.uuid}/backups`,
       {
         method: 'POST',
-        body: { uuid: backup.server.uuid, backupUuid: backup.uuid, ignore: backup.ignoredFiles, upload },
+        body: {
+          uuid: backup.server.uuid,
+          backupUuid: backup.uuid,
+          ignore: backup.ignoredFiles,
+          upload,
+        },
         timeoutMs: 6 * 3600_000,
       },
     );
@@ -132,7 +128,12 @@ async function runRestore(app: FastifyInstance, data: RestoreJobData): Promise<v
       `/api/v1/servers/${backup.server.uuid}/backups/${backup.uuid}/restore`,
       {
         method: 'POST',
-        body: { uuid: backup.server.uuid, backupUuid: backup.uuid, truncate: data.truncate, download },
+        body: {
+          uuid: backup.server.uuid,
+          backupUuid: backup.uuid,
+          truncate: data.truncate,
+          download,
+        },
         timeoutMs: 6 * 3600_000,
       },
     );

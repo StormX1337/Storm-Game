@@ -49,7 +49,10 @@ describe('Sidebar', () => {
       'Audit log',
       'Settings',
     ]) {
-      expect(screen.getByRole('link', { name: new RegExp(label) }), `missing "${label}"`).toBeInTheDocument();
+      expect(
+        screen.getByRole('link', { name: new RegExp(label) }),
+        `missing "${label}"`,
+      ).toBeInTheDocument();
     }
   });
 

@@ -29,7 +29,9 @@ export interface ConfirmOptions {
 
 type Resolver = (confirmed: boolean) => void;
 
-const ConfirmContext = React.createContext<((options: ConfirmOptions) => Promise<boolean>) | null>(null);
+const ConfirmContext = React.createContext<((options: ConfirmOptions) => Promise<boolean>) | null>(
+  null,
+);
 
 export function useConfirm(): (options: ConfirmOptions) => Promise<boolean> {
   const context = React.useContext(ConfirmContext);
@@ -38,7 +40,9 @@ export function useConfirm(): (options: ConfirmOptions) => Promise<boolean> {
 }
 
 export function ConfirmProvider({ children }: { children: React.ReactNode }): React.JSX.Element {
-  const [state, setState] = React.useState<{ options: ConfirmOptions; resolve: Resolver } | null>(null);
+  const [state, setState] = React.useState<{ options: ConfirmOptions; resolve: Resolver } | null>(
+    null,
+  );
   const [typed, setTyped] = React.useState('');
 
   const confirm = React.useCallback(
@@ -83,8 +87,11 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }): Re
           {options?.confirmText ? (
             <div className="space-y-1.5">
               <p className="text-sm text-muted-foreground">
-                Type <span className="font-mono font-semibold text-foreground">{options.confirmText}</span> to
-                confirm.
+                Type{' '}
+                <span className="font-mono font-semibold text-foreground">
+                  {options.confirmText}
+                </span>{' '}
+                to confirm.
               </p>
               <Input
                 value={typed}

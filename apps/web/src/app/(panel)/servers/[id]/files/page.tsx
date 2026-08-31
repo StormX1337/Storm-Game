@@ -62,8 +62,29 @@ import { useServer } from '@/components/panel/server-context';
 import { FileEditor } from '@/components/panel/file-editor';
 
 const TEXT_EXTENSIONS = new Set([
-  'txt', 'log', 'md', 'json', 'yml', 'yaml', 'xml', 'properties', 'cfg', 'conf',
-  'ini', 'toml', 'sh', 'bat', 'js', 'ts', 'lua', 'py', 'sql', 'env', 'csv', 'html', 'css',
+  'txt',
+  'log',
+  'md',
+  'json',
+  'yml',
+  'yaml',
+  'xml',
+  'properties',
+  'cfg',
+  'conf',
+  'ini',
+  'toml',
+  'sh',
+  'bat',
+  'js',
+  'ts',
+  'lua',
+  'py',
+  'sql',
+  'env',
+  'csv',
+  'html',
+  'css',
 ]);
 
 function extensionOf(name: string): string {
@@ -75,7 +96,8 @@ function iconFor(entry: AgentFileEntry): React.ComponentType<{ className?: strin
   if (entry.isDirectory) return Folder;
   const extension = extensionOf(entry.name);
   if (['zip', 'gz', 'tar', 'rar', '7z', 'jar'].includes(extension)) return FileArchive;
-  if (['js', 'ts', 'json', 'lua', 'py', 'sh', 'yml', 'yaml', 'xml'].includes(extension)) return FileCode;
+  if (['js', 'ts', 'json', 'lua', 'py', 'sh', 'yml', 'yaml', 'xml'].includes(extension))
+    return FileCode;
   if (TEXT_EXTENSIONS.has(extension)) return FileText;
   return FileIcon;
 }
@@ -181,7 +203,8 @@ export default function FilesPage() {
   });
 
   const decompressMutation = useMutation({
-    mutationFn: (file: string) => api.post(`/servers/${server.id}/files/decompress`, { path, file }),
+    mutationFn: (file: string) =>
+      api.post(`/servers/${server.id}/files/decompress`, { path, file }),
     onSuccess: () => {
       toast.success('Archive extracted');
       refresh();
@@ -258,7 +281,8 @@ export default function FilesPage() {
     }
   };
 
-  const entries = search.trim().length > 1 ? (searchResults.data ?? []) : (listing.data?.entries ?? []);
+  const entries =
+    search.trim().length > 1 ? (searchResults.data ?? []) : (listing.data?.entries ?? []);
   const segments = path.split('/').filter(Boolean);
 
   const allSelected = entries.length > 0 && selected.size === entries.length;
@@ -337,7 +361,9 @@ export default function FilesPage() {
                 }}
                 className={cn(
                   'rounded px-1.5 py-0.5 transition-colors hover:bg-secondary',
-                  last ? 'font-medium text-foreground' : 'text-muted-foreground hover:text-foreground',
+                  last
+                    ? 'font-medium text-foreground'
+                    : 'text-muted-foreground hover:text-foreground',
                 )}
               >
                 {segment}
@@ -400,7 +426,9 @@ export default function FilesPage() {
                     <Checkbox
                       checked={allSelected}
                       onCheckedChange={(checked) =>
-                        setSelected(checked === true ? new Set(entries.map((e) => e.path)) : new Set())
+                        setSelected(
+                          checked === true ? new Set(entries.map((e) => e.path)) : new Set(),
+                        )
                       }
                       aria-label="Select all"
                     />
@@ -486,7 +514,9 @@ export default function FilesPage() {
                                     <Pencil />
                                     Rename
                                   </DropdownMenuItem>
-                                  <DropdownMenuItem onSelect={() => copyMutation.mutate(entry.path)}>
+                                  <DropdownMenuItem
+                                    onSelect={() => copyMutation.mutate(entry.path)}
+                                  >
                                     <Copy />
                                     Duplicate
                                   </DropdownMenuItem>
@@ -569,7 +599,9 @@ export default function FilesPage() {
               Cancel
             </Button>
             <Button
-              onClick={() => createMutation.mutate({ kind: creating ?? 'file', name: newName.trim() })}
+              onClick={() =>
+                createMutation.mutate({ kind: creating ?? 'file', name: newName.trim() })
+              }
               disabled={!newName.trim()}
               loading={createMutation.isPending}
             >

@@ -42,7 +42,10 @@ export default function SftpPage() {
   const resetPassword = useMutation({
     mutationFn: () => api.post<{ password: string }>(`/servers/${server.id}/sftp/reset`, {}),
     onSuccess: () => {
-      toast.success('SFTP password rotated', 'The new password is shown below. It is not stored in readable form.');
+      toast.success(
+        'SFTP password rotated',
+        'The new password is shown below. It is not stored in readable form.',
+      );
       void queryClient.invalidateQueries({ queryKey: ['server', server.shortId, 'sftp'] });
     },
     onError: (error) => toast.error('Could not rotate the password', errorMessage(error)),

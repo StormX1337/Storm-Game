@@ -10,7 +10,13 @@ export interface CronParts {
 }
 
 export function cronExpression(parts: CronParts): string {
-  return [parts.cronMinute, parts.cronHour, parts.cronDayOfMonth, parts.cronMonth, parts.cronDayOfWeek].join(' ');
+  return [
+    parts.cronMinute,
+    parts.cronHour,
+    parts.cronDayOfMonth,
+    parts.cronMonth,
+    parts.cronDayOfWeek,
+  ].join(' ');
 }
 
 /** Next fire time for a schedule, or null when the expression is unusable. */
@@ -32,7 +38,13 @@ export function isValidCron(parts: CronParts): boolean {
 
 /** Plain-English summary shown in the schedule list. */
 export function describeCron(parts: CronParts): string {
-  const { cronMinute: m, cronHour: h, cronDayOfMonth: dom, cronMonth: mo, cronDayOfWeek: dow } = parts;
+  const {
+    cronMinute: m,
+    cronHour: h,
+    cronDayOfMonth: dom,
+    cronMonth: mo,
+    cronDayOfWeek: dow,
+  } = parts;
 
   if (m === '*' && h === '*') return 'Every minute';
   if (h === '*' && dom === '*' && mo === '*' && dow === '*') {

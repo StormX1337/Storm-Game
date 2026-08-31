@@ -139,7 +139,11 @@ export const DropdownMenuItem = React.forwardRef<
 >(({ className, destructive, ...props }, ref) => (
   <DropdownMenuPrimitive.Item
     ref={ref}
-    className={cn(menuItemClasses, destructive && 'text-destructive focus:bg-destructive/10', className)}
+    className={cn(
+      menuItemClasses,
+      destructive && 'text-destructive focus:bg-destructive/10',
+      className,
+    )}
     {...props}
   />
 ));
@@ -151,7 +155,10 @@ export const DropdownMenuLabel = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DropdownMenuPrimitive.Label
     ref={ref}
-    className={cn('px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground', className)}
+    className={cn(
+      'px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground',
+      className,
+    )}
     {...props}
   />
 ));
@@ -161,7 +168,11 @@ export const DropdownMenuSeparator = React.forwardRef<
   React.ElementRef<typeof DropdownMenuPrimitive.Separator>,
   React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Separator>
 >(({ className, ...props }, ref) => (
-  <DropdownMenuPrimitive.Separator ref={ref} className={cn('-mx-1 my-1 h-px bg-border', className)} {...props} />
+  <DropdownMenuPrimitive.Separator
+    ref={ref}
+    className={cn('-mx-1 my-1 h-px bg-border', className)}
+    {...props}
+  />
 ));
 DropdownMenuSeparator.displayName = 'DropdownMenuSeparator';
 
@@ -175,7 +186,11 @@ export const ContextMenuContent = React.forwardRef<
   React.ComponentPropsWithoutRef<typeof ContextMenuPrimitive.Content>
 >(({ className, ...props }, ref) => (
   <ContextMenuPrimitive.Portal>
-    <ContextMenuPrimitive.Content ref={ref} className={cn(menuContentClasses, className)} {...props} />
+    <ContextMenuPrimitive.Content
+      ref={ref}
+      className={cn(menuContentClasses, className)}
+      {...props}
+    />
   </ContextMenuPrimitive.Portal>
 ));
 ContextMenuContent.displayName = 'ContextMenuContent';
@@ -186,7 +201,11 @@ export const ContextMenuItem = React.forwardRef<
 >(({ className, destructive, ...props }, ref) => (
   <ContextMenuPrimitive.Item
     ref={ref}
-    className={cn(menuItemClasses, destructive && 'text-destructive focus:bg-destructive/10', className)}
+    className={cn(
+      menuItemClasses,
+      destructive && 'text-destructive focus:bg-destructive/10',
+      className,
+    )}
     {...props}
   />
 ));
@@ -196,7 +215,11 @@ export const ContextMenuSeparator = React.forwardRef<
   React.ElementRef<typeof ContextMenuPrimitive.Separator>,
   React.ComponentPropsWithoutRef<typeof ContextMenuPrimitive.Separator>
 >(({ className, ...props }, ref) => (
-  <ContextMenuPrimitive.Separator ref={ref} className={cn('-mx-1 my-1 h-px bg-border', className)} {...props} />
+  <ContextMenuPrimitive.Separator
+    ref={ref}
+    className={cn('-mx-1 my-1 h-px bg-border', className)}
+    {...props}
+  />
 ));
 ContextMenuSeparator.displayName = 'ContextMenuSeparator';
 
@@ -300,7 +323,8 @@ export const SelectContent = React.forwardRef<
       <SelectPrimitive.Viewport
         className={cn(
           'p-1',
-          position === 'popper' && 'h-[var(--radix-select-trigger-height)] w-full min-w-[var(--radix-select-trigger-width)]',
+          position === 'popper' &&
+            'h-[var(--radix-select-trigger-height)] w-full min-w-[var(--radix-select-trigger-width)]',
         )}
       >
         {children}
@@ -342,7 +366,10 @@ export const SelectLabel = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <SelectPrimitive.Label
     ref={ref}
-    className={cn('px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground', className)}
+    className={cn(
+      'px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground',
+      className,
+    )}
     {...props}
   />
 ));

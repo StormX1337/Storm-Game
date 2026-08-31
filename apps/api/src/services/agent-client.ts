@@ -92,7 +92,11 @@ export class AgentClient {
       const parsed = JSON.parse(text) as { success?: boolean; data?: T };
       return (parsed && typeof parsed === 'object' && 'data' in parsed ? parsed.data : parsed) as T;
     } catch {
-      throw new AppError(502, ErrorCode.NODE_UNREACHABLE, 'The node agent returned an unreadable response');
+      throw new AppError(
+        502,
+        ErrorCode.NODE_UNREACHABLE,
+        'The node agent returned an unreadable response',
+      );
     }
   }
 

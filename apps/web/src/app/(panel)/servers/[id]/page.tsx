@@ -54,7 +54,8 @@ export default function ServerOverviewPage() {
 
   const history = useQuery({
     queryKey: ['server', server.shortId, 'history'],
-    queryFn: () => api.get<HistoryPoint[]>(`/servers/${server.id}/stats/history`, { query: { hours: 6 } }),
+    queryFn: () =>
+      api.get<HistoryPoint[]>(`/servers/${server.id}/stats/history`, { query: { hours: 6 } }),
     refetchInterval: 300_000,
   });
 
@@ -299,7 +300,9 @@ export default function ServerOverviewPage() {
                 <span className="font-mono text-sm">
                   {allocation.ip}:{allocation.port}
                 </span>
-                <span className="text-2xs uppercase text-muted-foreground">{allocation.protocol}</span>
+                <span className="text-2xs uppercase text-muted-foreground">
+                  {allocation.protocol}
+                </span>
                 {allocation.isPrimary ? (
                   <span className="rounded-full bg-primary/15 px-1.5 py-0.5 text-2xs font-medium text-primary">
                     primary
@@ -318,7 +321,10 @@ function Detail({ label, value, mono }: { label: string; value: string; mono?: b
   return (
     <div className="flex items-start justify-between gap-3">
       <span className="shrink-0 text-muted-foreground">{label}</span>
-      <span className={`min-w-0 truncate text-right ${mono ? 'font-mono text-xs' : ''}`} title={value}>
+      <span
+        className={`min-w-0 truncate text-right ${mono ? 'font-mono text-xs' : ''}`}
+        title={value}
+      >
         {value}
       </span>
     </div>

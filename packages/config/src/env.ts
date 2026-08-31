@@ -12,7 +12,9 @@ export function loadEnvFile(path?: string): void {
 
 const booleanish = z
   .union([z.boolean(), z.string()])
-  .transform((v) => (typeof v === 'boolean' ? v : ['1', 'true', 'yes', 'on'].includes(v.toLowerCase())));
+  .transform((v) =>
+    typeof v === 'boolean' ? v : ['1', 'true', 'yes', 'on'].includes(v.toLowerCase()),
+  );
 
 const port = z.coerce.number().int().min(1).max(65535);
 
@@ -24,7 +26,10 @@ const port = z.coerce.number().int().min(1).max(65535);
 const secret = z
   .string()
   .min(32, 'Secret must be at least 32 characters')
-  .refine((v) => !/^(changeme|secret|password|storm)$/i.test(v), 'Refusing to use a placeholder secret');
+  .refine(
+    (v) => !/^(changeme|secret|password|storm)$/i.test(v),
+    'Refusing to use a placeholder secret',
+  );
 
 export const apiEnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -60,7 +65,11 @@ export const apiEnvSchema = z.object({
   MAIL_FROM: z.string().default('Storm Panel <no-reply@localhost>'),
 
   BACKUP_LOCAL_PATH: z.string().default('/var/lib/storm/backups'),
-  UPLOAD_MAX_BYTES: z.coerce.number().int().min(1024).default(2 * 1024 * 1024 * 1024),
+  UPLOAD_MAX_BYTES: z.coerce
+    .number()
+    .int()
+    .min(1024)
+    .default(2 * 1024 * 1024 * 1024),
 
   NODE_HEARTBEAT_TIMEOUT: z.coerce.number().int().min(15).default(90),
   AGENT_REQUEST_TIMEOUT: z.coerce.number().int().min(1000).default(15000),
@@ -137,7 +146,10 @@ export class EnvValidationError extends Error {
   }
 }
 
-export function parseEnv<T extends z.ZodTypeAny>(schema: T, source: NodeJS.ProcessEnv = process.env): z.infer<T> {
+export function parseEnv<T extends z.ZodTypeAny>(
+  schema: T,
+  source: NodeJS.ProcessEnv = process.env,
+): z.infer<T> {
   const result = schema.safeParse(source);
   if (!result.success) {
     throw new EnvValidationError(

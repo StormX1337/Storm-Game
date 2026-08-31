@@ -84,11 +84,7 @@ function LoginForm() {
           />
         </Field>
 
-        <Field
-          label="Password"
-          error={fieldErrors.password}
-          required
-        >
+        <Field label="Password" error={fieldErrors.password} required>
           <Input
             type="password"
             value={password}
@@ -132,7 +128,10 @@ function LoginForm() {
               checked={rememberMe}
               onCheckedChange={(checked) => setRememberMe(checked === true)}
             />
-            <Label htmlFor="remember" className="cursor-pointer text-sm font-normal text-muted-foreground">
+            <Label
+              htmlFor="remember"
+              className="cursor-pointer text-sm font-normal text-muted-foreground"
+            >
               Stay signed in
             </Label>
           </div>

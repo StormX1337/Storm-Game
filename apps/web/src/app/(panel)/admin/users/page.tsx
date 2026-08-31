@@ -115,7 +115,8 @@ export default function AdminUsersPage() {
   });
 
   const resetPassword = useMutation({
-    mutationFn: (id: string) => api.post<{ password: string }>(`/admin/users/${id}/reset-password`, {}),
+    mutationFn: (id: string) =>
+      api.post<{ password: string }>(`/admin/users/${id}/reset-password`, {}),
     onSuccess: (result) => {
       toast.success('Password reset', `Temporary password: ${result.password}`);
     },
@@ -253,9 +254,7 @@ export default function AdminUsersPage() {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem
-                          onSelect={() =>
-                            suspend.mutate({ id: row.id, suspend: !row.suspended })
-                          }
+                          onSelect={() => suspend.mutate({ id: row.id, suspend: !row.suspended })}
                           disabled={row.id === currentUser?.id}
                         >
                           {row.suspended ? <UserCheck /> : <Ban />}
@@ -324,13 +323,7 @@ export default function AdminUsersPage() {
   );
 }
 
-function CreateUserDialog({
-  onClose,
-  onCreated,
-}: {
-  onClose: () => void;
-  onCreated: () => void;
-}) {
+function CreateUserDialog({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const toast = useToast();
   const [form, setForm] = React.useState({
     email: '',

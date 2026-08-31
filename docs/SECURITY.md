@@ -57,7 +57,7 @@ character classes, and a maximum stops long-string DoS against the hasher.
 ±1-step window. Enrolment shows a QR code rendered in the browser from the
 `otpauth://` URI the panel issued — the secret is already on that page, so
 drawing it there sends it nowhere new — with the Base32 key beside it for
-anyone who would rather type it. Enabling requires the account password *and*
+anyone who would rather type it. Enabling requires the account password _and_
 a working code, so an unattended session cannot add a second factor, and
 nobody locks themselves out by mis-scanning. Ten single-use backup codes are issued, stored as Argon2
 hashes, and burned atomically on use. Seeds are encrypted at rest with
@@ -85,7 +85,7 @@ Both live in `httpOnly`, `sameSite=lax` cookies, `secure` when
 exfiltrate a session. The panel and API share one origin, which is what makes
 this possible without CORS credentials or a second cookie domain.
 
-**Algorithm confusion** is prevented by pinning `HS256` when signing *and* when
+**Algorithm confusion** is prevented by pinning `HS256` when signing _and_ when
 verifying. An `alg: none` or `alg: RS256` token is rejected before its
 signature is examined.
 
@@ -133,18 +133,18 @@ delegate what you do not hold.
 
 Each game server is one container, created by the agent with:
 
-| Setting | Value | Why |
-| --- | --- | --- |
-| `User` | `1000:1000` | Never root inside the container |
-| `no-new-privileges` | on | setuid binaries cannot escalate |
-| `CapDrop` | `ALL` | Then only what a game server needs is added back |
-| Network | isolated bridge, ICC off | Containers cannot reach each other |
-| `Memory` / `MemorySwap` | equal | No swap escape from the memory limit |
-| `CpuQuota` | per server | Cannot starve neighbours |
-| `PidsLimit` | bounded | Fork bombs hit a wall |
-| `BlkioWeight` | bounded | Disk I/O cannot be monopolised |
-| Log driver | `json-file`, rotated | Logs cannot fill the disk |
-| `ReadonlyRootfs` | where the game allows | Only the data volume is writable |
+| Setting                 | Value                    | Why                                              |
+| ----------------------- | ------------------------ | ------------------------------------------------ |
+| `User`                  | `1000:1000`              | Never root inside the container                  |
+| `no-new-privileges`     | on                       | setuid binaries cannot escalate                  |
+| `CapDrop`               | `ALL`                    | Then only what a game server needs is added back |
+| Network                 | isolated bridge, ICC off | Containers cannot reach each other               |
+| `Memory` / `MemorySwap` | equal                    | No swap escape from the memory limit             |
+| `CpuQuota`              | per server               | Cannot starve neighbours                         |
+| `PidsLimit`             | bounded                  | Fork bombs hit a wall                            |
+| `BlkioWeight`           | bounded                  | Disk I/O cannot be monopolised                   |
+| Log driver              | `json-file`, rotated     | Logs cannot fill the disk                        |
+| `ReadonlyRootfs`        | where the game allows    | Only the data volume is writable                 |
 
 The Docker socket is never mounted into a game container. The agent is the only
 process holding it, and it never passes user input to the Docker CLI — it uses
@@ -201,7 +201,7 @@ to the panel. It is not a public service.
 
 ## Databases
 
-A customer database gets its own database *and* its own user on the host,
+A customer database gets its own database _and_ its own user on the host,
 granted rights to that one database only. Credentials are generated with a CSPRNG
 and stored encrypted with `ENCRYPTION_KEY`.
 

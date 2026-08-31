@@ -32,7 +32,8 @@ export default fp(
         },
       },
       crossOriginEmbedderPolicy: false,
-      hsts: app.env.NODE_ENV === 'production' ? { maxAge: 31536000, includeSubDomains: true } : false,
+      hsts:
+        app.env.NODE_ENV === 'production' ? { maxAge: 31536000, includeSubDomains: true } : false,
       referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
     });
 
@@ -68,7 +69,8 @@ export default fp(
         // Authenticated callers get their own bucket so one busy tenant behind
         // a shared NAT cannot rate-limit everyone else.
         keyGenerator: (request) => request.user?.id ?? request.ip,
-        allowList: (request) => request.url.startsWith('/health') || request.url.startsWith('/ready'),
+        allowList: (request) =>
+          request.url.startsWith('/health') || request.url.startsWith('/ready'),
         // Returning an AppError (rather than a plain object) keeps the refusal
         // on the normal error path, so it answers 429 with the standard
         // envelope instead of falling through as an unhandled 500.
@@ -80,7 +82,6 @@ export default fp(
           ),
       });
     }
-
   },
   { name: 'storm-security', dependencies: ['storm-env', 'storm-redis'] },
 );

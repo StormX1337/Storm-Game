@@ -284,10 +284,7 @@ function CreateStorageDialog({
                 </Field>
               </div>
 
-              <Field
-                label="Endpoint"
-                hint="Required for R2 and MinIO; leave blank for Amazon S3."
-              >
+              <Field label="Endpoint" hint="Required for R2 and MinIO; leave blank for Amazon S3.">
                 <Input
                   value={form.endpoint}
                   onChange={(event) => setForm((c) => ({ ...c, endpoint: event.target.value }))}
@@ -349,7 +346,9 @@ function CreateStorageDialog({
           </Button>
           <Button
             onClick={() => create.mutate()}
-            disabled={!form.name || (isObjectStore && (!form.bucket || !form.accessKey || !form.secretKey))}
+            disabled={
+              !form.name || (isObjectStore && (!form.bucket || !form.accessKey || !form.secretKey))
+            }
             loading={create.isPending}
           >
             Add storage

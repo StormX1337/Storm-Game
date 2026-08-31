@@ -83,7 +83,10 @@ export class BackupService {
       await this.upload(target, input.upload, size);
       // The panel is now the system of record for this archive.
       await fs.rm(target, { force: true });
-      this.log.info({ backup: input.backupUuid, bytes: size }, 'archive uploaded to object storage');
+      this.log.info(
+        { backup: input.backupUuid, bytes: size },
+        'archive uploaded to object storage',
+      );
     }
 
     return {

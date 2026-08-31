@@ -157,7 +157,9 @@ export default function SubusersPage() {
           onClose={() => setInviteOpen(false)}
           onSaved={() => {
             setInviteOpen(false);
-            void queryClient.invalidateQueries({ queryKey: ['server', server.shortId, 'subusers'] });
+            void queryClient.invalidateQueries({
+              queryKey: ['server', server.shortId, 'subusers'],
+            });
           }}
         />
       ) : null}
@@ -207,7 +209,11 @@ function InviteDialog({
         </DialogHeader>
 
         <div className="space-y-4">
-          <Field label="Email address" hint="They must already have a Storm Panel account." required>
+          <Field
+            label="Email address"
+            hint="They must already have a Storm Panel account."
+            required
+          >
             <Input
               type="email"
               value={email}

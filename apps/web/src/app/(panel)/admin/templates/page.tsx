@@ -255,7 +255,9 @@ function CloneDialog({
           <Field label="Slug" hint="Lowercase letters, numbers and dashes." required>
             <Input
               value={slug}
-              onChange={(event) => setSlug(event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))}
+              onChange={(event) =>
+                setSlug(event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))
+              }
               className="font-mono text-xs"
             />
           </Field>
@@ -265,7 +267,11 @@ function CloneDialog({
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={() => clone.mutate()} disabled={!name || !slug} loading={clone.isPending}>
+          <Button
+            onClick={() => clone.mutate()}
+            disabled={!name || !slug}
+            loading={clone.isPending}
+          >
             Duplicate
           </Button>
         </DialogFooter>

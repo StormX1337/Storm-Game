@@ -49,7 +49,11 @@ declare module 'fastify' {
       enqueueInstall: (serverId: string, options?: Partial<InstallJobData>) => Promise<void>;
       enqueueBackup: (backupId: string) => Promise<void>;
       enqueueRestore: (backupId: string, truncate: boolean, userId: string | null) => Promise<void>;
-      enqueueWebhook: (webhookId: string, event: string, payload: Record<string, unknown>) => Promise<void>;
+      enqueueWebhook: (
+        webhookId: string,
+        event: string,
+        payload: Record<string, unknown>,
+      ) => Promise<void>;
       enqueueMail: (data: MailJobData) => Promise<void>;
       enqueueSchedule: (scheduleId: string) => Promise<void>;
     };
@@ -93,7 +97,11 @@ export default fp(
       },
 
       async enqueueBackup(backupId) {
-        await backups.add('backup', { backupId }, { ...RETRY, attempts: 2, jobId: `backup-${backupId}` });
+        await backups.add(
+          'backup',
+          { backupId },
+          { ...RETRY, attempts: 2, jobId: `backup-${backupId}` },
+        );
       },
 
       async enqueueRestore(backupId, truncate, userId) {

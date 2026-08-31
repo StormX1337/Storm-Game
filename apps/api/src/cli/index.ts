@@ -56,14 +56,20 @@ const log = {
     console.log(`  ${colour.dim}${label.padEnd(16)}${colour.reset}${value}`),
 };
 
-async function prompt(question: string, options: { mask?: boolean; fallback?: string } = {}): Promise<string> {
+async function prompt(
+  question: string,
+  options: { mask?: boolean; fallback?: string } = {},
+): Promise<string> {
   const rl = createInterface({ input: stdin, output: stdout, terminal: true });
   try {
     // Password prompts must not leave the secret in the terminal scrollback.
     if (options.mask) {
       const originalWrite = stdout.write.bind(stdout);
       let masking = false;
-      (stdout as unknown as { write: typeof originalWrite }).write = ((chunk: string, ...rest: unknown[]) => {
+      (stdout as unknown as { write: typeof originalWrite }).write = ((
+        chunk: string,
+        ...rest: unknown[]
+      ) => {
         if (masking && typeof chunk === 'string' && !chunk.includes('\n')) {
           return originalWrite('*', ...(rest as []));
         }
@@ -95,10 +101,7 @@ function withPrisma<T>(fn: (prisma: PrismaClient) => Promise<T>): Promise<T> {
 
 const program = new Command();
 
-program
-  .name('storm')
-  .description('Storm Panel command line interface')
-  .version(STORM_VERSION);
+program.name('storm').description('Storm Panel command line interface').version(STORM_VERSION);
 
 /* --------------------------------------------------------------- install -- */
 
@@ -205,8 +208,10 @@ interface CreateUserOptions {
 
 async function createUser(options: CreateUserOptions): Promise<void> {
   const email = options.email ?? (await prompt('Email address'));
-  const username = options.username ?? (await prompt('Username', { fallback: email.split('@')[0] }));
-  const password = options.password ?? (await prompt('Password (blank to generate)', { mask: true }));
+  const username =
+    options.username ?? (await prompt('Username', { fallback: email.split('@')[0] }));
+  const password =
+    options.password ?? (await prompt('Password (blank to generate)', { mask: true }));
   const role = options.role ?? 'ADMIN';
 
   if (!email.includes('@')) {
@@ -370,7 +375,11 @@ admin
       for (const entry of users) {
         // The state that explains "why can this person not sign in".
         const tone = entry.suspendedAt ? colour.red : colour.green;
-        const state = entry.suspendedAt ? 'suspended' : entry.emailVerifiedAt ? 'active' : 'unverified';
+        const state = entry.suspendedAt
+          ? 'suspended'
+          : entry.emailVerifiedAt
+            ? 'active'
+            : 'unverified';
         console.log(
           `  ${tone}●${colour.reset} ${entry.email.padEnd(32)} ${entry.username.padEnd(20)} ` +
             `${entry.role.name.padEnd(9)} ${state.padEnd(11)} ` +
@@ -516,7 +525,11 @@ node
       log.heading(`${nodes.length} node(s)`);
       for (const entry of nodes) {
         const tone =
-          entry.status === 'ONLINE' ? colour.green : entry.status === 'OFFLINE' ? colour.red : colour.yellow;
+          entry.status === 'ONLINE'
+            ? colour.green
+            : entry.status === 'OFFLINE'
+              ? colour.red
+              : colour.yellow;
         console.log(
           `  ${tone}●${colour.reset} ${entry.name.padEnd(22)} ${entry.location.padEnd(18)} ` +
             `${String(entry._count.servers).padStart(3)} servers  ` +
@@ -671,7 +684,9 @@ program
     console.log(`JWT_SECRET=${generateToken(48)}`);
     console.log(`ENCRYPTION_KEY=${generateToken(48)}`);
     console.log(`COOKIE_SECRET=${generateToken(48)}`);
-    console.log(`\n${colour.dim}Changing ENCRYPTION_KEY makes existing encrypted values unreadable.${colour.reset}`);
+    console.log(
+      `\n${colour.dim}Changing ENCRYPTION_KEY makes existing encrypted values unreadable.${colour.reset}`,
+    );
   });
 
 program

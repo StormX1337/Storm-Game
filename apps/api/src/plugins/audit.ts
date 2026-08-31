@@ -22,7 +22,11 @@ declare module 'fastify' {
       /** Panel-wide administrative event. */
       log: (request: FastifyRequest | null, entry: AuditEntry, actorId?: string) => Promise<void>;
       /** Server-scoped event shown on the server's Activity tab. */
-      activity: (request: FastifyRequest | null, entry: ActivityEntry, userId?: string) => Promise<void>;
+      activity: (
+        request: FastifyRequest | null,
+        entry: ActivityEntry,
+        userId?: string,
+      ) => Promise<void>;
       system: (entry: AuditEntry) => Promise<void>;
     };
   }
@@ -43,7 +47,8 @@ export default fp(
               targetId: entry.targetId ?? null,
               targetLabel: entry.targetLabel ?? null,
               ip: request?.ip ?? null,
-              userAgent: (request?.headers['user-agent'] as string | undefined)?.slice(0, 512) ?? null,
+              userAgent:
+                (request?.headers['user-agent'] as string | undefined)?.slice(0, 512) ?? null,
               metadata: redact(entry.metadata ?? {}) as object,
             },
           });

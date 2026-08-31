@@ -196,8 +196,8 @@ export default function UpdatesPage() {
                   <div>
                     <p className="font-medium">Update in progress</p>
                     <p className="text-muted-foreground">
-                      Requested by {data.job?.requestedBy} {formatRelative(data.job?.requestedAt)}. The
-                      panel restarts when it finishes — this page may briefly fail to load.
+                      Requested by {data.job?.requestedBy} {formatRelative(data.job?.requestedAt)}.
+                      The panel restarts when it finishes — this page may briefly fail to load.
                     </p>
                   </div>
                 </div>
@@ -223,7 +223,11 @@ export default function UpdatesPage() {
 
               {!data.available.upToDate && data.available.checked ? (
                 data.canApply ? (
-                  <Button onClick={() => void onApply()} loading={apply.isPending} disabled={running}>
+                  <Button
+                    onClick={() => void onApply()}
+                    loading={apply.isPending}
+                    disabled={running}
+                  >
                     <Download />
                     Update now
                   </Button>
@@ -252,8 +256,8 @@ export default function UpdatesPage() {
               <CardHeader>
                 <CardTitle className="text-base">What changes</CardTitle>
                 <CardDescription>
-                  {data.available.behindBy} commit{data.available.behindBy === 1 ? '' : 's'} since this
-                  panel was built.
+                  {data.available.behindBy} commit{data.available.behindBy === 1 ? '' : 's'} since
+                  this panel was built.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-1.5">

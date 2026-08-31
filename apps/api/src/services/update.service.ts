@@ -90,7 +90,14 @@ export class UpdateService {
     if (!env.UPDATE_CHECK_ENABLED) {
       return {
         current,
-        available: { checked: false, upToDate: true, commit: null, shortCommit: null, behindBy: 0, commits: [] },
+        available: {
+          checked: false,
+          upToDate: true,
+          commit: null,
+          shortCommit: null,
+          behindBy: 0,
+          commits: [],
+        },
         canApply,
         reason: reason ?? 'Update checking is switched off (UPDATE_CHECK_ENABLED).',
         repository: env.UPDATE_REPOSITORY,
@@ -129,7 +136,9 @@ export class UpdateService {
   }
 
   /** Why applying would not work, so the UI can explain instead of failing. */
-  private async applicability(job: UpdateJob | null): Promise<{ canApply: boolean; reason: string | null }> {
+  private async applicability(
+    job: UpdateJob | null,
+  ): Promise<{ canApply: boolean; reason: string | null }> {
     const dir = this.controlDir;
     if (!dir) {
       return {
@@ -165,7 +174,9 @@ export class UpdateService {
     const cached = await this.app.redis.get(CACHE_KEY).catch(() => null);
     if (cached) {
       try {
-        return JSON.parse(cached) as ReturnType<UpdateService['latest']> extends Promise<infer T> ? T : never;
+        return JSON.parse(cached) as ReturnType<UpdateService['latest']> extends Promise<infer T>
+          ? T
+          : never;
       } catch {
         // Fall through and ask again.
       }
@@ -186,7 +197,9 @@ export class UpdateService {
         headers: {
           accept: 'application/vnd.github+json',
           'user-agent': 'storm-panel',
-          ...(process.env.UPDATE_TOKEN ? { authorization: `Bearer ${process.env.UPDATE_TOKEN}` } : {}),
+          ...(process.env.UPDATE_TOKEN
+            ? { authorization: `Bearer ${process.env.UPDATE_TOKEN}` }
+            : {}),
         },
         signal: AbortSignal.timeout(10_000),
       });
@@ -199,7 +212,9 @@ export class UpdateService {
       const body = (await response.json()) as Record<string, unknown>;
       const result = this.parse(body, repo);
       if (result) {
-        await this.app.redis.setex(CACHE_KEY, CACHE_SECONDS, JSON.stringify(result)).catch(() => undefined);
+        await this.app.redis
+          .setex(CACHE_KEY, CACHE_SECONDS, JSON.stringify(result))
+          .catch(() => undefined);
       }
       return result;
     } catch (error) {
@@ -217,13 +232,20 @@ export class UpdateService {
     // /compare returns the range; /commits/<branch> returns a single commit.
     if (typeof body.ahead_by === 'number' || Array.isArray(body.commits)) {
       const raw = Array.isArray(body.commits) ? body.commits : [];
-      const commits = raw.map((entry) => this.toCommit(entry as Record<string, unknown>, repo)).reverse();
+      const commits = raw
+        .map((entry) => this.toCommit(entry as Record<string, unknown>, repo))
+        .reverse();
       const head =
         (body.commits as Record<string, unknown>[] | undefined)?.at(-1)?.sha ??
         commits[0]?.sha ??
         null;
       if (typeof head !== 'string') return null;
-      return { head, behindBy: typeof body.ahead_by === 'number' ? body.ahead_by : commits.length, commits, checkedAt };
+      return {
+        head,
+        behindBy: typeof body.ahead_by === 'number' ? body.ahead_by : commits.length,
+        commits,
+        checkedAt,
+      };
     }
 
     if (typeof body.sha === 'string') {

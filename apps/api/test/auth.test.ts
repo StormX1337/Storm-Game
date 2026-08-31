@@ -2,7 +2,13 @@ import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import type { FastifyInstance } from 'fastify';
 import { generateTotp, hashToken } from '@storm/security';
-import { createTestApp, deleteUser, registerUser, uniqueSuffix, type RegisteredUser } from './helpers.js';
+import {
+  createTestApp,
+  deleteUser,
+  registerUser,
+  uniqueSuffix,
+  type RegisteredUser,
+} from './helpers.js';
 
 describe('authentication', () => {
   let app: FastifyInstance;
@@ -47,7 +53,11 @@ describe('authentication', () => {
     const response = await app.inject({
       method: 'POST',
       url: '/api/v1/auth/register',
-      payload: { email: user.email, username: `other${uniqueSuffix()}`, password: 'AnotherPass123!' },
+      payload: {
+        email: user.email,
+        username: `other${uniqueSuffix()}`,
+        password: 'AnotherPass123!',
+      },
     });
 
     assert.equal(response.statusCode, 409);
@@ -385,7 +395,6 @@ describe('authentication', () => {
     });
 
     it('demands a code once 2FA is enabled', async () => {
-
       const response = await app.inject({
         method: 'POST',
         url: '/api/v1/auth/login',
@@ -393,10 +402,7 @@ describe('authentication', () => {
       });
 
       assert.equal(response.statusCode, 401);
-      assert.equal(
-        response.json<{ error: { code: string } }>().error.code,
-        'TWO_FACTOR_REQUIRED',
-      );
+      assert.equal(response.json<{ error: { code: string } }>().error.code, 'TWO_FACTOR_REQUIRED');
     });
 
     it('accepts a backup code exactly once', async () => {

@@ -68,16 +68,16 @@ browser.
 
 **Admin → Backup storage → Add.**
 
-| Field | Notes |
-| --- | --- |
-| Name | What operators see |
-| Driver | Local or S3 |
-| Endpoint | S3 only — `https://s3.eu-central-1.amazonaws.com`, `https://<account>.r2.cloudflarestorage.com` |
-| Region | S3 only — `auto` for R2 |
-| Bucket | Must already exist |
-| Access key / Secret key | An account scoped to this bucket alone |
-| Path style | On for MinIO and most self-hosted S3 |
-| Default | Used by servers without an explicit choice |
+| Field                   | Notes                                                                                           |
+| ----------------------- | ----------------------------------------------------------------------------------------------- |
+| Name                    | What operators see                                                                              |
+| Driver                  | Local or S3                                                                                     |
+| Endpoint                | S3 only — `https://s3.eu-central-1.amazonaws.com`, `https://<account>.r2.cloudflarestorage.com` |
+| Region                  | S3 only — `auto` for R2                                                                         |
+| Bucket                  | Must already exist                                                                              |
+| Access key / Secret key | An account scoped to this bucket alone                                                          |
+| Path style              | On for MinIO and most self-hosted S3                                                            |
+| Default                 | Used by servers without an explicit choice                                                      |
 
 **Test connection** does a real round trip — put, get, delete — before saving,
 so a typo fails here rather than at 3am during a restore.
@@ -224,10 +224,10 @@ deleted until it is unlocked. Deleting a server deletes its backups with it.
 
 ## Limits and quotas
 
-| Setting | Where |
-| --- | --- |
-| Backups per account | `Admin → Users → <user>`, defaulting from `Admin → Settings` |
-| Retention days | Per backup storage, at `Admin → Backup storage` |
+| Setting                | Where                                                                       |
+| ---------------------- | --------------------------------------------------------------------------- |
+| Backups per account    | `Admin → Users → <user>`, defaulting from `Admin → Settings`                |
+| Retention days         | Per backup storage, at `Admin → Backup storage`                             |
 | Concurrent backup jobs | The panel's backup worker — three at a time, scaled by `WORKER_CONCURRENCY` |
 
 Concurrency is capped because gzip is CPU-hungry, and a fleet backing up all at

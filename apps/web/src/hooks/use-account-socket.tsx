@@ -3,7 +3,12 @@
 import * as React from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@storm/ui';
-import type { AccountSocketEvent, NotificationLevel, ServerLiveStats, ServerStatus } from '@storm/types';
+import type {
+  AccountSocketEvent,
+  NotificationLevel,
+  ServerLiveStats,
+  ServerStatus,
+} from '@storm/types';
 
 export interface LiveServerState {
   status?: ServerStatus;

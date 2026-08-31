@@ -21,28 +21,28 @@ takes no code.
 
 ## Anatomy
 
-| Field | What it is |
-| --- | --- |
-| `name` | Shown to customers — "Minecraft: Java Edition" |
-| `slug` | Stable identifier — `minecraft-java` |
-| `game` | The game, for grouping |
-| `category` | Minecraft, Survival, Sandbox, Shooter, Simulation, Other |
-| `description` | One or two sentences in the creation wizard |
-| `author` | Who maintains it |
-| `dockerImages` | Display name → image reference. Customers pick one |
-| `defaultImage` | Which of those is preselected |
-| `installContainer` | Image the install script runs in |
-| `installEntrypoint` | Usually `bash` |
-| `installScript` | The script itself |
-| `startupCommand` | The command the container runs, with `{{VARIABLE}}` placeholders |
-| `stopCommand` | What to write to stdin to stop it gracefully |
-| `startupDetection` | Regex that means "online" |
-| `crashDetection` | Regex that means "this crashed" |
-| `configFiles` | Files the panel keeps in step with allocations |
-| `logConfig` | Where the game writes logs, if not stdout |
-| `defaultPorts` | Ports a new server should get |
-| `supportedVersions` | Version strings offered in the wizard |
-| `variables` | The settings a customer may set |
+| Field               | What it is                                                       |
+| ------------------- | ---------------------------------------------------------------- |
+| `name`              | Shown to customers — "Minecraft: Java Edition"                   |
+| `slug`              | Stable identifier — `minecraft-java`                             |
+| `game`              | The game, for grouping                                           |
+| `category`          | Minecraft, Survival, Sandbox, Shooter, Simulation, Other         |
+| `description`       | One or two sentences in the creation wizard                      |
+| `author`            | Who maintains it                                                 |
+| `dockerImages`      | Display name → image reference. Customers pick one               |
+| `defaultImage`      | Which of those is preselected                                    |
+| `installContainer`  | Image the install script runs in                                 |
+| `installEntrypoint` | Usually `bash`                                                   |
+| `installScript`     | The script itself                                                |
+| `startupCommand`    | The command the container runs, with `{{VARIABLE}}` placeholders |
+| `stopCommand`       | What to write to stdin to stop it gracefully                     |
+| `startupDetection`  | Regex that means "online"                                        |
+| `crashDetection`    | Regex that means "this crashed"                                  |
+| `configFiles`       | Files the panel keeps in step with allocations                   |
+| `logConfig`         | Where the game writes logs, if not stdout                        |
+| `defaultPorts`      | Ports a new server should get                                    |
+| `supportedVersions` | Version strings offered in the wizard                            |
+| `variables`         | The settings a customer may set                                  |
 
 Install and runtime images are separate on purpose: installation often needs
 `curl`, `tar` and a compiler, and none of that belongs in the image the game
@@ -56,30 +56,30 @@ Each variable becomes an environment variable in both the install container and
 the game container, and can be interpolated into `startupCommand` as
 `{{NAME}}`.
 
-| Field | Meaning |
-| --- | --- |
-| `name` | Label in the UI — "Server jar file" |
-| `description` | Help text under it |
-| `envVariable` | The environment variable — `SERVER_JARFILE` |
-| `defaultValue` | Used when the customer does not set one |
-| `userViewable` | Whether the customer sees it at all |
-| `userEditable` | Whether they may change it |
-| `rules` | Validation, as a pipe-separated list |
-| `sortOrder` | Display order |
+| Field          | Meaning                                     |
+| -------------- | ------------------------------------------- |
+| `name`         | Label in the UI — "Server jar file"         |
+| `description`  | Help text under it                          |
+| `envVariable`  | The environment variable — `SERVER_JARFILE` |
+| `defaultValue` | Used when the customer does not set one     |
+| `userViewable` | Whether the customer sees it at all         |
+| `userEditable` | Whether they may change it                  |
+| `rules`        | Validation, as a pipe-separated list        |
+| `sortOrder`    | Display order                               |
 
-| Rule | Checks |
-| --- | --- |
-| `required` | Not empty. Without it, an empty value skips every other rule |
-| `string` | Documentation only — everything arrives as a string |
-| `integer` | A whole number |
-| `numeric` | A number |
-| `boolean` | `true`, `false`, `0` or `1` |
-| `min:n` / `max:n` | Length in characters |
-| `between:a,b` | Numeric range, inclusive |
-| `in:a,b,c` | One of these exact values |
-| `alpha_dash` | Letters, numbers, dashes and underscores only |
-| `url` | A valid `http` or `https` URL |
-| `regex:…` | Matches the pattern |
+| Rule              | Checks                                                       |
+| ----------------- | ------------------------------------------------------------ |
+| `required`        | Not empty. Without it, an empty value skips every other rule |
+| `string`          | Documentation only — everything arrives as a string          |
+| `integer`         | A whole number                                               |
+| `numeric`         | A number                                                     |
+| `boolean`         | `true`, `false`, `0` or `1`                                  |
+| `min:n` / `max:n` | Length in characters                                         |
+| `between:a,b`     | Numeric range, inclusive                                     |
+| `in:a,b,c`        | One of these exact values                                    |
+| `alpha_dash`      | Letters, numbers, dashes and underscores only                |
+| `url`             | A valid `http` or `https` URL                                |
+| `regex:…`         | Matches the pattern                                          |
 
 Combine them with `|`. They are enforced server-side, so a variable marked
 `userEditable: false` cannot be changed by a crafted request either.
@@ -172,13 +172,13 @@ between a clean save and a corrupted world.
 `startupDetection` is a regex matched against console output. Until it matches,
 the server shows as `STARTING`.
 
-| Game | Pattern |
-| --- | --- |
-| Minecraft | `\)! For help, type` |
-| CS2 | `Connection to Steam servers successful` |
-| Rust | `Server startup complete` |
-| Valheim | `Game server connected` |
-| Factorio | `Hosting game at IP ADDR` |
+| Game      | Pattern                                  |
+| --------- | ---------------------------------------- |
+| Minecraft | `\)! For help, type`                     |
+| CS2       | `Connection to Steam servers successful` |
+| Rust      | `Server startup complete`                |
+| Valheim   | `Game server connected`                  |
+| Factorio  | `Hosting game at IP ADDR`                |
 
 Leave it empty and the server is considered online as soon as the process is
 up, which is usually a lie.
@@ -198,9 +198,11 @@ anything.
 {
   "server.properties": {
     "parser": "properties",
-    "find": { "server-port": "{{server.allocation.port}}",
-              "server-ip":   "{{server.allocation.ip}}",
-              "query.port":  "{{server.allocation.port}}" }
+    "find": {
+      "server-port": "{{server.allocation.port}}",
+      "server-ip": "{{server.allocation.ip}}",
+      "query.port": "{{server.allocation.port}}"
+    }
   }
 }
 ```
@@ -284,20 +286,20 @@ untrusted source is code you are about to run as root during installation:
 
 ## Included templates
 
-| Template | Category | Notes |
-| --- | --- | --- |
-| Minecraft: Java Edition | Minecraft | Vanilla, Paper, Purpur, Fabric |
-| Minecraft: Bedrock Edition | Minecraft | Official Mojang server |
-| Counter-Strike 2 | Shooter | SteamCMD, needs a GSLT for public listing |
-| Rust | Survival | SteamCMD, wipes on major updates |
-| Terraria (TShock) | Sandbox | Plugins and permissions |
-| ARK: Survival Evolved | Survival | Large; allow disk and RAM |
-| Valheim | Survival | BepInEx-compatible |
-| Palworld | Survival | SteamCMD |
-| Garry's Mod | Sandbox | Workshop collections |
-| Team Fortress 2 | Shooter | SteamCMD |
-| Factorio | Simulation | Headless, mod folder |
-| Project Zomboid | Survival | SteamCMD |
+| Template                   | Category   | Notes                                     |
+| -------------------------- | ---------- | ----------------------------------------- |
+| Minecraft: Java Edition    | Minecraft  | Vanilla, Paper, Purpur, Fabric            |
+| Minecraft: Bedrock Edition | Minecraft  | Official Mojang server                    |
+| Counter-Strike 2           | Shooter    | SteamCMD, needs a GSLT for public listing |
+| Rust                       | Survival   | SteamCMD, wipes on major updates          |
+| Terraria (TShock)          | Sandbox    | Plugins and permissions                   |
+| ARK: Survival Evolved      | Survival   | Large; allow disk and RAM                 |
+| Valheim                    | Survival   | BepInEx-compatible                        |
+| Palworld                   | Survival   | SteamCMD                                  |
+| Garry's Mod                | Sandbox    | Workshop collections                      |
+| Team Fortress 2            | Shooter    | SteamCMD                                  |
+| Factorio                   | Simulation | Headless, mod folder                      |
+| Project Zomboid            | Survival   | SteamCMD                                  |
 
 Each is editable. Change one and it becomes your template — the seed will not
 overwrite it.

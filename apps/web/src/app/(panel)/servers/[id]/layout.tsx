@@ -36,7 +36,9 @@ export default function ServerLayout({ children }: { children: React.ReactNode }
         </div>
         <h1 className="text-lg font-semibold">Server unavailable</h1>
         <p className="mt-1.5 text-sm text-muted-foreground">
-          {error ? errorMessage(error) : 'This server does not exist or you do not have access to it.'}
+          {error
+            ? errorMessage(error)
+            : 'This server does not exist or you do not have access to it.'}
         </p>
         <div className="mt-5 flex justify-center gap-2">
           <Button variant="outline" onClick={() => void refetch()}>
@@ -136,9 +138,7 @@ export default function ServerLayout({ children }: { children: React.ReactNode }
                   href={href}
                   className={cn(
                     'relative flex items-center gap-1.5 whitespace-nowrap px-3 py-2.5 text-sm font-medium transition-colors',
-                    active
-                      ? 'text-foreground'
-                      : 'text-muted-foreground hover:text-foreground',
+                    active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
                   )}
                   aria-current={active ? 'page' : undefined}
                 >

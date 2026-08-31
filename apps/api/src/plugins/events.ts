@@ -1,6 +1,13 @@
 import fp from 'fastify-plugin';
 import type { FastifyInstance } from 'fastify';
-import { REDIS_CHANNELS, type NotificationLevel, type NotificationType, type ServerLiveStats, type ServerStatus, type NodeStatus } from '@storm/types';
+import {
+  REDIS_CHANNELS,
+  type NotificationLevel,
+  type NotificationType,
+  type ServerLiveStats,
+  type ServerStatus,
+  type NodeStatus,
+} from '@storm/types';
 
 export interface PushNotificationInput {
   type: NotificationType | string;
@@ -15,8 +22,16 @@ declare module 'fastify' {
   interface FastifyInstance {
     notifications: {
       push: (userId: string, input: PushNotificationInput) => Promise<void>;
-      broadcastServerStatus: (serverId: string, ownerId: string, status: ServerStatus) => Promise<void>;
-      broadcastServerStats: (serverId: string, ownerId: string, stats: ServerLiveStats) => Promise<void>;
+      broadcastServerStatus: (
+        serverId: string,
+        ownerId: string,
+        status: ServerStatus,
+      ) => Promise<void>;
+      broadcastServerStats: (
+        serverId: string,
+        ownerId: string,
+        stats: ServerLiveStats,
+      ) => Promise<void>;
       broadcastNodeStatus: (nodeId: string, status: NodeStatus) => Promise<void>;
     };
   }

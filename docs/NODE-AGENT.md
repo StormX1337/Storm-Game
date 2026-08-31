@@ -120,7 +120,7 @@ the node's **scheme** to `https` in the panel to match (`storm node create
 --scheme http` for an agent without a certificate). A mismatch shows up as
 "node is not reachable", because the panel is speaking TLS to a plain HTTP
 port. If the
-*panel* uses a self-signed certificate, the agent needs
+_panel_ uses a self-signed certificate, the agent needs
 `PANEL_ALLOW_SELF_SIGNED=true` to call back to it — a lab setting, not a
 production one. The panel has the mirror-image switch,
 `AGENT_ALLOW_SELF_SIGNED`, for agents with self-signed certificates.
@@ -160,25 +160,25 @@ Everything below is signed. There is no unauthenticated endpoint except
 
 ### Node
 
-| | |
-| --- | --- |
-| `GET /health` | Liveness — Docker reachable, disk writable |
-| `GET /system` | Docker version, kernel, cores, memory, disk |
-| `GET /system/stats` | Live load, memory and disk |
-| `GET /servers` | Which servers this node believes it has |
+|                     |                                             |
+| ------------------- | ------------------------------------------- |
+| `GET /health`       | Liveness — Docker reachable, disk writable  |
+| `GET /system`       | Docker version, kernel, cores, memory, disk |
+| `GET /system/stats` | Live load, memory and disk                  |
+| `GET /servers`      | Which servers this node believes it has     |
 
 ### Servers
 
-| | |
-| --- | --- |
-| `PUT /servers` | Create or reconcile a container from a spec |
-| `GET /servers/:uuid` | State, container id, resource picture |
-| `DELETE /servers/:uuid` | Destroy container, volumes and data |
-| `POST /servers/:uuid/power` | `start` · `stop` · `restart` · `kill` |
-| `POST /servers/:uuid/command` | Write a line to stdin |
-| `GET /servers/:uuid/stats` | Current stats |
-| `GET /servers/:uuid/logs` | Recent console buffer |
-| `POST /servers/:uuid/install` | Run the install script |
+|                               |                                             |
+| ----------------------------- | ------------------------------------------- |
+| `PUT /servers`                | Create or reconcile a container from a spec |
+| `GET /servers/:uuid`          | State, container id, resource picture       |
+| `DELETE /servers/:uuid`       | Destroy container, volumes and data         |
+| `POST /servers/:uuid/power`   | `start` · `stop` · `restart` · `kill`       |
+| `POST /servers/:uuid/command` | Write a line to stdin                       |
+| `GET /servers/:uuid/stats`    | Current stats                               |
+| `GET /servers/:uuid/logs`     | Recent console buffer                       |
+| `POST /servers/:uuid/install` | Run the install script                      |
 
 `PUT /servers` is idempotent: it compares the spec with what exists and
 recreates the container only when something material changed. That makes
@@ -188,30 +188,30 @@ recreates the container only when something material changed. That makes
 
 Relative paths only, all resolved inside the server's directory.
 
-| | |
-| --- | --- |
-| `GET /servers/:uuid/files/list` | Listing with sizes, modes, timestamps |
-| `GET /servers/:uuid/files/contents` | Read a text file |
-| `GET /servers/:uuid/files/download` | Stream a file |
-| `GET /servers/:uuid/files/search` | Search names and contents |
-| `POST /servers/:uuid/files/write` | Create or overwrite |
-| `POST /servers/:uuid/files/upload` | Multipart, streamed to disk |
-| `POST /servers/:uuid/files/rename` | Rename or move |
-| `POST /servers/:uuid/files/copy` | Copy |
-| `POST /servers/:uuid/files/delete` | Delete |
-| `POST /servers/:uuid/files/create-directory` | mkdir -p |
-| `POST /servers/:uuid/files/compress` | tar.gz or zip |
-| `POST /servers/:uuid/files/decompress` | Extract, re-validating every entry |
-| `POST /servers/:uuid/files/chmod` | Change mode |
+|                                              |                                       |
+| -------------------------------------------- | ------------------------------------- |
+| `GET /servers/:uuid/files/list`              | Listing with sizes, modes, timestamps |
+| `GET /servers/:uuid/files/contents`          | Read a text file                      |
+| `GET /servers/:uuid/files/download`          | Stream a file                         |
+| `GET /servers/:uuid/files/search`            | Search names and contents             |
+| `POST /servers/:uuid/files/write`            | Create or overwrite                   |
+| `POST /servers/:uuid/files/upload`           | Multipart, streamed to disk           |
+| `POST /servers/:uuid/files/rename`           | Rename or move                        |
+| `POST /servers/:uuid/files/copy`             | Copy                                  |
+| `POST /servers/:uuid/files/delete`           | Delete                                |
+| `POST /servers/:uuid/files/create-directory` | mkdir -p                              |
+| `POST /servers/:uuid/files/compress`         | tar.gz or zip                         |
+| `POST /servers/:uuid/files/decompress`       | Extract, re-validating every entry    |
+| `POST /servers/:uuid/files/chmod`            | Change mode                           |
 
 ### Backups
 
-| | |
-| --- | --- |
-| `POST /servers/:uuid/backups` | Create; streams progress |
-| `POST /servers/:uuid/backups/:backupUuid/restore` | Restore |
-| `GET /servers/:uuid/backups/:backupUuid/download` | Stream an archive |
-| `DELETE /servers/:uuid/backups/:backupUuid` | Delete |
+|                                                   |                          |
+| ------------------------------------------------- | ------------------------ |
+| `POST /servers/:uuid/backups`                     | Create; streams progress |
+| `POST /servers/:uuid/backups/:backupUuid/restore` | Restore                  |
+| `GET /servers/:uuid/backups/:backupUuid/download` | Stream an archive        |
+| `DELETE /servers/:uuid/backups/:backupUuid`       | Delete                   |
 
 ---
 

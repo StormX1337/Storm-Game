@@ -2,12 +2,7 @@ import fp from 'fastify-plugin';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { hashToken, safeCompare } from '@storm/security';
 import { COOKIE_NAMES } from '@storm/config';
-import {
-  Permission,
-  ROLE_PRIORITY,
-  type RoleName,
-  ErrorCode,
-} from '@storm/types';
+import { Permission, ROLE_PRIORITY, type RoleName, ErrorCode } from '@storm/types';
 import { verifyJwt, JwtError } from '../lib/jwt.js';
 import { AppError, forbidden, unauthorized } from '../lib/errors.js';
 import { AuthService } from '../services/auth.service.js';
@@ -32,9 +27,7 @@ declare module 'fastify' {
     /** preHandler: requires a signed-in, non-suspended user. */
     authenticate: (request: FastifyRequest) => Promise<void>;
     /** preHandler factory: requires the given panel-wide permission. */
-    requirePermission: (
-      ...permissions: string[]
-    ) => (request: FastifyRequest) => Promise<void>;
+    requirePermission: (...permissions: string[]) => (request: FastifyRequest) => Promise<void>;
     /** Resolves a user from a token string (used by the WebSocket handshake). */
     resolveUserFromToken: (token: string) => Promise<AuthenticatedUser>;
   }
@@ -121,7 +114,9 @@ export default fp(
       const user = await loadUser(key.userId, null, key.id);
       if (key.permissions.length > 0) {
         // An API key can only ever narrow the user's permissions.
-        user.permissions = new Set([...user.permissions].filter((p) => key.permissions.includes(p)));
+        user.permissions = new Set(
+          [...user.permissions].filter((p) => key.permissions.includes(p)),
+        );
       }
       return user;
     }

@@ -244,7 +244,8 @@ function NotificationBell() {
 
   const { data } = useQuery({
     queryKey: ['notifications'],
-    queryFn: () => api.get<NotificationsPayload>('/account/notifications', { query: { perPage: 10 } }),
+    queryFn: () =>
+      api.get<NotificationsPayload>('/account/notifications', { query: { perPage: 10 } }),
     refetchInterval: 120_000,
   });
 

@@ -60,7 +60,9 @@ describe('panel updates', () => {
     });
 
     assert.equal(response.statusCode, 200);
-    const body = response.json<{ data: { current: { version: string; commit: string }; canApply: boolean } }>();
+    const body = response.json<{
+      data: { current: { version: string; commit: string }; canApply: boolean };
+    }>();
     assert.ok(body.data.current.version.length > 0);
     assert.ok(body.data.current.commit.length > 0);
   });
@@ -96,7 +98,10 @@ describe('panel updates', () => {
     });
 
     assert.equal(response.statusCode, 400);
-    assert.match(response.json<{ error: { message: string } }>().error.message, /no longer the latest|cannot apply/i);
+    assert.match(
+      response.json<{ error: { message: string } }>().error.message,
+      /no longer the latest|cannot apply/i,
+    );
   });
 
   it('rejects a malformed commit before it reaches anything', async () => {

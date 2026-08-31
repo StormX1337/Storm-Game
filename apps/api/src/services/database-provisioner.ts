@@ -33,14 +33,22 @@ export class DatabaseProvisioner {
 
   private assertIdentifier(value: string, label: string): void {
     if (!DatabaseProvisioner.IDENTIFIER.test(value)) {
-      throw new AppError(422, ErrorCode.VALIDATION_ERROR, `${label} contains characters that are not allowed`);
+      throw new AppError(
+        422,
+        ErrorCode.VALIDATION_ERROR,
+        `${label} contains characters that are not allowed`,
+      );
     }
   }
 
   private password(host: DatabaseHost): string {
     const password = this.app.encrypter.tryDecrypt(host.passwordEnc);
     if (password === null) {
-      throw new AppError(500, ErrorCode.INTERNAL_ERROR, 'Database host credentials could not be decrypted');
+      throw new AppError(
+        500,
+        ErrorCode.INTERNAL_ERROR,
+        'Database host credentials could not be decrypted',
+      );
     }
     return password;
   }
@@ -69,10 +77,10 @@ export class DatabaseProvisioner {
     await this.withMysql(host, async (connection) => {
       await connection.query(`CREATE DATABASE \`${databaseName}\``);
       await connection.query(`CREATE USER ?@? IDENTIFIED BY ?`, [username, remoteAccess, password]);
-      await connection.query(
-        `GRANT ALL PRIVILEGES ON \`${databaseName}\`.* TO ?@?`,
-        [username, remoteAccess],
-      );
+      await connection.query(`GRANT ALL PRIVILEGES ON \`${databaseName}\`.* TO ?@?`, [
+        username,
+        remoteAccess,
+      ]);
       await connection.query('FLUSH PRIVILEGES');
     });
   }
@@ -127,7 +135,9 @@ export class DatabaseProvisioner {
   }
 
   /** Verifies the panel can reach and authenticate against a host. */
-  async testConnection(host: DatabaseHost): Promise<{ ok: boolean; version?: string; error?: string }> {
+  async testConnection(
+    host: DatabaseHost,
+  ): Promise<{ ok: boolean; version?: string; error?: string }> {
     try {
       if (host.engine === 'POSTGRES') {
         return await this.withPostgres(host, async (client) => {
@@ -144,7 +154,10 @@ export class DatabaseProvisioner {
     }
   }
 
-  private async withPostgres<T>(host: DatabaseHost, fn: (client: pg.Client) => Promise<T>): Promise<T> {
+  private async withPostgres<T>(
+    host: DatabaseHost,
+    fn: (client: pg.Client) => Promise<T>,
+  ): Promise<T> {
     const client = new pg.Client({
       host: host.host,
       port: host.port,

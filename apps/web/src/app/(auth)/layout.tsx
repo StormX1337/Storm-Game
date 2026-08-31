@@ -61,7 +61,9 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
                 </div>
                 <div className="space-y-0.5">
                   <p className="text-sm font-medium">{item.title}</p>
-                  <p className="text-xs leading-relaxed text-muted-foreground">{item.description}</p>
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    {item.description}
+                  </p>
                 </div>
               </li>
             ))}

@@ -27,7 +27,12 @@ export class Encrypter {
     const cipher = createCipheriv(ALGORITHM, this.key, iv, { authTagLength: TAG_LENGTH });
     const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
     const tag = cipher.getAuthTag();
-    return [PREFIX, iv.toString('base64url'), tag.toString('base64url'), encrypted.toString('base64url')].join(':');
+    return [
+      PREFIX,
+      iv.toString('base64url'),
+      tag.toString('base64url'),
+      encrypted.toString('base64url'),
+    ].join(':');
   }
 
   decrypt(payload: string): string {

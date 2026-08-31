@@ -22,13 +22,14 @@ const TONE_DOT: Record<StatusTone, string> = {
   default: 'bg-primary',
 };
 
-const TONE_BADGE: Record<StatusTone, 'success' | 'warning' | 'destructive' | 'muted' | 'default'> = {
-  success: 'success',
-  warning: 'warning',
-  destructive: 'destructive',
-  muted: 'muted',
-  default: 'default',
-};
+const TONE_BADGE: Record<StatusTone, 'success' | 'warning' | 'destructive' | 'muted' | 'default'> =
+  {
+    success: 'success',
+    warning: 'warning',
+    destructive: 'destructive',
+    muted: 'muted',
+    default: 'default',
+  };
 
 export function ServerStatusBadge({
   status,
@@ -89,7 +90,9 @@ export function StatCard({
     <Card className={cn('p-5', className)}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            {label}
+          </p>
           {loading ? (
             <Skeleton className="h-8 w-24" />
           ) : (
@@ -153,8 +156,7 @@ export function UsageMeter({
   const unlimited = !limit || limit <= 0;
 
   // Colour only shifts once usage is genuinely worth attention.
-  const tone =
-    percent >= 90 ? 'bg-destructive' : percent >= 75 ? 'bg-warning' : 'bg-primary';
+  const tone = percent >= 90 ? 'bg-destructive' : percent >= 75 ? 'bg-warning' : 'bg-primary';
 
   return (
     <div className={cn('space-y-2', className)}>
@@ -174,7 +176,9 @@ export function UsageMeter({
       </div>
       <Progress value={percent} indicatorClassName={tone} />
       {!unlimited ? (
-        <p className="text-right text-2xs text-muted-foreground">{formatPercent(percent, 0)} used</p>
+        <p className="text-right text-2xs text-muted-foreground">
+          {formatPercent(percent, 0)} used
+        </p>
       ) : null}
     </div>
   );

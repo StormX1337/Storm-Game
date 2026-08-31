@@ -15,7 +15,12 @@ import { body, params, query } from '../../lib/validation.js';
 import { ok, paginated, pageArgs } from '../../lib/response.js';
 import { AppError, badRequest, conflict, forbidden, notFound } from '../../lib/errors.js';
 import { assertOutranks } from '../../plugins/auth.js';
-import { toServerSummary, toSessionSummary, toUserDetail, toUserSummary } from '../../lib/transformers.js';
+import {
+  toServerSummary,
+  toSessionSummary,
+  toUserDetail,
+  toUserSummary,
+} from '../../lib/transformers.js';
 
 const idParam = z.object({ id: z.string().min(1).max(64) });
 
@@ -66,53 +71,64 @@ export default async function adminUserRoutes(app: FastifyInstance): Promise<voi
     );
   });
 
-  app.post('/', { schema: { tags: ['Admin: Users'], summary: 'Create a user' } }, async (request, reply) => {
-    const actor = request.currentUser();
-    const input = body(request, createUserSchema);
+  app.post(
+    '/',
+    { schema: { tags: ['Admin: Users'], summary: 'Create a user' } },
+    async (request, reply) => {
+      const actor = request.currentUser();
+      const input = body(request, createUserSchema);
 
-    assertOutranks(actor, input.role);
+      assertOutranks(actor, input.role);
 
-    const existing = await app.prisma.user.findFirst({
-      where: { OR: [{ email: input.email }, { username: input.username }] },
-    });
-    if (existing) throw conflict('A user with that email or username already exists', ErrorCode.ALREADY_EXISTS);
+      const existing = await app.prisma.user.findFirst({
+        where: { OR: [{ email: input.email }, { username: input.username }] },
+      });
+      if (existing)
+        throw conflict(
+          'A user with that email or username already exists',
+          ErrorCode.ALREADY_EXISTS,
+        );
 
-    const role = await app.prisma.role.findUnique({ where: { name: input.role } });
-    if (!role) throw badRequest('That role does not exist');
+      const role = await app.prisma.role.findUnique({ where: { name: input.role } });
+      if (!role) throw badRequest('That role does not exist');
 
-    const password = input.password ?? generatePassword(20);
-    const user = await app.prisma.user.create({
-      data: {
-        email: input.email,
-        username: input.username,
-        firstName: input.firstName ?? null,
-        lastName: input.lastName ?? null,
-        passwordHash: await hashPassword(password),
-        roleId: role.id,
-        emailVerifiedAt: input.emailVerified ? new Date() : null,
-        extraPermissions: input.extraPermissions,
-        ...(input.limits ?? {}),
-      },
-      include: { role: { include: { permissions: true } }, twoFactor: true },
-    });
+      const password = input.password ?? generatePassword(20);
+      const user = await app.prisma.user.create({
+        data: {
+          email: input.email,
+          username: input.username,
+          firstName: input.firstName ?? null,
+          lastName: input.lastName ?? null,
+          passwordHash: await hashPassword(password),
+          roleId: role.id,
+          emailVerifiedAt: input.emailVerified ? new Date() : null,
+          extraPermissions: input.extraPermissions,
+          ...(input.limits ?? {}),
+        },
+        include: { role: { include: { permissions: true } }, twoFactor: true },
+      });
 
-    await app.audit.log(request, {
-      action: 'admin.user_created',
-      targetType: 'user',
-      targetId: user.id,
-      targetLabel: user.username,
-      metadata: { role: input.role },
-    });
-    await app.webhooks.dispatch(WebhookEvent.USER_CREATED, { userId: user.id, username: user.username });
+      await app.audit.log(request, {
+        action: 'admin.user_created',
+        targetType: 'user',
+        targetId: user.id,
+        targetLabel: user.username,
+        metadata: { role: input.role },
+      });
+      await app.webhooks.dispatch(WebhookEvent.USER_CREATED, {
+        userId: user.id,
+        username: user.username,
+      });
 
-    return reply.status(201).send(
-      ok({
-        user: toUserDetail(user, 0),
-        // Returned once so the operator can hand it over; never stored plaintext.
-        generatedPassword: input.password ? undefined : password,
-      }),
-    );
-  });
+      return reply.status(201).send(
+        ok({
+          user: toUserDetail(user, 0),
+          // Returned once so the operator can hand it over; never stored plaintext.
+          generatedPassword: input.password ? undefined : password,
+        }),
+      );
+    },
+  );
 
   app.get('/:id', { schema: { tags: ['Admin: Users'] } }, async (request) => {
     const { id } = params(request, idParam);
@@ -168,7 +184,9 @@ export default async function adminUserRoutes(app: FastifyInstance): Promise<voi
       if (clash) throw conflict('Another user already uses that email or username');
     }
 
-    const role = input.role ? await app.prisma.role.findUnique({ where: { name: input.role } }) : null;
+    const role = input.role
+      ? await app.prisma.role.findUnique({ where: { name: input.role } })
+      : null;
 
     const user = await app.prisma.user.update({
       where: { id },
@@ -256,7 +274,10 @@ export default async function adminUserRoutes(app: FastifyInstance): Promise<voi
     assertOutranks(actor, target.role.name as RoleName);
 
     const password = generatePassword(20);
-    await app.prisma.user.update({ where: { id }, data: { passwordHash: await hashPassword(password) } });
+    await app.prisma.user.update({
+      where: { id },
+      data: { passwordHash: await hashPassword(password) },
+    });
     await app.auth.revokeAllSessions(id);
 
     await app.audit.log(request, {
@@ -269,24 +290,28 @@ export default async function adminUserRoutes(app: FastifyInstance): Promise<voi
     return ok({ password });
   });
 
-  app.post('/:id/disable-2fa', { schema: { tags: ['Admin: Users'], summary: 'Remove two-factor from a locked-out account' } }, async (request) => {
-    const actor = request.currentUser();
-    const { id } = params(request, idParam);
+  app.post(
+    '/:id/disable-2fa',
+    { schema: { tags: ['Admin: Users'], summary: 'Remove two-factor from a locked-out account' } },
+    async (request) => {
+      const actor = request.currentUser();
+      const { id } = params(request, idParam);
 
-    const target = await app.prisma.user.findUnique({ where: { id }, include: { role: true } });
-    if (!target) throw notFound('User was not found', ErrorCode.USER_NOT_FOUND);
-    assertOutranks(actor, target.role.name as RoleName);
+      const target = await app.prisma.user.findUnique({ where: { id }, include: { role: true } });
+      if (!target) throw notFound('User was not found', ErrorCode.USER_NOT_FOUND);
+      assertOutranks(actor, target.role.name as RoleName);
 
-    await app.auth.disableTwoFactor(id);
-    await app.audit.log(request, {
-      action: 'admin.user_2fa_disabled',
-      targetType: 'user',
-      targetId: id,
-      targetLabel: target.username,
-    });
+      await app.auth.disableTwoFactor(id);
+      await app.audit.log(request, {
+        action: 'admin.user_2fa_disabled',
+        targetType: 'user',
+        targetId: id,
+        targetLabel: target.username,
+      });
 
-    return ok({ disabled: true });
-  });
+      return ok({ disabled: true });
+    },
+  );
 
   app.delete('/:id', { schema: { tags: ['Admin: Users'] } }, async (request) => {
     const actor = request.currentUser();
@@ -319,31 +344,40 @@ export default async function adminUserRoutes(app: FastifyInstance): Promise<voi
       targetId: id,
       targetLabel: target.username,
     });
-    await app.webhooks.dispatch(WebhookEvent.USER_DELETED, { userId: id, username: target.username });
+    await app.webhooks.dispatch(WebhookEvent.USER_DELETED, {
+      userId: id,
+      username: target.username,
+    });
 
     return ok({ deleted: true });
   });
 
-  app.get('/meta/roles', { schema: { tags: ['Admin: Users'], summary: 'Roles and their permissions' } }, async () => {
-    const roles = await app.prisma.role.findMany({
-      include: { permissions: true, _count: { select: { users: true } } },
-      orderBy: { priority: 'desc' },
-    });
-    return ok(
-      roles.map((role) => ({
-        id: role.id,
-        name: role.name,
-        displayName: role.displayName,
-        description: role.description,
-        priority: ROLE_PRIORITY[role.name as RoleName] ?? role.priority,
-        userCount: role._count.users,
-        permissions: role.permissions.map((permission) => permission.key),
-      })),
-    );
-  });
+  app.get(
+    '/meta/roles',
+    { schema: { tags: ['Admin: Users'], summary: 'Roles and their permissions' } },
+    async () => {
+      const roles = await app.prisma.role.findMany({
+        include: { permissions: true, _count: { select: { users: true } } },
+        orderBy: { priority: 'desc' },
+      });
+      return ok(
+        roles.map((role) => ({
+          id: role.id,
+          name: role.name,
+          displayName: role.displayName,
+          description: role.description,
+          priority: ROLE_PRIORITY[role.name as RoleName] ?? role.priority,
+          userCount: role._count.users,
+          permissions: role.permissions.map((permission) => permission.key),
+        })),
+      );
+    },
+  );
 
   app.get('/meta/permissions', { schema: { tags: ['Admin: Users'] } }, async () => {
-    const permissions = await app.prisma.permission.findMany({ orderBy: [{ category: 'asc' }, { key: 'asc' }] });
+    const permissions = await app.prisma.permission.findMany({
+      orderBy: [{ category: 'asc' }, { key: 'asc' }],
+    });
     return ok(
       permissions.map((permission) => ({
         key: permission.key,

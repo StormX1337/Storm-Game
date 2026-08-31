@@ -32,11 +32,16 @@ export const CardHeader = React.forwardRef<HTMLDivElement, React.HTMLAttributes<
 );
 CardHeader.displayName = 'CardHeader';
 
-export const CardTitle = React.forwardRef<HTMLHeadingElement, React.HTMLAttributes<HTMLHeadingElement>>(
-  ({ className, ...props }, ref) => (
-    <h3 ref={ref} className={cn('text-base font-semibold leading-none tracking-tight', className)} {...props} />
-  ),
-);
+export const CardTitle = React.forwardRef<
+  HTMLHeadingElement,
+  React.HTMLAttributes<HTMLHeadingElement>
+>(({ className, ...props }, ref) => (
+  <h3
+    ref={ref}
+    className={cn('text-base font-semibold leading-none tracking-tight', className)}
+    {...props}
+  />
+));
 CardTitle.displayName = 'CardTitle';
 
 export const CardDescription = React.forwardRef<
@@ -48,7 +53,9 @@ export const CardDescription = React.forwardRef<
 CardDescription.displayName = 'CardDescription';
 
 export const CardContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
-  ({ className, ...props }, ref) => <div ref={ref} className={cn('p-5 pt-0', className)} {...props} />,
+  ({ className, ...props }, ref) => (
+    <div ref={ref} className={cn('p-5 pt-0', className)} {...props} />
+  ),
 );
 CardContent.displayName = 'CardContent';
 
@@ -61,23 +68,24 @@ CardFooter.displayName = 'CardFooter';
 
 /* ------------------------------------------------------------------ forms -- */
 
-export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
-  ({ className, type, ...props }, ref) => (
-    <input
-      type={type}
-      ref={ref}
-      className={cn(
-        'flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors',
-        'file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background',
-        'disabled:cursor-not-allowed disabled:opacity-50',
-        'aria-[invalid=true]:border-destructive aria-[invalid=true]:focus-visible:ring-destructive',
-        className,
-      )}
-      {...props}
-    />
-  ),
-);
+export const Input = React.forwardRef<
+  HTMLInputElement,
+  React.InputHTMLAttributes<HTMLInputElement>
+>(({ className, type, ...props }, ref) => (
+  <input
+    type={type}
+    ref={ref}
+    className={cn(
+      'flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors',
+      'file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground',
+      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background',
+      'disabled:cursor-not-allowed disabled:opacity-50',
+      'aria-[invalid=true]:border-destructive aria-[invalid=true]:focus-visible:ring-destructive',
+      className,
+    )}
+    {...props}
+  />
+));
 Input.displayName = 'Input';
 
 export const Textarea = React.forwardRef<
@@ -209,7 +217,11 @@ export const Checkbox = React.forwardRef<
     {...props}
   >
     <CheckboxPrimitive.Indicator className="flex items-center justify-center">
-      {props.checked === 'indeterminate' ? <Minus className="h-3 w-3" /> : <Check className="h-3 w-3" />}
+      {props.checked === 'indeterminate' ? (
+        <Minus className="h-3 w-3" />
+      ) : (
+        <Check className="h-3 w-3" />
+      )}
     </CheckboxPrimitive.Indicator>
   </CheckboxPrimitive.Root>
 ));
@@ -275,7 +287,10 @@ export const Progress = React.forwardRef<
     {...props}
   >
     <ProgressPrimitive.Indicator
-      className={cn('h-full w-full flex-1 bg-primary transition-transform duration-500', indicatorClassName)}
+      className={cn(
+        'h-full w-full flex-1 bg-primary transition-transform duration-500',
+        indicatorClassName,
+      )}
       style={{ transform: `translateX(-${100 - Math.min(100, Math.max(0, value ?? 0))}%)` }}
     />
   </ProgressPrimitive.Root>
@@ -302,10 +317,7 @@ Separator.displayName = 'Separator';
 
 export function Skeleton({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return (
-    <div
-      className={cn('relative overflow-hidden rounded-md bg-muted', className)}
-      {...props}
-    >
+    <div className={cn('relative overflow-hidden rounded-md bg-muted', className)} {...props}>
       <div
         className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-foreground/5 to-transparent"
         style={{ animation: 'storm-shimmer 1.6s infinite' }}
@@ -332,7 +344,11 @@ export const AvatarImage = React.forwardRef<
   React.ElementRef<typeof AvatarPrimitive.Image>,
   React.ComponentPropsWithoutRef<typeof AvatarPrimitive.Image>
 >(({ className, ...props }, ref) => (
-  <AvatarPrimitive.Image ref={ref} className={cn('aspect-square h-full w-full', className)} {...props} />
+  <AvatarPrimitive.Image
+    ref={ref}
+    className={cn('aspect-square h-full w-full', className)}
+    {...props}
+  />
 ));
 AvatarImage.displayName = 'AvatarImage';
 
@@ -357,7 +373,11 @@ export const ScrollArea = React.forwardRef<
   React.ElementRef<typeof ScrollAreaPrimitive.Root>,
   React.ComponentPropsWithoutRef<typeof ScrollAreaPrimitive.Root>
 >(({ className, children, ...props }, ref) => (
-  <ScrollAreaPrimitive.Root ref={ref} className={cn('relative overflow-hidden', className)} {...props}>
+  <ScrollAreaPrimitive.Root
+    ref={ref}
+    className={cn('relative overflow-hidden', className)}
+    {...props}
+  >
     <ScrollAreaPrimitive.Viewport className="h-full w-full rounded-[inherit]">
       {children}
     </ScrollAreaPrimitive.Viewport>

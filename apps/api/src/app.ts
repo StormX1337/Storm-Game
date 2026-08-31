@@ -60,27 +60,28 @@ export interface BuildOptions {
  */
 export async function buildApp(options: BuildOptions = {}): Promise<FastifyInstance> {
   const app = Fastify({
-    logger: options.logger === false
-      ? false
-      : {
-          level: process.env.LOG_LEVEL ?? 'info',
-          redact: {
-            paths: [
-              'req.headers.authorization',
-              'req.headers.cookie',
-              'res.headers["set-cookie"]',
-              'body.password',
-              'body.newPassword',
-              'body.currentPassword',
-              'body.token',
-            ],
-            censor: '[redacted]',
+    logger:
+      options.logger === false
+        ? false
+        : {
+            level: process.env.LOG_LEVEL ?? 'info',
+            redact: {
+              paths: [
+                'req.headers.authorization',
+                'req.headers.cookie',
+                'res.headers["set-cookie"]',
+                'body.password',
+                'body.newPassword',
+                'body.currentPassword',
+                'body.token',
+              ],
+              censor: '[redacted]',
+            },
+            transport:
+              process.env.NODE_ENV === 'development'
+                ? { target: 'pino/file', options: { destination: 1 } }
+                : undefined,
           },
-          transport:
-            process.env.NODE_ENV === 'development'
-              ? { target: 'pino/file', options: { destination: 1 } }
-              : undefined,
-        },
     genReqId: () => randomUUID(),
     trustProxy: true,
     bodyLimit: 12 * 1024 * 1024,

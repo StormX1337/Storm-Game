@@ -27,9 +27,7 @@ export function createPrismaClient(options: PrismaFactoryOptions): PrismaClient 
 
 /** Narrow a caught error to a Prisma known-request error with a given code. */
 export function isPrismaError(error: unknown, code: string): boolean {
-  return (
-    error instanceof Prisma.PrismaClientKnownRequestError && error.code === code
-  );
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === code;
 }
 
 export const PRISMA_ERRORS = {

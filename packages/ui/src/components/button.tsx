@@ -12,7 +12,8 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default: 'bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm',
-        secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80 border border-border',
+        secondary:
+          'bg-secondary text-secondary-foreground hover:bg-secondary/80 border border-border',
         outline: 'border border-border bg-transparent hover:bg-secondary/60 hover:text-foreground',
         ghost: 'hover:bg-secondary/70 hover:text-foreground',
         destructive: 'bg-destructive text-destructive-foreground hover:bg-destructive/90 shadow-sm',
@@ -39,7 +40,10 @@ export interface ButtonProps
 }
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, asChild = false, loading = false, children, disabled, ...props }, ref) => {
+  (
+    { className, variant, size, asChild = false, loading = false, children, disabled, ...props },
+    ref,
+  ) => {
     const Comp = asChild ? Slot : 'button';
 
     // `asChild` renders someone else's element, so a spinner would be a second

@@ -2,15 +2,7 @@
 
 import * as React from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  Copy,
-  KeyRound,
-  Laptop,
-  Plus,
-  ShieldCheck,
-  ShieldOff,
-  Trash2,
-} from 'lucide-react';
+import { Copy, KeyRound, Laptop, Plus, ShieldCheck, ShieldOff, Trash2 } from 'lucide-react';
 import {
   Badge,
   Button,
@@ -53,7 +45,9 @@ export default function SecurityPage() {
 
   const [passwords, setPasswords] = React.useState({ current: '', next: '', confirm: '' });
   const [fieldErrors, setFieldErrors] = React.useState<Record<string, string[]>>({});
-  const [enrolment, setEnrolment] = React.useState<{ secret: string; otpauthUrl: string } | null>(null);
+  const [enrolment, setEnrolment] = React.useState<{ secret: string; otpauthUrl: string } | null>(
+    null,
+  );
   const [backupCodes, setBackupCodes] = React.useState<string[] | null>(null);
   const [keyDialog, setKeyDialog] = React.useState(false);
   const [issuedKey, setIssuedKey] = React.useState<string | null>(null);
@@ -98,7 +92,8 @@ export default function SecurityPage() {
   });
 
   const disableTwoFactor = useMutation({
-    mutationFn: (input: { password: string; code: string }) => api.post('/account/2fa/disable', input),
+    mutationFn: (input: { password: string; code: string }) =>
+      api.post('/account/2fa/disable', input),
     onSuccess: async () => {
       toast.success('Two-factor authentication disabled');
       await refresh();
@@ -142,9 +137,7 @@ export default function SecurityPage() {
       <Card>
         <CardHeader>
           <CardTitle>Password</CardTitle>
-          <CardDescription>
-            Changing your password signs out every other device.
-          </CardDescription>
+          <CardDescription>Changing your password signs out every other device.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <Field label="Current password" error={fieldErrors.currentPassword} required>
@@ -182,7 +175,10 @@ export default function SecurityPage() {
             <Button
               onClick={() => changePassword.mutate()}
               disabled={
-                !passwords.current || !passwords.next || passwordMismatch || passwords.next.length < 10
+                !passwords.current ||
+                !passwords.next ||
+                passwordMismatch ||
+                passwords.next.length < 10
               }
               loading={changePassword.isPending}
             >
@@ -218,7 +214,9 @@ export default function SecurityPage() {
                 }).then((confirmed) => {
                   if (!confirmed) return;
                   const password = window.prompt('Confirm your password');
-                  const code = password ? window.prompt('Enter a current 2FA or backup code') : null;
+                  const code = password
+                    ? window.prompt('Enter a current 2FA or backup code')
+                    : null;
                   if (password && code) disableTwoFactor.mutate({ password, code });
                 });
               }}
@@ -227,7 +225,11 @@ export default function SecurityPage() {
               Disable
             </Button>
           ) : (
-            <Button size="sm" onClick={() => beginTwoFactor.mutate()} loading={beginTwoFactor.isPending}>
+            <Button
+              size="sm"
+              onClick={() => beginTwoFactor.mutate()}
+              loading={beginTwoFactor.isPending}
+            >
               <ShieldCheck />
               Enable
             </Button>
@@ -310,7 +312,9 @@ export default function SecurityPage() {
                 <p className="truncate font-medium">{key.name}</p>
                 <p className="truncate font-mono text-xs text-muted-foreground">
                   storm_{key.keyId}… · created {formatDate(key.createdAt)}
-                  {key.lastUsedAt ? ` · last used ${formatRelative(key.lastUsedAt)}` : ' · never used'}
+                  {key.lastUsedAt
+                    ? ` · last used ${formatRelative(key.lastUsedAt)}`
+                    : ' · never used'}
                 </p>
               </div>
               <Button
@@ -382,7 +386,11 @@ function TwoFactorDialog({
     // it has no business in the bundle every page pays for.
     void import('qrcode')
       .then((module) =>
-        module.default.toDataURL(enrolment.otpauthUrl, { margin: 0, width: 352, errorCorrectionLevel: 'M' }),
+        module.default.toDataURL(enrolment.otpauthUrl, {
+          margin: 0,
+          width: 352,
+          errorCorrectionLevel: 'M',
+        }),
       )
       .then((url) => {
         if (!cancelled) setQr(url);
@@ -399,7 +407,8 @@ function TwoFactorDialog({
   }, [enrolment.otpauthUrl]);
 
   const enable = useMutation({
-    mutationFn: () => api.post<{ backupCodes: string[] }>('/account/2fa/enable', { code, password }),
+    mutationFn: () =>
+      api.post<{ backupCodes: string[] }>('/account/2fa/enable', { code, password }),
     onSuccess: (result) => void onEnabled(result.backupCodes),
     onError: (error) => toast.error('Could not enable 2FA', errorMessage(error)),
   });
@@ -447,7 +456,9 @@ function TwoFactorDialog({
                   void navigator.clipboard
                     ?.writeText(enrolment.secret)
                     .then(() => toast.success('Copied', 'The setup key is on your clipboard.'))
-                    .catch(() => toast.error('Could not copy', 'Select the key and copy it by hand.'));
+                    .catch(() =>
+                      toast.error('Could not copy', 'Select the key and copy it by hand.'),
+                    );
                 }}
               >
                 Copy
@@ -571,7 +582,11 @@ function CreateKeyDialog({
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={() => create.mutate()} disabled={!name.trim()} loading={create.isPending}>
+          <Button
+            onClick={() => create.mutate()}
+            disabled={!name.trim()}
+            loading={create.isPending}
+          >
             Create key
           </Button>
         </DialogFooter>

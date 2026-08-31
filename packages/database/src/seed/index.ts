@@ -16,7 +16,10 @@ const prisma = new PrismaClient();
 
 const ROLE_META: Record<RoleName, { displayName: string; description: string }> = {
   OWNER: { displayName: 'Owner', description: 'Full control over the panel and its settings.' },
-  ADMIN: { displayName: 'Administrator', description: 'Manages users, nodes, servers and templates.' },
+  ADMIN: {
+    displayName: 'Administrator',
+    description: 'Manages users, nodes, servers and templates.',
+  },
   STAFF: { displayName: 'Staff', description: 'Provisions and maintains customer servers.' },
   SUPPORT: { displayName: 'Support', description: 'Read-mostly access for troubleshooting.' },
   CUSTOMER: { displayName: 'Customer', description: 'Manages their own servers.' },
@@ -76,7 +79,12 @@ async function seedTemplates(): Promise<void> {
     const { variables, ...rest } = template;
     const saved = await prisma.gameTemplate.upsert({
       where: { slug: template.slug },
-      create: { ...rest, dockerImages: rest.dockerImages, configFiles: rest.configFiles as object, logConfig: rest.logConfig as object },
+      create: {
+        ...rest,
+        dockerImages: rest.dockerImages,
+        configFiles: rest.configFiles as object,
+        logConfig: rest.logConfig as object,
+      },
       update: {
         name: rest.name,
         game: rest.game,
@@ -155,7 +163,9 @@ async function seedAdmin(): Promise<void> {
   if (!email || !password) {
     const owners = await prisma.user.count({ where: { role: { name: 'OWNER' } } });
     if (owners === 0) {
-      console.log('  admin: skipped (set ADMIN_EMAIL and ADMIN_PASSWORD, or run `storm admin create`)');
+      console.log(
+        '  admin: skipped (set ADMIN_EMAIL and ADMIN_PASSWORD, or run `storm admin create`)',
+      );
     }
     return;
   }

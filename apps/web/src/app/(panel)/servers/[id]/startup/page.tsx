@@ -59,7 +59,8 @@ export default function StartupPage() {
   });
 
   const saveVariables = useMutation({
-    mutationFn: () => api.put<ServerDetail>(`/servers/${server.id}/variables`, { variables: values }),
+    mutationFn: () =>
+      api.put<ServerDetail>(`/servers/${server.id}/variables`, { variables: values }),
     onSuccess: () => {
       setFieldErrors({});
       toast.success('Variables saved', 'Restart the server to apply them.');
@@ -100,7 +101,11 @@ export default function StartupPage() {
           </Field>
 
           <Field label="Docker image">
-            <Select value={image} onValueChange={setImage} disabled={!editable || images.length <= 1}>
+            <Select
+              value={image}
+              onValueChange={setImage}
+              disabled={!editable || images.length <= 1}
+            >
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>

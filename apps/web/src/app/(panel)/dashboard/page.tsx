@@ -13,15 +13,7 @@ import {
   Power,
   Server,
 } from 'lucide-react';
-import {
-  Button,
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  EmptyState,
-  Skeleton,
-} from '@storm/ui';
+import { Button, Card, CardContent, CardHeader, CardTitle, EmptyState, Skeleton } from '@storm/ui';
 import type { DashboardOverview, ServerSummary } from '@storm/types';
 import { api, apiPaginated } from '@/lib/api';
 import { formatBytes, formatMib, formatRelative, humaniseEvent } from '@/lib/format';
@@ -70,7 +62,9 @@ export default function DashboardPage() {
           icon={Server}
           loading={overview.isLoading}
           hint={
-            data && data.servers.installing > 0 ? `${data.servers.installing} installing` : undefined
+            data && data.servers.installing > 0
+              ? `${data.servers.installing} installing`
+              : undefined
           }
         />
         <StatCard
@@ -85,7 +79,9 @@ export default function DashboardPage() {
           value={data?.servers.offline ?? 0}
           icon={Power}
           loading={overview.isLoading}
-          hint={data && data.servers.suspended > 0 ? `${data.servers.suspended} suspended` : undefined}
+          hint={
+            data && data.servers.suspended > 0 ? `${data.servers.suspended} suspended` : undefined
+          }
         />
         <StatCard
           label="Memory in use"

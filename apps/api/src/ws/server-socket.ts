@@ -28,16 +28,28 @@ export async function registerServerSocket(app: FastifyInstance): Promise<void> 
     async (socket, request) => {
       let user: AuthenticatedUser;
       try {
-        user = await authenticateSocket(app, request.query as Record<string, string>, request.headers.cookie);
+        user = await authenticateSocket(
+          app,
+          request.query as Record<string, string>,
+          request.headers.cookie,
+        );
       } catch {
-        send(socket, { type: 'error', code: 'UNAUTHENTICATED', message: 'Sign in to open this console' });
+        send(socket, {
+          type: 'error',
+          code: 'UNAUTHENTICATED',
+          message: 'Sign in to open this console',
+        });
         socket.close(4401, 'unauthenticated');
         return;
       }
 
       let access;
       try {
-        access = await app.serverAccess.require(user, request.params.id, Permission.SERVERS_CONSOLE);
+        access = await app.serverAccess.require(
+          user,
+          request.params.id,
+          Permission.SERVERS_CONSOLE,
+        );
       } catch {
         send(socket, { type: 'error', code: 'FORBIDDEN', message: 'You cannot view this console' });
         socket.close(4403, 'forbidden');
@@ -192,7 +204,11 @@ export async function registerServerSocket(app: FastifyInstance): Promise<void> 
       await subscriber.subscribe(REDIS_CHANNELS.serverStatus, REDIS_CHANNELS.serverStats);
       subscriber.on('message', (channel: string, payload: string) => {
         try {
-          const parsed = JSON.parse(payload) as { serverId: string; status?: string; stats?: unknown };
+          const parsed = JSON.parse(payload) as {
+            serverId: string;
+            status?: string;
+            stats?: unknown;
+          };
           if (parsed.serverId !== server.id) return;
           if (channel === REDIS_CHANNELS.serverStatus && parsed.status) {
             send(socket, { type: 'status', status: parsed.status as never });

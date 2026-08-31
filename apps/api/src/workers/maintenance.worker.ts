@@ -40,12 +40,22 @@ export async function scheduleMaintenanceJobs(queue: Queue): Promise<void> {
   await queue.add(
     'tick',
     {},
-    { repeat: { pattern: '* * * * *' }, jobId: 'storm-tick', removeOnComplete: 10, removeOnFail: 20 },
+    {
+      repeat: { pattern: '* * * * *' },
+      jobId: 'storm-tick',
+      removeOnComplete: 10,
+      removeOnFail: 20,
+    },
   );
   await queue.add(
     'housekeeping',
     {},
-    { repeat: { pattern: '17 * * * *' }, jobId: 'storm-housekeeping', removeOnComplete: 10, removeOnFail: 20 },
+    {
+      repeat: { pattern: '17 * * * *' },
+      jobId: 'storm-housekeeping',
+      removeOnComplete: 10,
+      removeOnFail: 20,
+    },
   );
 }
 
@@ -139,9 +149,13 @@ async function applyBackupRetention(app: FastifyInstance): Promise<void> {
         if (backup.storageKey) {
           if (app.storage.isLocal(storage)) {
             await app.agents
-              .request(backup.server.node, `/api/v1/servers/${backup.server.uuid}/backups/${backup.uuid}`, {
-                method: 'DELETE',
-              })
+              .request(
+                backup.server.node,
+                `/api/v1/servers/${backup.server.uuid}/backups/${backup.uuid}`,
+                {
+                  method: 'DELETE',
+                },
+              )
               .catch(() => undefined);
           } else {
             await app.storage.remove(storage, backup.storageKey);
