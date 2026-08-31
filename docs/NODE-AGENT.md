@@ -36,29 +36,53 @@ business logic. Everything it knows about a server arrives from the panel.
 
 ## Installation
 
-The scripted path, from the node:
+Add the node in the panel first — **Admin → Nodes → Add node** — then open its
+**Agent configuration** and press **Download**. That file carries the node's
+identity and its credentials, and it is what the installer reads.
+
+On the node, as root:
 
 ```bash
+install -d -m 700 /etc/storm
+# put the downloaded file here, e.g. from your laptop:
+#   scp agent.env root@node:/etc/storm/agent.env
+chmod 600 /etc/storm/agent.env
+
 curl -fsSL https://panel.example.com/install/node.sh -o install-node.sh
 less install-node.sh
 sudo bash install-node.sh
 ```
 
+The installer reads `/etc/storm/agent.env` if it is already there and asks
+nothing. `--config <file>` points it at the file somewhere else. Without either
+it prompts for the five values, which is the fallback, not the intended path.
+
 Supported: Ubuntu 22.04+, Ubuntu 24.04+, Debian 12+, x86_64 or arm64. The
 script refuses anything else rather than half-working.
 
 It installs Docker Engine and Node 20 if missing, creates the `storm_net`
-bridge with inter-container communication disabled, writes
-`/etc/storm/agent.env` mode 0600, installs a hardened systemd unit, starts it,
-and waits for `/health`.
+bridge with inter-container communication disabled, rewrites
+`/etc/storm/agent.env` mode 0600 with the full set of settings, installs a
+hardened systemd unit, starts it, and waits for `/health`.
 
-Unattended:
+Unattended, without a file:
 
 ```bash
 sudo STORM_PANEL_URL=https://panel.example.com \
      STORM_NODE_UUID=… STORM_TOKEN_ID=… STORM_TOKEN=… STORM_SECRET=… \
      bash install-node.sh
 ```
+
+Prefer the environment over flags for the secrets: a flag is readable in `ps`
+by anyone on the box for as long as the installer runs.
+
+### Reopening the configuration
+
+Opening **Agent configuration** again issues a new token and revokes any earlier
+one the node never used — so old screenshots and scrollbacks stop being a way
+in. The token a running node is authenticating with is left alone, so looking at
+the page cannot take a node offline. To deliberately replace the credential a
+node is using, `storm node token <name>` on the panel host.
 
 ### By hand
 

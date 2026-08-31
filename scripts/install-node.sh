@@ -44,6 +44,7 @@ AGENT_PORT="${STORM_AGENT_PORT:-8081}"
 SFTP_PORT="${STORM_SFTP_PORT:-2022}"
 SKIP_DOCKER=0
 ASSUME_YES=0
+CONFIG_FILE="${STORM_CONFIG_FILE:-}"
 
 usage() {
   cat <<USAGE
@@ -57,6 +58,7 @@ Options:
   --secret <secret>     AGENT_SECRET                          (required)
   --agent-port <port>   Port the agent listens on             (default 8081)
   --sftp-port <port>    Port the SFTP server listens on       (default 2022)
+  --config <file>       Read the values from a downloaded agent.env
   --skip-docker         Do not install or configure Docker
   --yes                 Do not prompt for confirmation
   --help                Show this message
@@ -69,6 +71,9 @@ secrets out of the process list:
 
 Values other than --panel-url come from the panel: Admin -> Nodes -> Agent
 configuration, or the CLI command "storm node create".
+
+The panel offers that configuration as a file. Put it at /etc/storm/agent.env
+before running this, or point --config at it, and nothing needs typing.
 USAGE
 }
 
@@ -81,6 +86,7 @@ while [[ $# -gt 0 ]]; do
     --secret)     SECRET="${2:-}"; shift 2 ;;
     --agent-port) AGENT_PORT="${2:-}"; shift 2 ;;
     --sftp-port)  SFTP_PORT="${2:-}"; shift 2 ;;
+    --config)     CONFIG_FILE="${2:-}"; shift 2 ;;
     --skip-docker) SKIP_DOCKER=1; shift ;;
     --yes|-y)     ASSUME_YES=1; shift ;;
     --help|-h)    usage; exit 0 ;;
@@ -135,6 +141,47 @@ fi
 # --------------------------------------------------------- configuration --
 
 step "Collecting configuration"
+
+# The panel hands out a ready-made agent.env, and its own dialog tells people to
+# save it at /etc/storm/agent.env. Reading it here is what makes that true:
+# without this the installer prompted for values the operator had already put on
+# the machine, and then overwrote the file with what they retyped.
+read_config_file() {
+  local file="$1"
+  [[ -r "$file" ]] || return 1
+
+  local key value
+  while IFS='=' read -r key value; do
+    # A file downloaded through a browser on Windows arrives with CRLF, and a
+    # trailing \r turns PANEL_URL into a host that does not resolve and the
+    # token into one that does not match — both failing much later, with an
+    # error that points nowhere near the cause.
+    key="${key%%[[:space:]]*}"
+    value="${value%$'\r'}"
+    [[ -z "$key" || "$key" == \#* ]] && continue
+    # Values the panel writes are unquoted, but tolerate quotes anyway.
+    value="${value%\"}"; value="${value#\"}"
+    value="${value%\'}"; value="${value#\'}"
+
+    case "$key" in
+      PANEL_URL)      [[ -z "$PANEL_URL"  ]] && PANEL_URL="$value" ;;
+      NODE_UUID)      [[ -z "$NODE_UUID"  ]] && NODE_UUID="$value" ;;
+      AGENT_TOKEN_ID) [[ -z "$TOKEN_ID"   ]] && TOKEN_ID="$value" ;;
+      AGENT_TOKEN)    [[ -z "$TOKEN"      ]] && TOKEN="$value" ;;
+      AGENT_SECRET)   [[ -z "$SECRET"     ]] && SECRET="$value" ;;
+      AGENT_PORT)     AGENT_PORT="${AGENT_PORT:-$value}" ;;
+      SFTP_PORT)      SFTP_PORT="${SFTP_PORT:-$value}" ;;
+    esac
+  done < "$file"
+  return 0
+}
+
+if [[ -n "$CONFIG_FILE" ]]; then
+  read_config_file "$CONFIG_FILE" || fail "Cannot read ${CONFIG_FILE}"
+  ok "Read ${CONFIG_FILE}"
+elif read_config_file "${CONFIG_DIR}/agent.env"; then
+  ok "Read the configuration already at ${CONFIG_DIR}/agent.env"
+fi
 
 prompt_for() {
   local var="$1" label="$2" secret="${3:-0}"

@@ -224,7 +224,20 @@ export default async function adminNodeRoutes(app: FastifyInstance): Promise<voi
 
       // Issuing configuration always mints a fresh token: the old secret cannot
       // be recovered from the database, only replaced.
-      const token = await mintToken(app, node.id, 'configuration');
+      //
+      // Every previous config token that was never used is revoked with it.
+      // Those are the ones left behind by opening this dialog and closing it
+      // again, and each was a working credential for the life of the node — a
+      // screenshot or a scrollback from months ago would still let someone in.
+      // A token the node has actually authenticated with is untouched, so
+      // looking at this page cannot take a running node offline.
+      const [, token] = await Promise.all([
+        app.prisma.nodeToken.updateMany({
+          where: { nodeId: node.id, name: 'configuration', revokedAt: null, lastUsedAt: null },
+          data: { revokedAt: new Date() },
+        }),
+        mintToken(app, node.id, 'configuration'),
+      ]);
 
       const config = [
         `# Storm Node Agent configuration for ${node.name}`,

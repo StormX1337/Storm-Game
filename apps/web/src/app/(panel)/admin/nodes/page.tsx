@@ -444,8 +444,10 @@ function ConfigurationDialog({ node, onClose }: { node: NodeSummary; onClose: ()
           <DialogTitle>Agent configuration for {node.name}</DialogTitle>
           <DialogDescription>
             Save this as <code className="font-mono text-xs">/etc/storm/agent.env</code> on the
-            node. A new token is issued each time this is opened, which invalidates nothing but
-            means the newest configuration is the one to deploy.
+            node, then run the installer — it reads the file and asks nothing. A new token is issued
+            each time this is opened, and any earlier one the node never used is revoked with it, so
+            only the newest configuration works. The token a running node is already using keeps
+            working.
           </DialogDescription>
         </DialogHeader>
 
