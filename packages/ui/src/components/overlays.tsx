@@ -44,6 +44,11 @@ export const DialogContent = React.forwardRef<
       ref={ref}
       className={cn(
         'fixed left-1/2 top-1/2 z-50 grid w-full max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4',
+        // A grid item's min-width is auto, so one long unbreakable string — a
+        // command, a token, a path — makes the whole dialog wider than the
+        // screen and clips every other line in it. On a phone that is most of
+        // the content. The inset leaves the rounded corners visible there.
+        'max-sm:w-[calc(100%-1.5rem)] [&>*]:min-w-0',
         'border border-border bg-card p-6 shadow-2xl duration-200 sm:rounded-xl',
         'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0',
         'data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',

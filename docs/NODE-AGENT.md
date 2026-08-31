@@ -37,25 +37,52 @@ business logic. Everything it knows about a server arrives from the panel.
 ## Installation
 
 Add the node in the panel first — **Admin → Nodes → Add node** — then open its
-**Agent configuration** and press **Download**. That file carries the node's
-identity and its credentials, and it is what the installer reads.
+**Agent configuration**.
 
-On the node, as root:
+### One command
+
+Press **Create install command** and run what it gives you on the node:
+
+```bash
+curl -fsSL https://panel.example.com/install/node.sh | sudo bash -s -- \
+  --panel-url https://panel.example.com --claim <claim>
+```
+
+The installer redeems the claim over HTTPS, writes `/etc/storm/agent.env`
+itself, and asks nothing. Nothing has to be copied onto the machine, which makes
+this the only workable route when the only thing you have is a phone and an SSH
+app.
+
+A claim is worth **one node's configuration, once, within fifteen minutes**.
+Redeeming it mints the node's token; a second attempt with the same claim is
+refused, so a claim left in a scrollback is not a way in. The panel stores only
+its digest, exactly as it does for the node tokens themselves.
+
+Piping a script into a shell is worth being deliberate about. To read it first:
+
+```bash
+curl -fsSL https://panel.example.com/install/node.sh -o install-node.sh
+less install-node.sh
+sudo bash install-node.sh --panel-url https://panel.example.com --claim <claim>
+```
+
+### Or with the file
+
+Press **Download** instead, put it on the node, and run the installer:
 
 ```bash
 install -d -m 700 /etc/storm
-# put the downloaded file here, e.g. from your laptop:
-#   scp agent.env root@node:/etc/storm/agent.env
+# from your laptop:  scp agent.env root@node:/etc/storm/agent.env
 chmod 600 /etc/storm/agent.env
 
 curl -fsSL https://panel.example.com/install/node.sh -o install-node.sh
-less install-node.sh
 sudo bash install-node.sh
 ```
 
 The installer reads `/etc/storm/agent.env` if it is already there and asks
-nothing. `--config <file>` points it at the file somewhere else. Without either
-it prompts for the five values, which is the fallback, not the intended path.
+nothing. `--config <file>` points it at the file somewhere else. Without any of
+the three it prompts for the five values, which is the fallback, not the
+intended path.
 
 Supported: Ubuntu 22.04+, Ubuntu 24.04+, Debian 12+, x86_64 or arm64. The
 script refuses anything else rather than half-working.

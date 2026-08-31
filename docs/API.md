@@ -367,6 +367,7 @@ Everything below needs a staff role.
 | `GET/POST /admin/nodes`, `GET/PATCH/DELETE /admin/nodes/:id`                 | `nodes.*`            |
 | `GET/POST /admin/nodes/:id/tokens`, `DELETE …/:tokenId`                      | `nodes.manage`       |
 | `GET /admin/nodes/:id/configuration`                                         | `nodes.manage`       |
+| `POST /admin/nodes/:id/bootstrap`                                            | `nodes.manage`       |
 | `GET /admin/nodes/:id/health`                                                | `nodes.view`         |
 | `GET/POST /admin/nodes/:id/allocations`, `DELETE …/:allocationId`            | `nodes.manage`       |
 | `POST /admin/nodes/:id/allocations/prune`                                    | `nodes.manage`       |
@@ -385,6 +386,36 @@ Everything below needs a staff role.
 | `GET /admin/webhooks/events` · `/admin/webhooks/:id/deliveries`              | `webhooks.manage`    |
 | `POST /admin/webhooks/:id/test`                                              | `webhooks.manage`    |
 | `GET /admin/updates` · `POST /admin/updates/apply`                           | `panel.update`       |
+
+### Node installation
+
+|                                   |                                                                |
+| --------------------------------- | -------------------------------------------------------------- |
+| `POST /admin/nodes/:id/bootstrap` | Mints a claim and returns the one-line install command         |
+| `POST /install/claim`             | Unauthenticated. Exchanges a claim for that node's `agent.env` |
+
+`POST /admin/nodes/:id/bootstrap` answers with a command to run on the node:
+
+```json
+{
+  "command": "curl -fsSL https://panel.example.com/install/node.sh | sudo bash -s -- --panel-url https://panel.example.com --claim …",
+  "expiresInSeconds": 900
+}
+```
+
+The claim it carries is worth **one node's configuration, once, for fifteen
+minutes**. The installer posts it to `/install/claim` — in the body, not the
+path, so it is not written to the access log of every proxy in between — and
+gets back the same file `GET /admin/nodes/:id/configuration` produces. Redeeming
+mints the node's token; a replay is refused with 404, so a claim left in a
+scrollback is not a way in. Only the digest is stored, in Redis, with the
+expiry as its TTL.
+
+`/install/claim` is unauthenticated because a bare node has no credentials yet.
+What guards it is the claim itself, and a rate limit of ten attempts per ten
+minutes.
+
+---
 
 ### Health
 

@@ -46,7 +46,21 @@ export default fp(
         // Same-origin and server-to-server requests carry no Origin header.
         if (!origin) return callback(null, true);
         if (origins.includes('*') || origins.includes(origin)) return callback(null, true);
-        return callback(new Error('Origin is not allowed'), false);
+
+        // A plain Error here reaches the handler as an unknown throw and comes
+        // back as 500 "Something went wrong on our side" — which is both wrong
+        // (the request is at fault, not the server) and undiagnosable: the one
+        // thing the operator needs to know is that APP_URL does not match the
+        // address the browser is actually using. Saying so costs nothing; the
+        // origin is something the caller already sent.
+        return callback(
+          new AppError(
+            403,
+            ErrorCode.FORBIDDEN,
+            `Origin ${origin} is not allowed. Set APP_URL (or CORS_ORIGINS) to the address the panel is served from.`,
+          ),
+          false,
+        );
       },
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],

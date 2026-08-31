@@ -170,3 +170,43 @@ describe('integration tests from the admin area', () => {
     });
   });
 });
+
+/**
+ * A browser reaching the panel on an address the configuration does not name is
+ * a misconfiguration, and the operator has to be able to tell. It used to come
+ * back as 500 "Something went wrong on our side", which says nothing and blames
+ * the wrong side.
+ */
+describe('cross-origin requests', () => {
+  let app: FastifyInstance;
+  let cleanup: () => Promise<void>;
+
+  before(async () => {
+    const context = await createTestApp();
+    app = context.app;
+    cleanup = context.cleanup;
+  });
+
+  after(async () => {
+    await cleanup();
+  });
+
+  it('refuses an origin the configuration does not name, and says which', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/login',
+      headers: { origin: 'https://not-the-panel.example.com' },
+      payload: { identifier: 'someone', password: 'whatever' },
+    });
+
+    assert.equal(response.statusCode, 403, 'a disallowed origin should not read as a server fault');
+    assert.match(response.body, /not-the-panel\.example\.com/);
+    assert.match(response.body, /APP_URL/);
+    assert.doesNotMatch(response.body, /went wrong on our side/);
+  });
+
+  it('allows a request with no origin at all, as a node agent sends', async () => {
+    const response = await app.inject({ method: 'GET', url: '/health' });
+    assert.equal(response.statusCode, 200);
+  });
+});

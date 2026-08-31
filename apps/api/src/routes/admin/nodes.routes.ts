@@ -17,6 +17,10 @@ import { body, params, query } from '../../lib/validation.js';
 import { ok, paginated, pageArgs } from '../../lib/response.js';
 import { AppError, badRequest, conflict, notFound } from '../../lib/errors.js';
 import { toAllocation, toNodeDetail, toNodeSummary } from '../../lib/transformers.js';
+import {
+  createBootstrapClaim,
+  issueNodeConfiguration,
+} from '../../services/node-bootstrap.service.js';
 
 const idParam = z.object({ id: z.string().min(1).max(64) });
 
@@ -219,52 +223,49 @@ export default async function adminNodeRoutes(app: FastifyInstance): Promise<voi
     { schema: { tags: ['Admin: Nodes'], summary: 'Agent configuration file' } },
     async (request) => {
       const { id } = params(request, idParam);
-      const node = await app.prisma.node.findUnique({ where: { id } });
-      if (!node) throw notFound('Node was not found', ErrorCode.NODE_NOT_FOUND);
-
-      // Issuing configuration always mints a fresh token: the old secret cannot
-      // be recovered from the database, only replaced.
-      //
-      // Every previous config token that was never used is revoked with it.
-      // Those are the ones left behind by opening this dialog and closing it
-      // again, and each was a working credential for the life of the node — a
-      // screenshot or a scrollback from months ago would still let someone in.
-      // A token the node has actually authenticated with is untouched, so
-      // looking at this page cannot take a running node offline.
-      const [, token] = await Promise.all([
-        app.prisma.nodeToken.updateMany({
-          where: { nodeId: node.id, name: 'configuration', revokedAt: null, lastUsedAt: null },
-          data: { revokedAt: new Date() },
-        }),
-        mintToken(app, node.id, 'configuration'),
-      ]);
-
-      const config = [
-        `# Storm Node Agent configuration for ${node.name}`,
-        `# Generated ${new Date().toISOString()}`,
-        `NODE_UUID=${node.uuid}`,
-        `PANEL_URL=${app.env.APP_URL}`,
-        `AGENT_HOST=0.0.0.0`,
-        `AGENT_PORT=${node.agentPort}`,
-        `AGENT_TOKEN_ID=${token.tokenId}`,
-        `AGENT_TOKEN=${token.token}`,
-        `AGENT_SECRET=${token.secret}`,
-        `DATA_DIRECTORY=${node.dataDirectory}`,
-        `BACKUP_DIRECTORY=${node.backupDirectory}`,
-        `SFTP_ENABLED=true`,
-        `SFTP_PORT=${node.sftpPort}`,
-        `DOCKER_NETWORK=storm_net`,
-        `LOG_LEVEL=info`,
-      ].join('\n');
+      const { config, nodeName } = await issueNodeConfiguration(app, id);
 
       await app.audit.log(request, {
         action: 'admin.node_configuration_issued',
         targetType: 'node',
         targetId: id,
-        targetLabel: node.name,
+        targetLabel: nodeName,
       });
 
-      return ok({ configuration: `${config}\n`, filename: 'storm-agent.env' });
+      return ok(config);
+    },
+  );
+
+  app.post(
+    '/:id/bootstrap',
+    {
+      // A claim is worth this node's credentials to whoever holds it. Minting
+      // them in bulk is not something an administrator does, and is something
+      // a stolen session would.
+      config: { rateLimit: { max: 10, timeWindow: '10 minutes' } },
+      schema: {
+        tags: ['Admin: Nodes'],
+        summary: 'A one-line install command the node can redeem itself',
+      },
+    },
+    async (request) => {
+      const { id } = params(request, idParam);
+      const node = await app.prisma.node.findUnique({ where: { id } });
+      if (!node) throw notFound('Node was not found', ErrorCode.NODE_NOT_FOUND);
+
+      const claim = await createBootstrapClaim(app, node.id);
+
+      await app.audit.log(request, {
+        action: 'admin.node_bootstrap_issued',
+        targetType: 'node',
+        targetId: id,
+        targetLabel: node.name,
+        metadata: { expiresInSeconds: claim.expiresInSeconds },
+      });
+
+      // The claim itself is deliberately not returned: the command is what gets
+      // copied, and a second copy of the secret is a second place to leak it.
+      return ok({ command: claim.command, expiresInSeconds: claim.expiresInSeconds });
     },
   );
 

@@ -45,6 +45,7 @@ SFTP_PORT="${STORM_SFTP_PORT:-2022}"
 SKIP_DOCKER=0
 ASSUME_YES=0
 CONFIG_FILE="${STORM_CONFIG_FILE:-}"
+CLAIM="${STORM_CLAIM:-}"
 
 usage() {
   cat <<USAGE
@@ -59,6 +60,7 @@ Options:
   --agent-port <port>   Port the agent listens on             (default 8081)
   --sftp-port <port>    Port the SFTP server listens on       (default 2022)
   --config <file>       Read the values from a downloaded agent.env
+  --claim <claim>       Fetch the configuration from the panel (needs --panel-url)
   --skip-docker         Do not install or configure Docker
   --yes                 Do not prompt for confirmation
   --help                Show this message
@@ -74,6 +76,11 @@ configuration, or the CLI command "storm node create".
 
 The panel offers that configuration as a file. Put it at /etc/storm/agent.env
 before running this, or point --config at it, and nothing needs typing.
+
+Easier still, and the only practical route if all you have is a phone: Admin ->
+Nodes -> Install command gives you one line carrying a claim. The installer
+redeems it over HTTPS and writes the file itself, so no credential is ever on
+your device. A claim is good for one node, once, for fifteen minutes.
 USAGE
 }
 
@@ -87,6 +94,7 @@ while [[ $# -gt 0 ]]; do
     --agent-port) AGENT_PORT="${2:-}"; shift 2 ;;
     --sftp-port)  SFTP_PORT="${2:-}"; shift 2 ;;
     --config)     CONFIG_FILE="${2:-}"; shift 2 ;;
+    --claim)      CLAIM="${2:-}"; shift 2 ;;
     --skip-docker) SKIP_DOCKER=1; shift ;;
     --yes|-y)     ASSUME_YES=1; shift ;;
     --help|-h)    usage; exit 0 ;;
@@ -176,7 +184,44 @@ read_config_file() {
   return 0
 }
 
-if [[ -n "$CONFIG_FILE" ]]; then
+# A claim beats everything else: it is the freshest configuration, minted for
+# this node moments ago.
+if [[ -n "$CLAIM" ]]; then
+  [[ -n "$PANEL_URL" ]] || fail "--claim needs --panel-url too."
+
+  CLAIM_BODY="$(printf '{"claim":"%s"}' "$CLAIM")"
+  CLAIM_OUT="$(mktemp)"
+  # The claim goes in the body, not the URL: a token in a path is written to the
+  # access log of every proxy in between.
+  CLAIM_CODE="$(curl -fsS -o "$CLAIM_OUT" -w '%{http_code}' \
+    -X POST "${PANEL_URL%/}/install/claim" \
+    -H 'content-type: application/json' \
+    --data "$CLAIM_BODY" 2>/dev/null || echo 000)"
+
+  if [[ "$CLAIM_CODE" != "200" ]]; then
+    rm -f "$CLAIM_OUT"
+    case "$CLAIM_CODE" in
+      404) fail "That install command has expired or was already used. Generate a new one in the panel." ;;
+      429) fail "The panel is rate limiting this. Wait ten minutes, then try again." ;;
+      000) fail "Could not reach ${PANEL_URL}. Check the URL and that this machine has outbound HTTPS." ;;
+      *)   fail "The panel refused the claim (HTTP ${CLAIM_CODE})." ;;
+    esac
+  fi
+
+  # The response is JSON with the file in a string. Pull it out and unescape the
+  # newlines, without making the installer depend on jq being present.
+  install -d -m 0700 "$CONFIG_DIR"
+  sed -n 's/.*"configuration"[[:space:]]*:[[:space:]]*"\(.*\)","filename".*/\1/p' "$CLAIM_OUT" \
+    | sed 's/\\n/\n/g; s/\\"/"/g; s/\\\\/\\/g' > "${CONFIG_DIR}/agent.env"
+  rm -f "$CLAIM_OUT"
+  chmod 600 "${CONFIG_DIR}/agent.env"
+
+  grep -q '^AGENT_TOKEN=' "${CONFIG_DIR}/agent.env" ||
+    fail "The panel's response could not be read. Use the downloaded agent.env instead."
+
+  read_config_file "${CONFIG_DIR}/agent.env" || fail "Could not read the configuration just written."
+  ok "Fetched the configuration from the panel"
+elif [[ -n "$CONFIG_FILE" ]]; then
   read_config_file "$CONFIG_FILE" || fail "Cannot read ${CONFIG_FILE}"
   ok "Read ${CONFIG_FILE}"
 elif read_config_file "${CONFIG_DIR}/agent.env"; then

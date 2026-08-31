@@ -14,6 +14,7 @@ import {
   Plus,
   RefreshCw,
   Server,
+  Terminal,
   Trash2,
 } from 'lucide-react';
 import {
@@ -437,27 +438,84 @@ function ConfigurationDialog({ node, onClose }: { node: NodeSummary; onClose: ()
     gcTime: 0,
   });
 
+  // The install command is the route that works when the only machine you have
+  // is a phone: nothing to download, nothing to copy onto the node, and the
+  // credential never touches the device doing the copying.
+  const install = useMutation({
+    mutationFn: () =>
+      api.post<{ command: string; expiresInSeconds: number }>(
+        `/admin/nodes/${node.id}/bootstrap`,
+        {},
+      ),
+    onError: (error) => toast.error('Could not create an install command', errorMessage(error)),
+  });
+
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>Agent configuration for {node.name}</DialogTitle>
           <DialogDescription>
-            Save this as <code className="font-mono text-xs">/etc/storm/agent.env</code> on the
-            node, then run the installer — it reads the file and asks nothing. A new token is issued
-            each time this is opened, and any earlier one the node never used is revoked with it, so
-            only the newest configuration works. The token a running node is already using keeps
-            working.
+            What the agent on {node.name} needs in order to talk to this panel. Opening this issues
+            a new token and revokes any earlier one the node never used, so only the newest works —
+            the token a running node is already using is left alone.
           </DialogDescription>
         </DialogHeader>
 
-        {isLoading ? (
-          <Skeleton className="h-64" />
-        ) : (
-          <pre className="max-h-80 overflow-auto rounded-lg border border-border bg-secondary/40 p-3 font-mono text-xs">
-            {data?.configuration}
-          </pre>
-        )}
+        <div className="space-y-2 rounded-lg border border-primary/40 bg-primary/5 p-3">
+          <p className="text-sm font-medium">Install with one command</p>
+          <p className="text-sm text-muted-foreground">
+            Run this on the node over SSH. It fetches the configuration itself, so nothing has to be
+            copied onto the machine — the only route that works if all you have is a phone. The
+            command stops working after fifteen minutes, or once it has been used.
+          </p>
+
+          {install.data ? (
+            <>
+              {/* Wrapped rather than scrolled: on a phone a horizontal scrollbar
+                  inside a dialog is a thing you find by accident, if at all. */}
+              <pre className="max-h-40 overflow-y-auto whitespace-pre-wrap break-all rounded bg-background p-2 font-mono text-2xs leading-relaxed">
+                {install.data.command}
+              </pre>
+              <Button
+                size="sm"
+                onClick={() => {
+                  void navigator.clipboard
+                    .writeText(install.data.command)
+                    .then(() => toast.success('Command copied', 'Paste it into the node over SSH.'))
+                    .catch(() => toast.error('Could not copy'));
+                }}
+              >
+                <Copy />
+                Copy command
+              </Button>
+            </>
+          ) : (
+            <Button size="sm" loading={install.isPending} onClick={() => install.mutate()}>
+              <Terminal />
+              Create install command
+            </Button>
+          )}
+        </div>
+
+        <details className="rounded-lg border border-border">
+          <summary className="cursor-pointer p-3 text-sm font-medium">
+            Or put the file on the node yourself
+          </summary>
+          <div className="space-y-2 border-t border-border p-3">
+            <p className="text-sm text-muted-foreground">
+              Save this at <code className="font-mono text-xs">/etc/storm/agent.env</code> on the
+              node, then run the installer — it reads the file and asks nothing.
+            </p>
+            {isLoading ? (
+              <Skeleton className="h-64" />
+            ) : (
+              <pre className="max-h-80 overflow-auto rounded-lg border border-border bg-secondary/40 p-3 font-mono text-xs">
+                {data?.configuration}
+              </pre>
+            )}
+          </div>
+        </details>
 
         <DialogFooter>
           <Button
