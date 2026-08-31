@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Copy, KeyRound, Network, Plus, Star, Trash2 } from 'lucide-react';
+import { Copy, Network, Plus, Star, Trash2 } from 'lucide-react';
 import {
   Badge,
   Button,
@@ -26,13 +26,6 @@ import type { AllocationSummary } from '@storm/types';
 import { api, errorMessage } from '@/lib/api';
 import { useServer } from '@/components/panel/server-context';
 
-interface SftpDetails {
-  host: string;
-  port: number;
-  username: string;
-  password: string | null;
-}
-
 export default function NetworkPage() {
   const { server, can } = useServer();
   const toast = useToast();
@@ -43,12 +36,6 @@ export default function NetworkPage() {
     queryKey: ['server', server.shortId, 'allocations'],
     queryFn: () => api.get<AllocationSummary[]>(`/servers/${server.id}/allocations`),
     initialData: server.allocations,
-  });
-
-  const sftp = useQuery({
-    queryKey: ['server', server.shortId, 'sftp'],
-    queryFn: () => api.get<SftpDetails>(`/servers/${server.id}/sftp`),
-    enabled: can('servers.sftp'),
   });
 
   const invalidate = () => {
@@ -80,15 +67,6 @@ export default function NetworkPage() {
       invalidate();
     },
     onError: (error) => toast.error('Could not update the primary port', errorMessage(error)),
-  });
-
-  const resetSftp = useMutation({
-    mutationFn: () => api.post<{ password: string }>(`/servers/${server.id}/sftp/reset`, {}),
-    onSuccess: () => {
-      toast.success('SFTP password rotated');
-      void queryClient.invalidateQueries({ queryKey: ['server', server.shortId, 'sftp'] });
-    },
-    onError: (error) => toast.error('Could not rotate the password', errorMessage(error)),
   });
 
   const copy = async (value: string, label: string): Promise<void> => {
@@ -207,53 +185,6 @@ export default function NetworkPage() {
         </CardContent>
       </Card>
 
-      {can('servers.sftp') ? (
-        <Card>
-          <CardHeader className="flex-row items-start justify-between gap-3">
-            <div>
-              <CardTitle>SFTP access</CardTitle>
-              <CardDescription>
-                Connect any SFTP client to manage files outside the browser.
-              </CardDescription>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => resetSftp.mutate()}
-              loading={resetSftp.isPending}
-            >
-              <KeyRound />
-              Rotate password
-            </Button>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {sftp.isLoading ? (
-              <Skeleton className="h-24" />
-            ) : sftp.data ? (
-              <>
-                <dl className="grid gap-2 text-sm sm:grid-cols-2">
-                  <Row label="Host" value={sftp.data.host} onCopy={copy} />
-                  <Row label="Port" value={String(sftp.data.port)} onCopy={copy} />
-                  <Row label="Username" value={sftp.data.username} onCopy={copy} />
-                  <Row
-                    label="Password"
-                    value={sftp.data.password ?? 'Hidden — rotate to reveal'}
-                    onCopy={sftp.data.password ? copy : undefined}
-                  />
-                </dl>
-                <div className="rounded-lg border border-border bg-secondary/40 p-3">
-                  <p className="mb-1 text-xs font-medium text-muted-foreground">Quick connect</p>
-                  <code className="block break-all font-mono text-xs">
-                    sftp://{sftp.data.username}@{sftp.data.host}:{sftp.data.port}
-                  </code>
-                </div>
-              </>
-            ) : (
-              <p className="text-sm text-muted-foreground">SFTP details are unavailable.</p>
-            )}
-          </CardContent>
-        </Card>
-      ) : null}
     </div>
   );
 }

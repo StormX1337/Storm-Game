@@ -157,7 +157,7 @@ pnpm dev            # api :8080, web :3000, agent :8081
 | `pnpm dev` | Run the API, panel and agent together |
 | `pnpm build` | Build every package and app |
 | `pnpm typecheck` | TypeScript across the whole workspace |
-| `pnpm test` | Unit and integration tests |
+| `pnpm test` | Unit, component and integration tests |
 | `pnpm test:e2e` | Playwright browser tests against a running stack |
 | `pnpm db:migrate` | Create a migration from schema changes |
 | `pnpm db:studio` | Prisma Studio |

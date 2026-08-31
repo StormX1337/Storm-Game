@@ -252,6 +252,22 @@ boundaries and validation. Point `DATABASE_URL` at a scratch database first:
 DATABASE_URL=postgresql://storm:storm@127.0.0.1:5432/storm_test pnpm test
 ```
 
+**Component** tests in `apps/web/test` run the real components in jsdom with
+Testing Library, driven by Vitest:
+
+```bash
+pnpm --filter @storm/web test
+pnpm --filter @storm/web test:watch
+```
+
+They cover what browser tests are too slow to cover exhaustively and unit tests
+cannot reach: that `Field` binds a label to its control (this broke once and
+made every form announce as unlabelled), that every server status renders as
+prose rather than a raw enum, that the sidebar hides what a role may not use,
+that the sign-in form reveals the 2FA field without discarding what was typed,
+and that the API client refreshes an expired session exactly once instead of
+rotating the refresh token per parallel request.
+
 **End-to-end** tests drive a browser against a running stack:
 
 ```bash

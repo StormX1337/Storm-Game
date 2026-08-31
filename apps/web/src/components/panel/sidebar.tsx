@@ -16,6 +16,7 @@ import {
   Server,
   Settings,
   Shield,
+  KeyRound,
   Users,
   X,
 } from 'lucide-react';
@@ -72,6 +73,8 @@ export const SERVER_TABS = [
   { segment: 'schedules', label: 'Schedules', icon: CalendarClock },
   { segment: 'databases', label: 'Databases', icon: Database },
   { segment: 'network', label: 'Network', icon: Network },
+  { segment: 'sftp', label: 'SFTP', icon: KeyRound },
+  { segment: 'subusers', label: 'Team', icon: Users },
   { segment: 'startup', label: 'Startup', icon: Package },
   { segment: 'activity', label: 'Activity', icon: Activity },
   { segment: 'settings', label: 'Settings', icon: Settings },

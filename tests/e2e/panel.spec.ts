@@ -184,6 +184,26 @@ test.describe('panel', () => {
     await expect(page.getByRole('button', { name: 'Send' })).toBeVisible();
   });
 
+  test('opens the SFTP and team tabs', async ({ page }) => {
+    await page.goto('/servers');
+
+    const firstServer = await firstServerLink(page);
+    test.skip(firstServer === null, 'no servers exist in this environment');
+
+    await firstServer!.click();
+    await page.waitForURL(/\/servers\/[^/]+$/, { timeout: 30_000 });
+
+    await serverTab(page, 'SFTP').click();
+    await page.waitForURL(/\/sftp$/, { timeout: 30_000 });
+    await expect(page.getByRole('heading', { name: 'SFTP access' })).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole('button', { name: 'Rotate password' })).toBeVisible();
+
+    await serverTab(page, 'Team').click();
+    await page.waitForURL(/\/subusers$/, { timeout: 30_000 });
+    await expect(page.getByRole('heading', { name: 'Shared access' })).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole('button', { name: 'Add user' })).toBeVisible();
+  });
+
   test('browses server files', async ({ page }) => {
     await page.goto('/servers');
 
