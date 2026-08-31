@@ -283,6 +283,27 @@ problem. `docker compose build` is the step that matters. `update.sh` notices
 this case: if the source is current but the running API reports a different
 `STORM_COMMIT`, it rebuilds rather than reporting nothing to do.
 
+**When `git pull` says "divergent branches".** That means the upstream history
+was replaced rather than added to — rewriting commit authorship does it to every
+commit at once — so this checkout is holding commits the remote no longer has.
+`git pull` will not guess what you want, and stops.
+
+`scripts/update.sh` handles it: it recognises a rewrite, checks whether this
+checkout has any commit whose change is _not_ upstream in some form, and only
+then moves onto the new history. A commit made on the server is never discarded
+silently — it refuses and names it. So the fix is to run the updater rather than
+to fight with `git pull`.
+
+If the checkout is too old to have that version of the script, do the move once
+by hand. Nothing in the working tree is lost that matters — `.env` is not
+tracked, and the updater backs it up anyway:
+
+```bash
+git fetch origin
+git reset --hard origin/main
+./scripts/update.sh
+```
+
 To see which commit is actually serving customers:
 
 ```bash

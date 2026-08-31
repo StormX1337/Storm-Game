@@ -88,6 +88,30 @@ FETCH_ERR="$(git fetch --quiet origin "$BRANCH" 2>&1)" || {
 CURRENT="$(git rev-parse HEAD)"
 TARGET="$(git rev-parse "origin/${BRANCH}")"
 
+# Can the checkout simply move forward, or has the upstream history been
+# replaced under it? A rewrite is a normal thing to happen to this repository —
+# rewriting the commit authorship does it to every commit at once — and it
+# leaves a deployment on commits the remote no longer has. `git pull` calls that
+# "divergent branches" and stops, which is where an operator gets stuck.
+REWRITTEN=0
+if ! git merge-base --is-ancestor "$CURRENT" "$TARGET" 2>/dev/null; then
+  # Local commits whose change is not upstream in any form. `git cherry`
+  # compares patches rather than hashes, so a commit that was rewritten
+  # upstream — same diff, new hash — comes back as already-there, while
+  # something committed on this machine comes back as genuinely local.
+  # -v so the operator reads what they would lose, not a bare hash.
+  LOCAL_ONLY="$(git cherry -v "$TARGET" "$CURRENT" 2>/dev/null | grep '^+' || true)"
+  if [[ -n "$LOCAL_ONLY" ]]; then
+    printf '\n' >&2
+    printf '%s\n' "$LOCAL_ONLY" | sed 's/^+ /  /' >&2
+    fail "This checkout has commits of its own that are not upstream.
+
+  Updating would throw them away. Push them somewhere, or drop them with
+  \`git reset --hard origin/${BRANCH}\`, then run this again."
+  fi
+  REWRITTEN=1
+fi
+
 # What the running API was actually built from. The panel serves from images,
 # not from the files on disk, so a checkout at the latest commit tells you
 # nothing about what customers are looking at.
@@ -107,6 +131,9 @@ if [[ "$CURRENT" == "$TARGET" ]]; then
     [[ "$CHECK_ONLY" == "1" ]] ||
       warn "Rebuilding so what is deployed matches what is checked out."
   fi
+elif [[ "$REWRITTEN" == "1" ]]; then
+  warn "The upstream history was rewritten; moving this checkout onto it."
+  printf '%s\n' "$(git log --oneline --no-decorate -10 "$TARGET" | sed 's/^/  /')"
 else
   printf '%s\n' "$(git log --oneline --no-decorate "${CURRENT}..${TARGET}" | sed 's/^/  /')"
 fi
@@ -169,7 +196,15 @@ if [[ "$CURRENT" == "$TARGET" ]]; then
   step "Rebuilding $(git rev-parse --short HEAD)"
 else
   step "Updating to $(git rev-parse --short "$TARGET")"
-  git merge --ff-only "origin/${BRANCH}" >/dev/null || fail "Could not fast-forward. Resolve by hand."
+  if [[ "$REWRITTEN" == "1" ]]; then
+    # Safe by the check above: the working tree is clean and every commit here
+    # exists upstream as the same change under a different hash.
+    git reset --hard "origin/${BRANCH}" >/dev/null ||
+      fail "Could not move onto the rewritten history. Resolve by hand."
+  else
+    git merge --ff-only "origin/${BRANCH}" >/dev/null ||
+      fail "Could not fast-forward. Resolve by hand."
+  fi
   ok "Source updated"
 fi
 
