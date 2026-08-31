@@ -19,6 +19,7 @@ import {
 import { api, errorMessage } from '@/lib/api';
 import { formatDate } from '@/lib/format';
 import { useServer } from '@/components/panel/server-context';
+import { ServerLimitsCard } from '@/components/panel/server-limits-card';
 
 export default function ServerSettingsPage() {
   const { server, can, status } = useServer();
@@ -137,6 +138,8 @@ export default function ServerSettingsPage() {
           </div>
         </CardContent>
       </Card>
+
+      <ServerLimitsCard />
 
       <Card>
         <CardHeader>

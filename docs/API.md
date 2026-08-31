@@ -243,6 +243,22 @@ percent — `cpuLimit` is percent of one core, so `200` means two cores:
 against the template — an image the template does not offer is rejected, so a
 customer cannot name an arbitrary one.
 
+`PATCH /servers/:id` takes the same `limits`, partially — send only what
+changes. Raising memory is the fix for a server the host keeps killing, and it
+does not touch the server's files. Two rules apply:
+
+- **Only administrators.** A server's own owner may rename it and change
+  everything else on that endpoint, but never its limits — the point of a limit
+  is that whoever it constrains cannot move it. `servers.update` is not enough
+  either; it takes the panel owner or `admin.servers`.
+- **The node has to have the room.** The check excludes the server's own current
+  allocation, so raising a limit is not blocked by the space that server already
+  holds; asking for more than the node has left comes back 409
+  `INSUFFICIENT_NODE_CAPACITY`, naming the node.
+
+New limits are pushed to the node immediately but land in the container on its
+next start, so restart the server to apply them.
+
 Power actions:
 
 ```http
