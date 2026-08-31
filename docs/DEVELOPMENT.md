@@ -265,8 +265,14 @@ installation. Anything already exported wins, which is how you point them at a
 scratch database instead of the one you develop against:
 
 ```bash
-DATABASE_URL=postgresql://storm:storm@127.0.0.1:5432/storm_test pnpm test
+export DATABASE_URL=postgresql://storm:storm@127.0.0.1:5432/storm_test
+pnpm db:deploy && pnpm db:seed
+pnpm test
 ```
+
+A scratch database has to be migrated **and seeded**. Registration assigns the
+`CUSTOMER` role, so against an unseeded database the auth, permission and server
+suites all fail on a 404 that has nothing to do with what they are testing.
 
 They write and delete their own rows under a per-run namespace, but they are
 not read-only — do not aim them at a database with anything in it you want.

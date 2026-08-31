@@ -1,0 +1,175 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+# A second push to the same branch makes the first run's answer irrelevant.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  static:
+    name: Lint, format and types
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Typecheck needs the generated Prisma client and the built workspace
+      # packages the apps import by their published entry points.
+      - run: pnpm db:generate
+      - run: pnpm run build:packages
+
+      - run: pnpm format:check
+      - run: pnpm lint
+      - run: pnpm typecheck
+
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: storm
+          POSTGRES_PASSWORD: storm
+          POSTGRES_DB: storm_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U storm"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://storm:storm@127.0.0.1:5432/storm_test?schema=public
+      REDIS_URL: redis://127.0.0.1:6379
+      # Test-only values. The API refuses to start without them and checks the
+      # length, so these are as long as the real ones have to be — they protect
+      # nothing but an ephemeral runner.
+      JWT_SECRET: ci-jwt-secret-not-used-anywhere-else-0000
+      ENCRYPTION_KEY: ci-encryption-key-not-used-anywhere-0000
+      COOKIE_SECRET: ci-cookie-secret-not-used-anywhere-0000
+      APP_URL: http://localhost:3000
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm db:generate
+      - run: pnpm run build:packages
+
+      # The API suite drives the real schema, not a mock of it.
+      - run: pnpm db:deploy
+
+      # And the real reference data: registration assigns the CUSTOMER role,
+      # which does not exist until the seed creates it. Without this the auth,
+      # permission and server suites all fail on a 404 that has nothing to do
+      # with what they are testing. No admin account is created — ADMIN_* is
+      # unset, so the seed skips it.
+      - run: pnpm db:seed
+
+      - run: pnpm -r test
+
+  e2e:
+    name: End to end
+    runs-on: ubuntu-latest
+    # The full stack takes minutes to come up; there is no reason to spend that
+    # on a branch whose types or unit tests are already failing.
+    needs: [static, test]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Write an environment for the stack
+        run: |
+          cp .env.example .env
+          ADMIN_PASSWORD="$(openssl rand -hex 20)"
+          {
+            echo "POSTGRES_PASSWORD=$(openssl rand -hex 24)"
+            echo "JWT_SECRET=$(openssl rand -hex 32)"
+            echo "ENCRYPTION_KEY=$(openssl rand -hex 32)"
+            echo "COOKIE_SECRET=$(openssl rand -hex 32)"
+            echo "APP_URL=http://localhost:8080"
+            echo "HTTP_PORT=8080"
+            echo "ADMIN_EMAIL=ci@example.com"
+            echo "ADMIN_USERNAME=ciadmin"
+            echo "ADMIN_PASSWORD=${ADMIN_PASSWORD}"
+          } >> .env
+          # The browser tests sign in as the account the seed just created, so
+          # they need the same password rather than the fixture's default.
+          echo "::add-mask::${ADMIN_PASSWORD}"
+          echo "STORM_ADMIN_EMAIL=ci@example.com" >> "$GITHUB_ENV"
+          echo "STORM_ADMIN_PASSWORD=${ADMIN_PASSWORD}" >> "$GITHUB_ENV"
+
+      # This is the documented installation path. If it cannot bring the panel
+      # up from a clean checkout, neither can anyone following the README.
+      - name: Bring the stack up
+        run: docker compose up -d --build
+
+      - name: Wait for readiness
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:8080/ready > /dev/null; then
+              echo "ready after ${i}0s"; exit 0
+            fi
+            sleep 10
+          done
+          echo "The stack never became ready."
+          docker compose ps
+          docker compose logs --tail 200
+          exit 1
+
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - run: pnpm test:e2e
+        env:
+          STORM_BASE_URL: http://localhost:8080
+
+      - name: Collect logs on failure
+        if: failure()
+        run: docker compose logs --tail 400
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
