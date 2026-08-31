@@ -1,5 +1,16 @@
 import type { NodeStatus, ServerStatus } from '@storm/types';
 
+/**
+ * The panel is written in English, so its dates are too. Passing `undefined`
+ * here follows the browser instead, which puts "vor 12 Minuten" next to
+ * "Update available" on a German phone — half-translated is worse than either
+ * language. en-GB for the 24-hour clock: AM/PM has no place in a log.
+ *
+ * Only the language is pinned. Times still render in the reader's own zone,
+ * which is what makes "last seen" mean anything to them.
+ */
+export const LOCALE = 'en-GB';
+
 /* ------------------------------------------------------------------ sizes -- */
 
 const BYTE_UNITS = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB'];
@@ -26,7 +37,7 @@ export function formatPercent(value: number, decimals = 1): string {
 }
 
 export function formatNumber(value: number): string {
-  return new Intl.NumberFormat().format(value);
+  return new Intl.NumberFormat(LOCALE).format(value);
 }
 
 /* ------------------------------------------------------------------ times -- */
@@ -50,16 +61,14 @@ export function formatDate(value: string | Date | null | undefined): string {
   if (!value) return '—';
   const date = typeof value === 'string' ? new Date(value) : value;
   if (Number.isNaN(date.getTime())) return '—';
-  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(
-    date,
-  );
+  return new Intl.DateTimeFormat(LOCALE, { dateStyle: 'medium', timeStyle: 'short' }).format(date);
 }
 
 export function formatDateShort(value: string | Date | null | undefined): string {
   if (!value) return '—';
   const date = typeof value === 'string' ? new Date(value) : value;
   if (Number.isNaN(date.getTime())) return '—';
-  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(date);
+  return new Intl.DateTimeFormat(LOCALE, { dateStyle: 'medium' }).format(date);
 }
 
 export function formatRelative(value: string | Date | null | undefined): string {
@@ -69,7 +78,7 @@ export function formatRelative(value: string | Date | null | undefined): string 
 
   const seconds = Math.round((date.getTime() - Date.now()) / 1000);
   const absolute = Math.abs(seconds);
-  const formatter = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
+  const formatter = new Intl.RelativeTimeFormat(LOCALE, { numeric: 'auto' });
 
   if (absolute < 45) return formatter.format(Math.round(seconds), 'second');
   if (absolute < 2700) return formatter.format(Math.round(seconds / 60), 'minute');

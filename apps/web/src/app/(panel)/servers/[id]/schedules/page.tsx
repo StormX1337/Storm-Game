@@ -326,6 +326,8 @@ function ScheduleDialog({
     schedule?.cron ?? { minute: '0', hour: '4', dayOfMonth: '*', month: '*', dayOfWeek: '*' },
   );
   const [timezone, setTimezone] = React.useState(
+    // Deliberately the browser's zone and not the panel's pinned locale: "4am"
+    // has to mean 4am where the person setting it lives.
     schedule?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC',
   );
   const [onlyWhenOnline, setOnlyWhenOnline] = React.useState(schedule?.onlyWhenOnline ?? false);

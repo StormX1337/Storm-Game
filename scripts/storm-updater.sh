@@ -114,6 +114,9 @@ Requires=docker.service
 Type=simple
 WorkingDirectory=${REPO_DIR}
 Environment=STORM_CONTROL_DIR=${CONTROL_DIR}
+# systemd sets no HOME. update.sh puts its database dumps under it, so without
+# this the service and a manual root run would disagree about where backups go.
+Environment=HOME=/root
 ExecStart=${REPO_DIR}/scripts/storm-updater.sh
 Restart=always
 RestartSec=10

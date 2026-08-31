@@ -4,6 +4,7 @@ import * as React from 'react';
 import { ArrowDown, ChevronRight, Download, Eraser, Search, Wifi, WifiOff } from 'lucide-react';
 import { Button, Card, Input, cn, useToast } from '@storm/ui';
 import type { ServerStatus } from '@storm/types';
+import { LOCALE } from '@/lib/format';
 import type { ConsoleLine, SocketState } from '@/hooks/use-server-socket';
 
 /**
@@ -264,7 +265,7 @@ export function ServerConsole({
               <div key={line.id} className="flex gap-2 whitespace-pre-wrap break-all">
                 {showTimestamps ? (
                   <span className="shrink-0 select-none text-[#4b5263]">
-                    {new Date(line.at).toLocaleTimeString()}
+                    {new Date(line.at).toLocaleTimeString(LOCALE)}
                   </span>
                 ) : null}
                 <span

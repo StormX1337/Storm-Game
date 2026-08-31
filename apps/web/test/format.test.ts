@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { ServerStatus } from '@storm/types';
 import {
+  LOCALE,
   SERVER_STATUS_META,
   formatBytes,
+  formatDate,
+  formatDateShort,
   formatMib,
+  formatNumber,
+  formatRelative,
   formatUptime,
   humaniseEvent,
   initials,
@@ -110,5 +115,46 @@ describe('initials', () => {
 
   it('does not crash on an empty name', () => {
     expect(initials('   ')).toBe('??');
+  });
+});
+
+describe('language of dates and numbers', () => {
+  // These ran through the browser's locale, so a German phone rendered "vor 12
+  // Minuten" and "31.08.2026" inside an otherwise English panel. Half-English
+  // is worse than either language, and it is not something you notice unless
+  // you are testing on a device that is not set to English.
+  it("is English regardless of what the reader's device is set to", () => {
+    expect(LOCALE).toBe('en-GB');
+  });
+
+  it('says "ago" rather than "vor"', () => {
+    const twelveMinutesAgo = new Date(Date.now() - 12 * 60_000);
+    expect(formatRelative(twelveMinutesAgo)).toBe('12 minutes ago');
+
+    const inTwoHours = new Date(Date.now() + 2 * 3600_000);
+    expect(formatRelative(inTwoHours)).toBe('in 2 hours');
+  });
+
+  it('writes months as words, not as a number that reads differently elsewhere', () => {
+    // 08/09 is September in Berlin and August in Boston; "9 Aug" is neither.
+    const date = new Date('2026-08-09T12:00:00Z');
+    expect(formatDateShort(date)).toMatch(/Aug/);
+    expect(formatDateShort(date)).not.toMatch(/^\d+\.\d+\./);
+  });
+
+  it('keeps a 24-hour clock, because AM/PM has no place in a log', () => {
+    const evening = new Date('2026-08-09T18:30:00Z');
+    expect(formatDate(evening)).not.toMatch(/[AP]M/i);
+  });
+
+  it('groups numbers the English way', () => {
+    // 1.234.567 in German, and the panel shows these next to English labels.
+    expect(formatNumber(1234567)).toBe('1,234,567');
+  });
+
+  it('still answers when there is nothing to format', () => {
+    expect(formatRelative(null)).toBe('never');
+    expect(formatDate(null)).toBe('—');
+    expect(formatDate('not a date')).toBe('—');
   });
 });

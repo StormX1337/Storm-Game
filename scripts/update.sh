@@ -23,7 +23,11 @@ fail() { printf '  %s✖%s %s\n' "$RED" "$RESET" "$1" >&2; exit 1; }
 
 CHECK_ONLY=0
 BACKUP=1
-BACKUP_DIR="${STORM_BACKUP_DIR:-$HOME/storm-backups}"
+# systemd gives a service no HOME at all, and `set -u` turns that into a crash
+# before the first useful line — which is how the panel's update button failed
+# while running it by hand worked fine. /root is where the unit points, and the
+# fallback keeps any other HOME-less context (cron, a CI runner) working too.
+BACKUP_DIR="${STORM_BACKUP_DIR:-${HOME:-/root}/storm-backups}"
 KEEP_BACKUPS="${STORM_KEEP_BACKUPS:-10}"
 
 while [[ $# -gt 0 ]]; do

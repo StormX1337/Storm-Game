@@ -221,7 +221,14 @@ export default function UpdatesPage() {
                 </p>
               ) : null}
 
-              {!data.available.upToDate && data.available.checked ? (
+              {/*
+                While one is running, canApply is false and its reason is "an
+                update is already in progress" — which the panel would otherwise
+                render next to an invitation to go start one on the host. The
+                banner above already says what is happening; a second copy that
+                advises a colliding run does not help.
+              */}
+              {!data.available.upToDate && data.available.checked && !running ? (
                 data.canApply ? (
                   <Button
                     onClick={() => void onApply()}
@@ -237,9 +244,11 @@ export default function UpdatesPage() {
                       <Info className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
                       <span>{data.reason}</span>
                     </p>
-                    <p className="text-muted-foreground">Update from the host instead:</p>
+                    <p className="text-muted-foreground">
+                      Update from the host instead, in your Storm Panel checkout:
+                    </p>
                     <code className="block break-all rounded bg-background p-2 font-mono text-xs">
-                      cd /opt/storm-panel &amp;&amp; ./scripts/update.sh
+                      ./scripts/update.sh
                     </code>
                   </div>
                 )

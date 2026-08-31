@@ -14,6 +14,7 @@ import {
   YAxis,
 } from 'recharts';
 import { Card, CardHeader, CardTitle, cn } from '@storm/ui';
+import { LOCALE } from '@/lib/format';
 
 export interface ChartPoint {
   t: string;
@@ -66,7 +67,7 @@ export function ResourceChart({
   const formatTime = React.useCallback((value: string) => {
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return value;
-    return new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' }).format(date);
+    return new Intl.DateTimeFormat(LOCALE, { hour: '2-digit', minute: '2-digit' }).format(date);
   }, []);
 
   const body =
@@ -249,7 +250,7 @@ function ChartTooltip({
               />
               <span className="text-muted-foreground">{config?.label ?? entry.name}</span>
               <span className="ml-auto font-medium tabular-nums">
-                {config?.format ? config.format(value) : value.toLocaleString()}
+                {config?.format ? config.format(value) : value.toLocaleString(LOCALE)}
               </span>
             </div>
           );
