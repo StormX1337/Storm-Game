@@ -64,6 +64,14 @@ const CACHE_KEY = 'storm:update:latest';
 const CACHE_SECONDS = 900;
 const REQUEST_FILE = 'request.json';
 const STATUS_FILE = 'status.json';
+const HEARTBEAT_FILE = 'updater.json';
+
+/**
+ * How stale the updater's heartbeat may be before it counts as gone. It writes
+ * one every 15 seconds by default; six missed beats is a process that has died
+ * or a host that has stopped, not a slow one.
+ */
+const HEARTBEAT_MAX_AGE_MS = 90_000;
 
 export class UpdateService {
   constructor(private readonly app: FastifyInstance) {}
@@ -154,11 +162,43 @@ export class UpdateService {
       return { canApply: false, reason: `The updater directory ${dir} is not mounted.` };
     }
 
+    // Compose mounts the directory whether or not anyone installed an updater,
+    // so its existence proves nothing. Only a recent heartbeat does: without
+    // one, a click would write a request that nothing ever reads, and the panel
+    // would sit at "requested" forever looking broken.
+    const beat = await this.readHeartbeat(dir);
+    if (!beat) {
+      return {
+        canApply: false,
+        reason:
+          'No updater is connected. Install the host-side updater to apply updates from here — the panel has no access to Docker by design.',
+      };
+    }
+    if (Date.now() - beat > HEARTBEAT_MAX_AGE_MS) {
+      const minutes = Math.round((Date.now() - beat) / 60_000);
+      return {
+        canApply: false,
+        reason: `The updater last checked in ${minutes} minute(s) ago. Check it with: systemctl status storm-updater`,
+      };
+    }
+
     if (job && (job.state === 'requested' || job.state === 'running')) {
       return { canApply: false, reason: 'An update is already in progress.' };
     }
 
     return { canApply: true, reason: null };
+  }
+
+  /** When the host-side updater last said it was alive, or null. */
+  private async readHeartbeat(dir: string): Promise<number | null> {
+    try {
+      const raw = await fs.readFile(path.join(dir, HEARTBEAT_FILE), 'utf8');
+      const seenAt = (JSON.parse(raw) as { seenAt?: string }).seenAt;
+      const at = seenAt ? Date.parse(seenAt) : Number.NaN;
+      return Number.isFinite(at) ? at : null;
+    } catch {
+      return null;
+    }
   }
 
   /**

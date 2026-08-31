@@ -112,14 +112,16 @@ services:
       UPDATE_REPOSITORY: ${UPDATE_REPOSITORY:-StormX1337/Storm-Game}
       UPDATE_BRANCH: ${UPDATE_BRANCH:-main}
       UPDATE_CHECK_ENABLED: ${UPDATE_CHECK_ENABLED:-true}
-      UPDATE_CONTROL_DIR: ${UPDATE_CONTROL_DIR:-}
+      UPDATE_CONTROL_DIR: /var/lib/storm/control
     volumes:
       - backup-data:/var/lib/storm/backups
-      # Uncomment together with UPDATE_CONTROL_DIR to let the panel request an
-      # update. `scripts/storm-updater.sh --install` creates the directory with
-      # the ownership the API needs. Deliberately not on by default: it is the
-      # panel's only channel to anything on the host.
-      # - /var/lib/storm/control:/var/lib/storm/control
+      # The panel's only channel to anything on the host: it writes an update
+      # request here and the host-side updater picks it up. Mounted always, so
+      # installing the updater does not mean editing this file — but mounting a
+      # directory does not by itself enable anything. The panel offers the
+      # update button only while `scripts/storm-updater.sh` is running and
+      # writing its heartbeat here, and the API can write nothing outside it.
+      - ${STORM_CONTROL_DIR:-/var/lib/storm/control}:/var/lib/storm/control
     depends_on:
       postgres:
         condition: service_healthy

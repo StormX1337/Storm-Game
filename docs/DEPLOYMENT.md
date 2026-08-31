@@ -333,16 +333,28 @@ it. The panel can ask; only the host can execute.
 ```bash
 cd /opt/storm-panel
 sudo ./scripts/storm-updater.sh --install
+docker compose up -d api
 ```
 
-Then add to `.env`:
+That is the whole installation. Compose already mounts the control directory
+and already points the API at it, so there is nothing to edit — the restart is
+only so the API sees a directory that now exists and is writable. **Admin →
+Updates** offers the button within a few seconds.
 
-```dotenv
-UPDATE_CONTROL_DIR=/var/lib/storm/control
+Mounting that directory does not by itself enable anything. The updater writes
+a heartbeat into it every fifteen seconds, and the panel offers the button only
+while that heartbeat is fresh — so an uninstalled or stopped updater means the
+button stays off and says so, rather than writing a request nothing will ever
+read. If it stops later, the page names how long ago it was last seen and what
+to run:
+
+```bash
+systemctl status storm-updater
+journalctl -u storm-updater -f
 ```
 
-uncomment the matching volume on the `api` service in `docker-compose.yml`, and
-`docker compose up -d api`.
+`STORM_CONTROL_DIR` in `.env` moves the directory if `/var/lib/storm/control`
+does not suit the host.
 
 What the updater will and will not do:
 

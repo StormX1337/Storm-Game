@@ -20,6 +20,7 @@ CONTROL_DIR="${STORM_CONTROL_DIR:-/var/lib/storm/control}"
 INTERVAL="${STORM_UPDATER_INTERVAL:-15}"
 REQUEST="${CONTROL_DIR}/request.json"
 STATUS="${CONTROL_DIR}/status.json"
+HEARTBEAT="${CONTROL_DIR}/updater.json"
 
 log() { printf '%s storm-updater: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1"; }
 
@@ -29,21 +30,31 @@ json_field() {
   sed -n "s/.*\"$1\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p" "$2" | head -1
 }
 
+# Read out of the request once, by read_request, and held here — the request
+# file is deleted before the update runs, so re-reading it for the final status
+# would report an empty commit and an unknown job to the panel.
+JOB_ID="unknown"
+JOB_COMMIT=""
+JOB_BY=""
+JOB_AT=""
+
+read_request() {
+  JOB_ID="$(json_field id "$REQUEST" 2>/dev/null || echo 'unknown')"
+  JOB_COMMIT="$(json_field requestedCommit "$REQUEST" 2>/dev/null || echo '')"
+  JOB_BY="$(json_field requestedBy "$REQUEST" 2>/dev/null || echo '')"
+  JOB_AT="$(json_field requestedAt "$REQUEST" 2>/dev/null || echo '')"
+}
+
 write_status() {
   local state="$1" message="$2"
-  local commit requested_by requested_at id
-  commit="$(json_field requestedCommit "$REQUEST" 2>/dev/null || echo '')"
-  requested_by="$(json_field requestedBy "$REQUEST" 2>/dev/null || echo '')"
-  requested_at="$(json_field requestedAt "$REQUEST" 2>/dev/null || echo '')"
-  id="$(json_field id "$REQUEST" 2>/dev/null || echo 'unknown')"
 
   cat > "${STATUS}.tmp" <<JSON
 {
-  "id": "${id}",
+  "id": "${JOB_ID}",
   "state": "${state}",
-  "requestedCommit": "${commit}",
-  "requestedBy": "${requested_by}",
-  "requestedAt": "${requested_at}",
+  "requestedCommit": "${JOB_COMMIT}",
+  "requestedBy": "${JOB_BY}",
+  "requestedAt": "${JOB_AT}",
   "finishedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
   "message": "${message//\"/\'}"
 }
@@ -54,8 +65,8 @@ JSON
 process_request() {
   [[ -f "$REQUEST" ]] || return 0
 
-  local commit
-  commit="$(json_field requestedCommit "$REQUEST")"
+  read_request
+  local commit="$JOB_COMMIT"
 
   # Anything that is not a commit id is not something to hand to git.
   if [[ ! "$commit" =~ ^[0-9a-f]{7,40}$ ]]; then
@@ -65,7 +76,7 @@ process_request() {
     return 0
   fi
 
-  log "applying ${commit}, requested by $(json_field requestedBy "$REQUEST")"
+  log "applying ${commit}, requested by ${JOB_BY}"
   write_status running "Update in progress."
 
   # Take the request away first: a crash mid-update must not leave a request
@@ -121,14 +132,16 @@ UNIT
 
   systemctl daemon-reload
   systemctl enable --now storm-updater
-  echo "Installed. Add this to .env and restart the API:"
+
+  # Compose already mounts this directory and already points the API at it, so
+  # there is nothing to edit by hand — the API just has to be restarted to see
+  # a directory that now exists and is writable.
   echo
-  echo "  UPDATE_CONTROL_DIR=/var/lib/storm/control"
+  echo "Installed and running. One step left, from ${REPO_DIR}:"
   echo
-  echo "and mount it into the api service in docker-compose.yml:"
+  echo "  docker compose up -d api"
   echo
-  echo "  volumes:"
-  echo "    - ${CONTROL_DIR}:/var/lib/storm/control"
+  echo "Admin -> Updates will then offer the button."
 }
 
 case "${1:-}" in
@@ -139,9 +152,27 @@ case "${1:-}" in
   *)         echo "Unknown option: $1" >&2; exit 1 ;;
 esac
 
+# The panel decides whether to offer the update button by whether this file is
+# fresh. A mounted directory proves nothing — Docker creates one whether or not
+# anybody installed an updater — so the signal has to come from a process that
+# is actually running.
+write_heartbeat() {
+  cat > "${HEARTBEAT}.tmp" <<JSON
+{
+  "seenAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "interval": ${INTERVAL},
+  "repository": "${REPO_DIR}",
+  "pid": $$
+}
+JSON
+  mv "${HEARTBEAT}.tmp" "$HEARTBEAT"
+}
+
 mkdir -p "$CONTROL_DIR"
 log "watching ${CONTROL_DIR} every ${INTERVAL}s"
+trap 'rm -f "$HEARTBEAT"; exit 0' TERM INT
 while true; do
+  write_heartbeat
   process_request
   sleep "$INTERVAL"
 done
