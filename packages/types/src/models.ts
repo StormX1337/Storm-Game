@@ -107,7 +107,6 @@ export interface ServerLimits {
   diskLimit: number;
   swapLimit: number;
   ioWeight: number;
-  networkLimitMbps: number;
   pidsLimit: number;
   oomKill: boolean;
 }

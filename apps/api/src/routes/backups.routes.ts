@@ -232,6 +232,13 @@ export default async function backupRoutes(app: FastifyInstance): Promise<void> 
         throw conflict('Stop the server before restoring a backup');
       }
 
+      // A truncating restore empties the directory before it writes, so for a
+      // server that is over its limit it is a way out rather than further in.
+      // Only a restore that lands on top of what is already there is refused.
+      if (!input.truncate) {
+        await app.servers.assertDiskWithinLimit(access.server);
+      }
+
       await app.queues.enqueueRestore(backup.id, input.truncate, user.id);
       await app.audit.activity(request, {
         serverId: access.server.id,

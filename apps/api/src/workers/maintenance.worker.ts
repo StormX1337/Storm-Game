@@ -128,11 +128,23 @@ async function reconcileNodeHealth(app: FastifyInstance): Promise<void> {
   }
 }
 
-async function applyBackupRetention(app: FastifyInstance): Promise<void> {
-  const storages = await app.prisma.backupStorage.findMany({ where: { retentionDays: { gt: 0 } } });
+/** Exported so a test can drive it directly; the worker is its only caller. */
+export async function applyBackupRetention(app: FastifyInstance): Promise<void> {
+  // Two settings looked like they controlled this and only one did. Admin →
+  // Settings → Backups → Retention had no reader at all, so an administrator
+  // could set thirty days there and watch backups accumulate forever, while
+  // the retention that actually ran lived on each storage. It is now the
+  // panel-wide default: a storage with its own number keeps it, one left at
+  // zero follows the panel.
+  const fallback = (await app.settings.read()).backupRetentionDays;
+  const storages = await app.prisma.backupStorage.findMany();
 
   for (const storage of storages) {
-    const cutoff = new Date(Date.now() - storage.retentionDays * 86400 * 1000);
+    const retentionDays = storage.retentionDays > 0 ? storage.retentionDays : fallback;
+    // Zero on both means keep forever, which is what the settings page says.
+    if (retentionDays <= 0) continue;
+
+    const cutoff = new Date(Date.now() - retentionDays * 86400 * 1000);
     const expired = await app.prisma.backup.findMany({
       where: {
         storageId: storage.id,

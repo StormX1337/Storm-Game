@@ -145,6 +145,7 @@ export default async function fileRoutes(app: FastifyInstance): Promise<void> {
       const input = body(request, fileWriteSchema);
       const access = await app.serverAccess.require(user, id, Permission.SERVERS_FILES_WRITE);
       ServerAccessService.assertNotSuspended(access);
+      await app.servers.assertDiskWithinLimit(access.server);
 
       await app.agents.request(
         access.server.node,
@@ -173,6 +174,7 @@ export default async function fileRoutes(app: FastifyInstance): Promise<void> {
       const { id } = params(request, idParam);
       const access = await app.serverAccess.require(user, id, Permission.SERVERS_FILES_WRITE);
       ServerAccessService.assertNotSuspended(access);
+      await app.servers.assertDiskWithinLimit(access.server);
 
       if (!request.isMultipart()) throw badRequest('Send the file as multipart/form-data');
 
@@ -244,6 +246,7 @@ export default async function fileRoutes(app: FastifyInstance): Promise<void> {
     const input = body(request, fileCopySchema);
     const access = await app.serverAccess.require(user, id, Permission.SERVERS_FILES_WRITE);
     ServerAccessService.assertNotSuspended(access);
+    await app.servers.assertDiskWithinLimit(access.server);
 
     await app.agents.request(
       access.server.node,
@@ -318,6 +321,7 @@ export default async function fileRoutes(app: FastifyInstance): Promise<void> {
       const input = body(request, fileCompressSchema);
       const access = await app.serverAccess.require(user, id, Permission.SERVERS_FILES_WRITE);
       ServerAccessService.assertNotSuspended(access);
+      await app.servers.assertDiskWithinLimit(access.server);
 
       const result = await app.agents.request<{ archive: string }>(
         access.server.node,
@@ -350,6 +354,7 @@ export default async function fileRoutes(app: FastifyInstance): Promise<void> {
       const input = body(request, fileDecompressSchema);
       const access = await app.serverAccess.require(user, id, Permission.SERVERS_FILES_WRITE);
       ServerAccessService.assertNotSuspended(access);
+      await app.servers.assertDiskWithinLimit(access.server);
 
       await app.agents.request(
         access.server.node,

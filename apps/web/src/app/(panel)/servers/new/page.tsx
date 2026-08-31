@@ -65,7 +65,6 @@ export default function CreateServerPage() {
     diskLimit: 10240,
     swapLimit: 0,
     ioWeight: 500,
-    networkLimitMbps: 0,
     pidsLimit: 512,
     oomKill: true,
   });

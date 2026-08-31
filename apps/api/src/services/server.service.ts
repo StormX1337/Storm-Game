@@ -116,7 +116,6 @@ export class ServerService {
           diskLimit: input.limits.diskLimit,
           swapLimit: input.limits.swapLimit,
           ioWeight: input.limits.ioWeight,
-          networkLimitMbps: input.limits.networkLimitMbps,
           pidsLimit: input.limits.pidsLimit,
           oomKill: input.limits.oomKill,
           sftpUsername,
@@ -310,6 +309,49 @@ export class ServerService {
     }
   }
 
+  /**
+   * Refuses an operation that would grow a server already at its disk limit.
+   *
+   * Nothing else enforces this. `diskLimit` reaches the node agent, which
+   * validates it and drops it: Docker's own quota (`StorageOpt`) needs an
+   * xfs or btrfs backing filesystem with project quotas turned on, so it
+   * cannot be set unconditionally, and the agent has no other ceiling. So the
+   * panel enforces the paths it controls — uploads, writes, copies, archive
+   * extraction, restores and starting the server — and a customer who was
+   * sold 10 GiB can no longer quietly fill the node through the file manager.
+   *
+   * What this does not do: stop the game itself writing inside the container.
+   * That needs a filesystem quota on the host, which is a deployment
+   * decision rather than a setting — DEPLOYMENT.md says how.
+   *
+   * Usage comes from the last stats sample rather than a fresh measurement:
+   * walking a multi-gigabyte directory on every upload would cost more than
+   * the overshoot it prevents. So this stops sustained overuse, not the
+   * instant of crossing the line.
+   */
+  async assertDiskWithinLimit(server: { id: string; diskLimit: number }): Promise<void> {
+    if (server.diskLimit <= 0) return; // 0 means unlimited, as everywhere else.
+
+    const latest = await this.prisma.serverStat.findFirst({
+      where: { serverId: server.id },
+      orderBy: { createdAt: 'desc' },
+      select: { diskBytes: true },
+    });
+    // No sample yet — a server that has never reported cannot be shown to be
+    // over, and refusing here would block the first upload to a new server.
+    if (!latest) return;
+
+    const usedMb = Math.floor(Number(latest.diskBytes) / (1024 * 1024));
+    if (usedMb < server.diskLimit) return;
+
+    throw new AppError(
+      409,
+      ErrorCode.RESOURCE_LIMIT_REACHED,
+      `This server is using ${usedMb} MiB of its ${server.diskLimit} MiB of disk. ` +
+        'Delete some files, or ask an administrator for more space.',
+    );
+  }
+
   /* ----------------------------------------------------- environment -- */
 
   /**
@@ -386,7 +428,6 @@ export class ServerService {
         diskMb: server.diskLimit,
         ioWeight: server.ioWeight,
         pidsLimit: server.pidsLimit,
-        networkMbps: server.networkLimitMbps,
         oomKill: server.oomKill,
       },
       ports: server.allocations.map((allocation) => ({

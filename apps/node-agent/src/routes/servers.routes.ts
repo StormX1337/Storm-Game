@@ -20,7 +20,6 @@ const limitsSchema = z.object({
   diskMb: z.number().int().min(0),
   ioWeight: z.number().int().min(10).max(1000),
   pidsLimit: z.number().int().min(16).max(65535),
-  networkMbps: z.number().int().min(0),
   oomKill: z.boolean(),
 });
 

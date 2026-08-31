@@ -436,7 +436,6 @@ model Server {
   diskLimit        Int     @default(10240) // MiB
   swapLimit        Int     @default(0) // MiB, -1 = unlimited
   ioWeight         Int     @default(500)
-  networkLimitMbps Int     @default(0)
   pidsLimit        Int     @default(512)
   oomKill          Boolean @default(true)
   cpuPinning       String?

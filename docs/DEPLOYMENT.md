@@ -110,6 +110,36 @@ you like, but it is rarely the bottleneck.
 
 ---
 
+## Disk quotas on a node
+
+A server's disk limit is enforced by the panel, not by the container. Every
+route the panel controls — uploads, writes, copies, archive extraction,
+non-truncating restores and starting the server — is refused once a server is at
+or over its limit. A server writing from **inside** its own container is not
+covered by that, because Docker's own quota needs a filesystem the host may not
+have.
+
+For a node where customers can reach a console, back the limit with a real
+filesystem quota. Docker's `StorageOpt` works when the data directory sits on
+xfs with project quotas, or on btrfs:
+
+```bash
+# xfs, at mount time
+mount -o pquota /dev/sdb1 /var/lib/storm
+
+# confirm the driver can use it
+docker info --format '{{.Driver}} {{.DriverStatus}}'
+```
+
+Without it, the panel's own enforcement is still the difference between a
+customer filling the node through the file manager and not. It is a ceiling on
+the paths people actually use, not a guarantee against a determined process.
+
+Bandwidth is not limited at all. There is no setting for it, deliberately —
+shaping needs a `tc` qdisc per container and `NET_ADMIN` on the host, so it
+belongs to the node's own networking rather than to a number on a server. Use
+the host's traffic control or the provider's if you need it.
+
 ## Scaling nodes
 
 Add a node whenever an existing one passes roughly 80% of memory or disk. **Do

@@ -337,7 +337,7 @@ export default function AdminSettingsPage() {
         <CardContent>
           <Field
             label="Retention (days)"
-            hint="Automatic backups older than this are pruned. Zero keeps them forever. Locked backups are never pruned."
+            hint="The default for every backup storage that has not set its own. Backups older than this are pruned; zero keeps them forever, and a locked backup is never pruned whatever this says."
           >
             <Input
               type="number"

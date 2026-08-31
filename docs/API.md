@@ -259,6 +259,21 @@ does not touch the server's files. Two rules apply:
 New limits are pushed to the node immediately but land in the container on its
 next start, so restart the server to apply them.
 
+**The disk limit is enforced by the panel, not by the container.** Docker's own
+quota needs an xfs or btrfs filesystem with project quotas enabled, which most
+hosts are not running, so the node agent cannot set one unconditionally. The
+panel therefore refuses the operations it controls once a server is at or over
+its limit — writing a file, uploading, copying, compressing, extracting, a
+restore that does not truncate, and starting the server — with 409
+`RESOURCE_LIMIT_REACHED` naming both numbers.
+
+What stays open is deliberate: stopping, deleting files, and a truncating
+restore are how a customer gets back under, and an administrator can always
+raise the limit. Usage comes from the last stats sample rather than a fresh
+measurement, so this stops sustained overuse rather than the instant of
+crossing. A server writing from inside its own container is not covered — that
+needs a filesystem quota on the host, which DEPLOYMENT.md covers.
+
 Power actions:
 
 ```http

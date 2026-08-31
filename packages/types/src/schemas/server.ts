@@ -20,7 +20,6 @@ export const serverLimitsSchema = z.object({
     .max(1024 * 1024)
     .default(0),
   ioWeight: z.number().int().min(10).max(1000).default(500),
-  networkLimitMbps: z.number().int().min(0).max(100000).default(0),
   pidsLimit: z.number().int().min(16).max(4096).default(512),
   oomKill: z.boolean().default(true),
 });

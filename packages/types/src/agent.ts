@@ -83,7 +83,6 @@ export interface AgentServerSpec {
     diskMb: number;
     ioWeight: number; // 10..1000
     pidsLimit: number;
-    networkMbps: number; // 0 = unlimited
     oomKill: boolean;
   };
   ports: AgentPortBinding[];

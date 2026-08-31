@@ -131,7 +131,6 @@ export function toServerSummary(server: Row): ServerSummary {
       diskLimit: server.diskLimit,
       swapLimit: server.swapLimit,
       ioWeight: server.ioWeight,
-      networkLimitMbps: server.networkLimitMbps,
       pidsLimit: server.pidsLimit,
       oomKill: server.oomKill,
     },

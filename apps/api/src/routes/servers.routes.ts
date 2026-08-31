@@ -283,6 +283,15 @@ export default async function serverRoutes(app: FastifyInstance): Promise<void> 
       ServerAccessService.assertNotSuspended(access);
       ServerAccessService.assertInstalled(access);
 
+      // Bringing a server up is the one power action that lets it write more,
+      // so a server already over its disk limit does not start. Stopping and
+      // killing stay open, and so does deleting files — the way out is never
+      // closed off. Administrators are not exempt: they hold the faster
+      // remedy, which is to raise the limit on the settings page.
+      if (action === 'start' || action === 'restart') {
+        await app.servers.assertDiskWithinLimit(access.server);
+      }
+
       // A person starting or restarting it is saying "try again", so the
       // automatic-restart budget starts over. Auto-restart calls sendPower
       // directly and does not come through here, so it cannot clear its own.
