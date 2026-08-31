@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname, useParams } from 'next/navigation';
 import { AlertTriangle, ArrowLeft, Copy, Loader2 } from 'lucide-react';
 import { Badge, Button, Card, ScrollArea, cn, useToast } from '@storm/ui';
-import { SERVER_TABS } from '@/components/panel/sidebar';
+import { SERVER_TABS, SERVER_TABS_NAV_CLASS } from '@/components/panel/sidebar';
 import { ServerProvider, useServerQuery } from '@/components/panel/server-context';
 import { ServerStatusBadge } from '@/components/panel/stats';
 import { PowerControls } from '@/components/panel/power-controls';
@@ -127,8 +127,19 @@ export default function ServerLayout({ children }: { children: React.ReactNode }
           </div>
         ) : null}
 
+        {/*
+          Twelve tabs do not fit a phone. Held on one line they scrolled
+          sideways, which hid eight of them behind a gesture with nothing on
+          screen to suggest it existed — Settings, where the reinstall lives,
+          was simply unreachable.
+
+          Wrapping instead needs no breakpoint: they sit on one line wherever
+          they fit and fall onto a second where they do not, so there is no
+          width at which some are off screen. A guessed breakpoint gets this
+          wrong at exactly the width it was set to.
+        */}
         <ScrollArea className="w-full border-b border-border">
-          <nav className="flex min-w-max gap-1 pb-px" aria-label="Server sections">
+          <nav className={SERVER_TABS_NAV_CLASS} aria-label="Server sections">
             {SERVER_TABS.map((tab) => {
               const href = tab.segment ? `${base}/${tab.segment}` : base;
               const active = tab.segment ? pathname.startsWith(href) : pathname === base;

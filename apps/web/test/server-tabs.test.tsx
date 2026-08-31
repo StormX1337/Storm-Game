@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { render } from '@testing-library/react';
-import { SERVER_TABS } from '@/components/panel/sidebar';
+import { SERVER_TABS, SERVER_TABS_NAV_CLASS } from '@/components/panel/sidebar';
 
 /**
  * Each tab is a route segment typed by hand next to a directory named the same
@@ -43,5 +43,37 @@ describe('SERVER_TABS', () => {
       expect(container.querySelector('svg'), `${tab.label} has no icon`).not.toBeNull();
       unmount();
     }
+  });
+});
+
+describe('reaching every tab', () => {
+  // Twelve tabs held on one line scrolled sideways, and on a phone the four
+  // that fit ended flush at the screen edge — so Settings, and the reinstall
+  // it holds, could not be found at all. Wrapping is what makes them all
+  // reachable, and `min-w-max` is what silently takes that away.
+  it('does not force the tabs onto a single line', () => {
+    expect(SERVER_TABS_NAV_CLASS).toContain('flex-wrap');
+    // Either of these puts the row back on one line, and the tabs past the
+    // screen edge back out of reach.
+    expect(SERVER_TABS_NAV_CLASS).not.toMatch(/min-w-max/);
+    expect(SERVER_TABS_NAV_CLASS).not.toMatch(/flex-nowrap/);
+  });
+
+  it('offers every section the panel has', () => {
+    // A tab missing here is a page with no way to reach it.
+    expect(SERVER_TABS.map((tab) => tab.segment)).toEqual([
+      '',
+      'console',
+      'files',
+      'backups',
+      'schedules',
+      'databases',
+      'network',
+      'sftp',
+      'subusers',
+      'startup',
+      'activity',
+      'settings',
+    ]);
   });
 });

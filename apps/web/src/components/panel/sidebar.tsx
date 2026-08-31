@@ -90,6 +90,14 @@ const SECTIONS: NavSection[] = [
 ];
 
 /** Server-scoped links, shown while a server is open. */
+/**
+ * How the server tab row lays out. Wrapping is what makes all twelve reachable:
+ * held on one line they scroll sideways, and on a phone the four that fit end
+ * flush at the screen edge, so the rest cannot be found. No breakpoint — they
+ * sit on one line wherever they fit.
+ */
+export const SERVER_TABS_NAV_CLASS = 'flex flex-wrap gap-1 pb-px';
+
 export const SERVER_TABS = [
   { segment: '', label: 'Overview', icon: Gauge },
   { segment: 'console', label: 'Console', icon: Activity },

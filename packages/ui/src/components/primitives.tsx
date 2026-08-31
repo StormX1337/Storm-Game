@@ -387,6 +387,18 @@ export const ScrollArea = React.forwardRef<
     >
       <ScrollAreaPrimitive.Thumb className="relative flex-1 rounded-full bg-border" />
     </ScrollAreaPrimitive.Scrollbar>
+    {/*
+      A horizontal one too. Without it a row that overflows sideways scrolls
+      but shows nothing to say so — which is how eight of the twelve server
+      tabs became unreachable on a phone: the visible four ended flush at the
+      screen edge and looked like the whole set.
+    */}
+    <ScrollAreaPrimitive.Scrollbar
+      orientation="horizontal"
+      className="flex h-2.5 flex-col touch-none select-none p-0.5 transition-colors"
+    >
+      <ScrollAreaPrimitive.Thumb className="relative flex-1 rounded-full bg-border" />
+    </ScrollAreaPrimitive.Scrollbar>
     <ScrollAreaPrimitive.Corner />
   </ScrollAreaPrimitive.Root>
 ));
