@@ -166,6 +166,9 @@ export default async function internalRoutes(app: FastifyInstance): Promise<void
             'SUSPENDED',
             'REINSTALLING',
           ]),
+          // Why it crashed, when the agent could tell. Optional: an older agent
+          // reporting against a newer panel simply omits it.
+          reason: z.enum(['oom']).optional(),
         }),
       );
 
@@ -179,17 +182,25 @@ export default async function internalRoutes(app: FastifyInstance): Promise<void
       await app.servers.updateStatus(server.id, input.status as ServerStatus);
 
       if (input.status === ServerStatus.CRASHED) {
+        // Out of memory is the common way a game server dies, and the only
+        // crash the owner can fix from the panel — so it says so, with the
+        // limit it hit, rather than "stopped unexpectedly".
+        const outOfMemory = input.reason === 'oom';
+
         await app.notifications.push(server.ownerId, {
           type: NotificationType.SERVER_CRASHED,
-          title: 'Server crashed',
-          message: `${server.name} stopped unexpectedly.`,
+          title: outOfMemory ? 'Server ran out of memory' : 'Server crashed',
+          message: outOfMemory
+            ? `${server.name} was killed for exceeding its ${server.memoryLimit} MiB limit. Raise it under Settings.`
+            : `${server.name} stopped unexpectedly.`,
           level: 'ERROR',
-          link: `/servers/${server.shortId}`,
+          link: `/servers/${server.shortId}${outOfMemory ? '/settings' : ''}`,
         });
         await app.webhooks.dispatch(WebhookEvent.SERVER_CRASHED, {
           serverId: server.id,
           uuid: server.uuid,
           name: server.name,
+          reason: outOfMemory ? 'out_of_memory' : 'exited',
         });
       }
 

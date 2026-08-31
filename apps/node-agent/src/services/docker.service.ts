@@ -111,16 +111,41 @@ export class DockerService {
   }
 
   async status(uuid: string): Promise<ServerStatus> {
+    return (await this.statusWithReason(uuid)).status;
+  }
+
+  /**
+   * The status and, when it crashed, why.
+   *
+   * Docker distinguishes "the process failed" from "the kernel killed it for
+   * exceeding its memory limit", and the second is by far the most common way
+   * a game server dies. Collapsing both into CRASHED left the panel saying
+   * "stopped unexpectedly" and the console showing a bare "Killed" — true, and
+   * of no use to someone who needs to be told to raise the memory.
+   */
+  async statusWithReason(
+    uuid: string,
+  ): Promise<{ status: ServerStatus; oomKilled: boolean; exitCode: number | null }> {
     const info = await this.inspect(uuid);
-    if (!info) return ServerStatus.OFFLINE;
+    if (!info) return { status: ServerStatus.OFFLINE, oomKilled: false, exitCode: null };
 
     const state = info.State;
-    if (state.Restarting) return ServerStatus.STARTING;
-    if (state.Running) return ServerStatus.ONLINE;
-    if (state.OOMKilled || (state.ExitCode !== 0 && state.FinishedAt !== '0001-01-01T00:00:00Z')) {
-      return ServerStatus.CRASHED;
+    if (state.Restarting) {
+      return { status: ServerStatus.STARTING, oomKilled: false, exitCode: null };
     }
-    return ServerStatus.OFFLINE;
+    if (state.Running) return { status: ServerStatus.ONLINE, oomKilled: false, exitCode: null };
+
+    const exited = state.ExitCode !== 0 && state.FinishedAt !== '0001-01-01T00:00:00Z';
+    if (state.OOMKilled || exited) {
+      return {
+        status: ServerStatus.CRASHED,
+        // Exit 137 is SIGKILL, which is what the kernel's OOM killer sends.
+        // Docker does not always set OOMKilled on cgroup v2, so take either.
+        oomKilled: Boolean(state.OOMKilled) || state.ExitCode === 137,
+        exitCode: state.ExitCode ?? null,
+      };
+    }
+    return { status: ServerStatus.OFFLINE, oomKilled: false, exitCode: state.ExitCode ?? null };
   }
 
   /* ------------------------------------------------------------ images -- */

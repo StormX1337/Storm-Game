@@ -6,7 +6,8 @@ import type { DockerService } from './docker.service.js';
 
 export interface ConsoleEvents {
   line: (uuid: string, line: string, timestamp: string) => void;
-  status: (uuid: string, status: ServerStatus) => void;
+  /** `reason` distinguishes an out-of-memory kill from any other crash. */
+  status: (uuid: string, status: ServerStatus, reason?: 'oom') => void;
   stats: (uuid: string, stats: AgentServerStats) => void;
 }
 
@@ -152,8 +153,20 @@ export class ConsoleService extends EventEmitter {
   }
 
   async emitCurrentStatus(uuid: string): Promise<void> {
-    const status = await this.docker.status(uuid).catch(() => ServerStatus.OFFLINE);
-    this.emit('status', uuid, status);
+    const result = await this.docker
+      .statusWithReason(uuid)
+      .catch(() => ({ status: ServerStatus.OFFLINE, oomKilled: false, exitCode: null }));
+
+    // The console is where someone is looking when this happens, and "Killed"
+    // on its own is a dead end. Say what killed it and what to do.
+    if (result.oomKilled) {
+      this.broadcast(
+        uuid,
+        '[storm] The server was killed for exceeding its memory limit. Raise it under Settings, or give the server less to do.',
+      );
+    }
+
+    this.emit('status', uuid, result.status, result.oomKilled ? 'oom' : undefined);
   }
 
   /** Pushes a line the agent itself produced (install output, notices). */

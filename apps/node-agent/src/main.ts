@@ -177,8 +177,8 @@ async function main(): Promise<void> {
 
   /* ------------------------------------------------- panel reporting -- */
 
-  consoleService.on('status', (uuid: string, status: ServerStatus) => {
-    void panel.reportStatus(uuid, status);
+  consoleService.on('status', (uuid: string, status: ServerStatus, reason?: 'oom') => {
+    void panel.reportStatus(uuid, status, reason);
   });
   /**
    * Disk usage means walking the server directory, which is far too expensive

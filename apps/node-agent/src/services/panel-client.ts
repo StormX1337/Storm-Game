@@ -76,8 +76,8 @@ export class PanelClient {
     await this.post('/heartbeat', payload);
   }
 
-  async reportStatus(uuid: string, status: ServerStatus): Promise<void> {
-    await this.post(`/servers/${uuid}/state`, { status });
+  async reportStatus(uuid: string, status: ServerStatus, reason?: 'oom'): Promise<void> {
+    await this.post(`/servers/${uuid}/state`, { status, ...(reason ? { reason } : {}) });
   }
 
   async reportStats(uuid: string, stats: Record<string, unknown>): Promise<void> {
