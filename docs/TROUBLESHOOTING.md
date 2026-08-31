@@ -6,6 +6,7 @@ second thing you try, after you have stopped guessing.
 
 - [First moves](#first-moves)
 - [The panel will not start](#the-panel-will-not-start)
+- [I pulled, but the panel looks the same](#i-pulled-but-the-panel-looks-the-same)
 - [Cannot sign in](#cannot-sign-in)
 - [A node never comes online](#a-node-never-comes-online)
 - [A server will not install](#a-server-will-not-install)
@@ -114,6 +115,44 @@ away.
 Check the browser console. A 502 from `/api` means nginx cannot reach the API —
 `docker compose ps api`. Stale build output after an upgrade:
 `docker compose build --no-cache web`.
+
+---
+
+## I pulled, but the panel looks the same
+
+Almost always this: **`git pull` updates the files on disk, and the panel is
+served from Docker images.** The frontend is compiled into the image by `next
+build` when the image is built, so until you rebuild, the browser is showing the
+code from whenever that image was made — however current the checkout is.
+
+```bash
+docker compose exec api printenv STORM_COMMIT   # what is actually running
+git rev-parse HEAD                              # what is checked out
+```
+
+Different values, or an empty first one, mean a rebuild is due:
+
+```bash
+./scripts/update.sh
+```
+
+It handles this case explicitly — a current checkout with stale images makes it
+rebuild rather than report nothing to do. By hand:
+
+```bash
+export STORM_COMMIT=$(git rev-parse HEAD)
+export STORM_BUILT_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+docker compose build && docker compose up -d
+```
+
+If the values match and the page is still old, it is the browser: hard-reload,
+or open the panel in a private window. Next fingerprints its assets, so a stale
+`/_next/static` file is unusual — but a service worker or an aggressive
+Cloudflare rule can still hold an old HTML shell. Purge the Cloudflare cache for
+the hostname before suspecting the panel.
+
+Two things that are **not** the cause: the database (no migration changes what
+the sidebar renders) and the API container (it serves data, not pages).
 
 ---
 

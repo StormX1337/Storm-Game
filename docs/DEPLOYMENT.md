@@ -272,6 +272,32 @@ docker compose ps
 curl -s https://panel.example.com/api/health
 ```
 
+`scripts/update.sh` does all four steps, keeps ten dumps, and refuses to
+continue if the checkout has local edits.
+
+**`git pull` on its own changes nothing you can see.** The panel is served from
+images, and the frontend is compiled into them by `next build` at image build
+time — so a checkout at the newest commit and a browser showing last month's
+sidebar is the normal outcome of pulling without rebuilding, not a caching
+problem. `docker compose build` is the step that matters. `update.sh` notices
+this case: if the source is current but the running API reports a different
+`STORM_COMMIT`, it rebuilds rather than reporting nothing to do.
+
+To see which commit is actually serving customers:
+
+```bash
+docker compose exec api printenv STORM_COMMIT
+```
+
+Empty or `unknown` means the image was built without the build argument — pass
+it, or the **Admin → Updates** page cannot tell which version it runs:
+
+```bash
+export STORM_COMMIT=$(git rev-parse HEAD)
+export STORM_BUILT_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+docker compose build
+```
+
 Migrations run in the `migrate` service before the API starts. They are
 forward-only: to go back, restore the dump.
 

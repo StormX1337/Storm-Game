@@ -54,12 +54,28 @@ git fetch --quiet origin "$BRANCH" || fail "Could not reach the remote."
 CURRENT="$(git rev-parse HEAD)"
 TARGET="$(git rev-parse "origin/${BRANCH}")"
 
-if [[ "$CURRENT" == "$TARGET" ]]; then
-  ok "Already on the latest commit ($(git rev-parse --short HEAD)) — nothing to do."
-  exit 0
-fi
+# What the running API was actually built from. The panel serves from images,
+# not from the files on disk, so a checkout at the latest commit tells you
+# nothing about what customers are looking at.
+RUNNING="$(docker compose exec -T api printenv STORM_COMMIT 2>/dev/null | tr -d '\r' || true)"
 
-printf '%s\n' "$(git log --oneline --no-decorate "${CURRENT}..${TARGET}" | sed 's/^/  /')"
+if [[ "$CURRENT" == "$TARGET" ]]; then
+  if [[ -z "$RUNNING" ]]; then
+    warn "The API is not running, so its version is unknown."
+  elif [[ "$RUNNING" == "$CURRENT" ]]; then
+    ok "Already on the latest commit ($(git rev-parse --short HEAD)) — nothing to do."
+    exit 0
+  else
+    # The usual way to arrive here: someone ran `git pull` by hand, saw no
+    # change in the browser, and is now wondering why. The source moved; the
+    # images did not.
+    warn "The checkout is current, but the running panel was built from ${RUNNING:0:7}."
+    [[ "$CHECK_ONLY" == "1" ]] ||
+      warn "Rebuilding so what is deployed matches what is checked out."
+  fi
+else
+  printf '%s\n' "$(git log --oneline --no-decorate "${CURRENT}..${TARGET}" | sed 's/^/  /')"
+fi
 
 # A deployment that has been edited in place cannot be fast-forwarded, and
 # stashing someone's port change without telling them is worse than stopping.
@@ -71,7 +87,11 @@ fi
 
 if [[ "$CHECK_ONLY" == "1" ]]; then
   printf '\n'
-  ok "Check only — nothing was changed."
+  if [[ "$CURRENT" == "$TARGET" ]]; then
+    ok "Check only — a rebuild would bring the running images up to the checkout."
+  else
+    ok "Check only — nothing was changed."
+  fi
   exit 0
 fi
 
@@ -111,9 +131,13 @@ fi
 
 # ---------------------------------------------------------------- the update --
 
-step "Updating to $(git rev-parse --short "$TARGET")"
-git merge --ff-only "origin/${BRANCH}" >/dev/null || fail "Could not fast-forward. Resolve by hand."
-ok "Source updated"
+if [[ "$CURRENT" == "$TARGET" ]]; then
+  step "Rebuilding $(git rev-parse --short HEAD)"
+else
+  step "Updating to $(git rev-parse --short "$TARGET")"
+  git merge --ff-only "origin/${BRANCH}" >/dev/null || fail "Could not fast-forward. Resolve by hand."
+  ok "Source updated"
+fi
 
 step "Building images"
 compose build || fail "The build failed. The old containers are still running."
