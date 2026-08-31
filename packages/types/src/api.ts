@@ -62,6 +62,7 @@ export const ErrorCode = {
   STORAGE_ERROR: 'STORAGE_ERROR',
   INTERNAL_ERROR: 'INTERNAL_ERROR',
   SERVICE_UNAVAILABLE: 'SERVICE_UNAVAILABLE',
+  MAINTENANCE_MODE: 'MAINTENANCE_MODE',
 } as const;
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];
 

@@ -3,10 +3,11 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { UserPlus } from 'lucide-react';
+import { Lock, UserPlus } from 'lucide-react';
 import { Button, Field, Input, useToast } from '@storm/ui';
 import { ApiError, api } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
+import { usePanelSettings } from '@/lib/panel-settings';
 
 /** Length is the only strength signal worth showing; the rest is theatre. */
 function strengthOf(password: string): { score: number; label: string; tone: string } {
@@ -27,6 +28,7 @@ export default function RegisterPage() {
   const router = useRouter();
   const toast = useToast();
   const { refresh } = useAuth();
+  const { panelName, registrationEnabled, supportEmail } = usePanelSettings();
 
   const [form, setForm] = React.useState({
     email: '',
@@ -63,7 +65,7 @@ export default function RegisterPage() {
       if (response.emailVerificationRequired) {
         toast.info('Check your inbox', 'Confirm your email address to unlock every feature.');
       } else {
-        toast.success('Account created', 'Welcome to Storm Panel.');
+        toast.success('Account created', `Welcome to ${panelName}.`);
       }
       router.replace('/dashboard');
     } catch (caught) {
@@ -76,6 +78,42 @@ export default function RegisterPage() {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  // The API refuses these anyway; showing the form first and rejecting the
+  // filled-in password afterwards would just waste the visitor's time.
+  if (!registrationEnabled) {
+    return (
+      <div className="space-y-6 text-center animate-fade-in">
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl border border-border bg-card">
+          <Lock className="h-5 w-5 text-muted-foreground" />
+        </div>
+        <div className="space-y-1.5">
+          <h1 className="text-2xl font-semibold tracking-tight">Registration is closed</h1>
+          <p className="text-sm leading-relaxed text-muted-foreground">
+            {panelName} is invite-only right now. Ask an administrator for an account
+            {supportEmail ? ' — or write to the address below' : ''}.
+          </p>
+        </div>
+        {supportEmail ? (
+          <a
+            href={`mailto:${supportEmail}`}
+            className="inline-block text-sm font-medium text-primary underline-offset-4 hover:underline"
+          >
+            {supportEmail}
+          </a>
+        ) : null}
+        <p className="text-sm text-muted-foreground">
+          Already have one?{' '}
+          <Link
+            href="/login"
+            className="font-medium text-primary underline-offset-4 hover:underline"
+          >
+            Sign in
+          </Link>
+        </p>
+      </div>
+    );
   }
 
   return (

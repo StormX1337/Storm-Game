@@ -7,12 +7,14 @@ import { KeyRound, ShieldCheck } from 'lucide-react';
 import { Button, Checkbox, Field, Input, Label, useToast } from '@storm/ui';
 import { ApiError, api } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
+import { usePanelSettings } from '@/lib/panel-settings';
 
 function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
   const toast = useToast();
   const { refresh } = useAuth();
+  const { panelName, registrationEnabled } = usePanelSettings();
 
   const [identifier, setIdentifier] = React.useState('');
   const [password, setPassword] = React.useState('');
@@ -40,7 +42,7 @@ function LoginForm() {
       });
 
       await refresh();
-      toast.success('Signed in', 'Welcome back to Storm Panel.');
+      toast.success('Signed in', `Welcome back to ${panelName}.`);
       router.replace(next.startsWith('/') ? next : '/dashboard');
     } catch (caught) {
       if (caught instanceof ApiError) {
@@ -158,12 +160,14 @@ function LoginForm() {
         </Button>
       </form>
 
-      <p className="text-center text-sm text-muted-foreground">
-        Need an account?{' '}
-        <Link href="/register" className="font-medium text-primary hover:underline">
-          Create one
-        </Link>
-      </p>
+      {registrationEnabled ? (
+        <p className="text-center text-sm text-muted-foreground">
+          Need an account?{' '}
+          <Link href="/register" className="font-medium text-primary hover:underline">
+            Create one
+          </Link>
+        </p>
+      ) : null}
     </div>
   );
 }

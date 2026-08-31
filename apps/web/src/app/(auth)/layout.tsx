@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { Activity, HardDrive, ShieldCheck, Terminal } from 'lucide-react';
-import { StormLogo } from '@/components/brand';
+import { PanelName, StormLogo } from '@/components/brand';
 
 const HIGHLIGHTS = [
   {
@@ -48,8 +48,8 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
               under control.
             </h1>
             <p className="text-sm leading-relaxed text-muted-foreground">
-              Storm Panel gives you the console, files, backups and automation for every server you
-              run — on infrastructure you own.
+              <PanelName /> gives you the console, files, backups and automation for every server
+              you run — on infrastructure you own.
             </p>
           </div>
 
@@ -71,7 +71,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         </div>
 
         <p className="relative z-10 text-xs text-muted-foreground">
-          Storm Panel · self-hosted game server control
+          <PanelName /> · self-hosted game server control
         </p>
       </aside>
 

@@ -245,6 +245,17 @@ export const updateSettingsSchema = z.object({
   panelName: z.string().trim().min(1).max(100).optional(),
   panelUrl: z.string().url().max(500).optional(),
   supportEmail: z.string().email().max(255).optional(),
+  // Six-digit hex, nothing else. The value is written into a CSS custom
+  // property in every visitor's browser, so a free-form string here would let
+  // whoever holds settings.manage inject declarations into pages other people
+  // are looking at. A shape this narrow has nowhere to hide one.
+  brandColor: z
+    .string()
+    .trim()
+    .regex(/^#[0-9a-fA-F]{6}$/, 'Use a six-digit hex colour, for example #2563eb')
+    .optional(),
+  announcement: z.string().trim().max(500).optional(),
+  announcementLevel: z.enum(['info', 'warning', 'critical']).optional(),
   registrationEnabled: z.boolean().optional(),
   requireEmailVerification: z.boolean().optional(),
   defaultServerLimit: z.number().int().min(0).max(10000).optional(),

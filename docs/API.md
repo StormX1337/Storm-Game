@@ -137,6 +137,7 @@ reuse detection, not a bug. Store only the newest token.
 | 500    | `INTERNAL_ERROR`      | Our fault; the id is in the logs              |
 | 502    | `AGENT_UNREACHABLE`   | The node did not answer                       |
 | 503    | `SERVICE_UNAVAILABLE` | Dependency down                               |
+| 503    | `MAINTENANCE_MODE`    | The panel is in maintenance; see below        |
 
 Validation failures name every bad field at once:
 
@@ -417,6 +418,47 @@ minutes.
 
 ---
 
+### Panel settings
+
+|                 |                                                        |
+| --------------- | ------------------------------------------------------ |
+| `GET /settings` | Branding and sign-in policy — no authentication needed |
+
+The sign-in page has to know the panel's name and colour, whether registration
+is open, and whether maintenance is on, all before anyone has a session. Only
+those keys are returned:
+
+```json
+{
+  "panelName": "Storm Panel",
+  "panelUrl": "https://panel.example.com",
+  "brandColor": "#2563eb",
+  "announcement": "",
+  "announcementLevel": "info",
+  "registrationEnabled": true,
+  "requireEmailVerification": false,
+  "maintenanceMode": false,
+  "maintenanceMessage": "…",
+  "supportEmail": "support@example.com"
+}
+```
+
+How the panel is _run_ — the default limits, backup retention — stays behind
+`GET /admin/settings` and `settings.manage`.
+
+`brandColor` must be a six-digit hex. It becomes a CSS custom property in every
+visitor's browser, so anything looser would let whoever holds `settings.manage`
+inject declarations into pages other people are looking at. `announcement` is
+capped at 500 characters and `announcementLevel` is one of `info`, `warning`,
+`critical`.
+
+Settings are read through a five-second cache, so a second API replica picks up
+a change within that. Writing them through `PATCH /admin/settings` drops the
+cache on the instance that served the write, which is why a rebrand shows up on
+the very next request rather than five seconds later.
+
+---
+
 ### Health
 
 Unauthenticated, for load balancers and monitoring.
@@ -426,6 +468,37 @@ Unauthenticated, for load balancers and monitoring.
 | `GET /health`     | Liveness — the process is up            |
 | `GET /ready`      | Readiness — database and Redis answered |
 | `GET /api/health` | Version, uptime and dependency states   |
+
+---
+
+## Maintenance mode
+
+`PATCH /admin/settings` with `maintenanceMode: true` closes the panel to
+customers. Every request they make comes back **503 `MAINTENANCE_MODE`**, with
+`maintenanceMessage` as the message so they read what the administrator wrote
+rather than a generic failure.
+
+Containers are untouched — game servers keep running throughout. This closes the
+panel, not the platform.
+
+Four things keep answering, each for a reason:
+
+- **`/health`, `/ready`, `/api/health`** — otherwise an orchestrator drains the
+  API in the middle of the maintenance window.
+- **The whole `/auth` surface, refresh included** — locking sign-in would lock
+  the administrator out of the switch they came to flip, and letting access
+  tokens expire would sign everyone out instead of showing them the notice.
+  Signing _up_ is the exception: `POST /auth/register` returns 503, because an
+  account created now could not use the panel anyway.
+- **`/internal/*`** — nodes keep reporting. Their servers are still running, and
+  if that state stopped arriving the panel would come back with a wrong picture
+  of the world.
+- **`GET /settings`** — how a browser learns that maintenance is _why_ it is
+  being turned away, and how it notices the panel coming back.
+
+Anyone holding `admin.dashboard` works through maintenance normally — that is
+the permission that reaches the admin area, so it is the one that can turn it
+back off.
 
 ---
 

@@ -1,8 +1,8 @@
 'use client';
 
 import * as React from 'react';
-import { useMutation, useQuery } from '@tanstack/react-query';
-import { Save, Send, Settings2 } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Megaphone, Palette, Save, Send, Settings2 } from 'lucide-react';
 import {
   Button,
   Card,
@@ -12,16 +12,27 @@ import {
   CardTitle,
   Field,
   Input,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
   Skeleton,
   Switch,
+  Textarea,
   useToast,
 } from '@storm/ui';
 import { api, errorMessage } from '@/lib/api';
+
+type AnnouncementLevel = 'info' | 'warning' | 'critical';
 
 interface PanelSettings {
   panelName: string;
   panelUrl: string;
   supportEmail: string;
+  brandColor: string;
+  announcement: string;
+  announcementLevel: AnnouncementLevel;
   registrationEnabled: boolean;
   requireEmailVerification: boolean;
   defaultServerLimit: number;
@@ -37,6 +48,7 @@ interface PanelSettings {
 
 export default function AdminSettingsPage() {
   const toast = useToast();
+  const queryClient = useQueryClient();
   const [form, setForm] = React.useState<PanelSettings | null>(null);
 
   const { data, isLoading } = useQuery({
@@ -60,6 +72,10 @@ export default function AdminSettingsPage() {
     mutationFn: () => api.patch<PanelSettings>('/admin/settings', form ?? {}),
     onSuccess: (result) => {
       setForm(result);
+      // The name and colour are read from the public settings query, which the
+      // whole panel shares. Without this the administrator saves a rebrand and
+      // watches nothing change for half a minute.
+      void queryClient.invalidateQueries({ queryKey: ['panel-settings'] });
       toast.success('Settings saved');
     },
     onError: (error) => toast.error('Could not save settings', errorMessage(error)),
@@ -125,6 +141,89 @@ export default function AdminSettingsPage() {
             hint="Used in emails and the node agent configuration. Must be reachable by nodes."
           >
             <Input value={form.panelUrl} onChange={text('panelUrl')} />
+          </Field>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Palette className="h-4 w-4 text-primary" />
+            Branding
+          </CardTitle>
+          <CardDescription>
+            The name is used everywhere the panel refers to itself, sign-in page included. The
+            colour drives buttons, links and highlights in both themes.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Field
+            label="Accent colour"
+            hint="Six-digit hex. Pick something with enough contrast to read white text on."
+          >
+            <div className="flex items-center gap-3">
+              <input
+                type="color"
+                aria-label="Accent colour"
+                value={validHex(form.brandColor) ? form.brandColor : '#2563eb'}
+                onChange={(event) => set('brandColor', event.target.value)}
+                className="h-10 w-14 cursor-pointer rounded-md border border-border bg-transparent p-1"
+              />
+              <Input
+                value={form.brandColor}
+                onChange={text('brandColor')}
+                placeholder="#2563eb"
+                className="max-w-[160px] font-mono"
+                aria-invalid={!validHex(form.brandColor)}
+              />
+              <Button variant="ghost" size="sm" onClick={() => set('brandColor', '#2563eb')}>
+                Reset
+              </Button>
+            </div>
+          </Field>
+          {validHex(form.brandColor) ? null : (
+            <p className="mt-2 text-sm text-destructive">
+              That is not a six-digit hex colour — saving will be rejected.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Megaphone className="h-4 w-4 text-primary" />
+            Announcement
+          </CardTitle>
+          <CardDescription>
+            Shown as a banner above every page in the panel. Leave it empty for no banner. Anyone
+            who dismisses it sees the next one you write.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Field label="Message" hint={`${form.announcement.length}/500 characters`}>
+            <Textarea
+              rows={3}
+              maxLength={500}
+              value={form.announcement}
+              onChange={(event) => set('announcement', event.target.value)}
+              placeholder="Scheduled maintenance on Saturday from 20:00 UTC — expect around 30 minutes of downtime."
+            />
+          </Field>
+          <Field label="Severity" hint="Only changes how the banner looks.">
+            <Select
+              value={form.announcementLevel}
+              onValueChange={(value) => set('announcementLevel', value as AnnouncementLevel)}
+            >
+              <SelectTrigger className="max-w-[220px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="info">Information</SelectItem>
+                <SelectItem value="warning">Warning</SelectItem>
+                <SelectItem value="critical">Critical</SelectItem>
+              </SelectContent>
+            </Select>
           </Field>
         </CardContent>
       </Card>
@@ -257,13 +356,14 @@ export default function AdminSettingsPage() {
             Maintenance mode
           </CardTitle>
           <CardDescription>
-            Show a notice to customers while you work on the platform.
+            Locks customers out of the panel and shows them a notice instead. Their servers keep
+            running throughout — this stops people using the panel, not the containers.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <Toggle
             label="Enable maintenance mode"
-            description="Administrators keep full access."
+            description="Anyone who can reach this admin area keeps full access, including you. New sign-ups are refused."
             checked={form.maintenanceMode}
             onChange={(value) => set('maintenanceMode', value)}
           />
@@ -274,6 +374,11 @@ export default function AdminSettingsPage() {
       </Card>
     </div>
   );
+}
+
+/** Mirrors the API's own rule, so the form rejects what the save would. */
+function validHex(value: string): boolean {
+  return /^#[0-9a-fA-F]{6}$/.test(value.trim());
 }
 
 function Toggle({

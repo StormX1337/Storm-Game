@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider } from 'next-themes';
 import { ConfirmProvider, ToastProvider, TooltipProvider } from '@storm/ui';
 import { AuthProvider } from '@/lib/auth-context';
+import { PanelSettingsProvider } from '@/lib/panel-settings';
 import { ApiError } from '@/lib/api';
 
 export function Providers({ children }: { children: React.ReactNode }) {
@@ -36,7 +37,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <ToastProvider>
           <ConfirmProvider>
             <TooltipProvider delayDuration={250}>
-              <AuthProvider>{children}</AuthProvider>
+              <PanelSettingsProvider>
+                <AuthProvider>{children}</AuthProvider>
+              </PanelSettingsProvider>
             </TooltipProvider>
           </ConfirmProvider>
         </ToastProvider>

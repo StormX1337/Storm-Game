@@ -14,7 +14,6 @@ import {
   hashToken,
   verifyTotp,
 } from '@storm/security';
-import { readSettings } from '@storm/database';
 import { body, params, query } from '../lib/validation.js';
 import { ok, paginated, pageArgs } from '../lib/response.js';
 import { badRequest, forbidden, notFound } from '../lib/errors.js';
@@ -64,7 +63,7 @@ export default async function accountRoutes(app: FastifyInstance): Promise<void>
         if (taken) throw badRequest('That email address is already in use');
       }
 
-      const settings = await readSettings(app.prisma);
+      const settings = await app.settings.read();
       const emailChanged = Boolean(input.email && input.email !== current.email);
 
       const user = await app.prisma.user.update({
@@ -141,7 +140,7 @@ export default async function accountRoutes(app: FastifyInstance): Promise<void>
       const existing = await app.prisma.twoFactorAuth.findUnique({ where: { userId: current.id } });
       if (existing?.enabled) throw badRequest('Two-factor authentication is already enabled');
 
-      const settings = await readSettings(app.prisma);
+      const settings = await app.settings.read();
       const secret = generateTotpSecret();
       await app.auth.beginTwoFactorEnrolment(current.id, secret);
 

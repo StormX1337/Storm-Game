@@ -13,7 +13,9 @@ import prismaPlugin from './plugins/prisma.js';
 import redisPlugin from './plugins/redis.js';
 import securityPlugin from './plugins/security.js';
 import errorHandlerPlugin from './plugins/error-handler.js';
+import settingsPlugin from './plugins/settings.js';
 import authPlugin from './plugins/auth.js';
+import maintenancePlugin from './plugins/maintenance.js';
 import auditPlugin from './plugins/audit.js';
 import eventsPlugin from './plugins/events.js';
 import queuesPlugin from './plugins/queues.js';
@@ -29,6 +31,7 @@ import { ServerAccessService } from './services/server-access.service.js';
 
 import healthRoutes from './routes/health.routes.js';
 import authRoutes from './routes/auth.routes.js';
+import settingsRoutes from './routes/settings.routes.js';
 import accountRoutes from './routes/account.routes.js';
 import dashboardRoutes from './routes/dashboard.routes.js';
 import serverRoutes from './routes/servers.routes.js';
@@ -102,6 +105,7 @@ export async function buildApp(options: BuildOptions = {}): Promise<FastifyInsta
   await app.register(sensible);
   await app.register(prismaPlugin);
   await app.register(redisPlugin);
+  await app.register(settingsPlugin);
   await app.register(securityPlugin, { rateLimit: options.rateLimit !== false });
   await app.register(errorHandlerPlugin);
   await app.register(eventsPlugin);
@@ -113,6 +117,8 @@ export async function buildApp(options: BuildOptions = {}): Promise<FastifyInsta
   await app.register(databaseProvisionerPlugin);
   await app.register(agentsPlugin);
   await app.register(authPlugin);
+  // After auth: the guard needs to know who is asking before it turns them away.
+  await app.register(maintenancePlugin);
 
   await app.register(multipart, {
     limits: {
@@ -184,6 +190,7 @@ export async function buildApp(options: BuildOptions = {}): Promise<FastifyInsta
   await app.register(healthRoutes);
 
   const prefix = `${app.env.API_PREFIX}/v1`;
+  await app.register(settingsRoutes, { prefix });
   await app.register(authRoutes, { prefix: `${prefix}/auth` });
   await app.register(accountRoutes, { prefix: `${prefix}/account` });
   await app.register(dashboardRoutes, { prefix });

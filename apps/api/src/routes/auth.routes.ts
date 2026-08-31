@@ -11,7 +11,6 @@ import {
 } from '@storm/types';
 import { generateToken, hashPassword, hashToken } from '@storm/security';
 import { COOKIE_NAMES } from '@storm/config';
-import { readSettings } from '@storm/database';
 import { body } from '../lib/validation.js';
 import { ok } from '../lib/response.js';
 import { AppError, forbidden, unauthorized } from '../lib/errors.js';
@@ -47,10 +46,21 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
     },
     async (request, reply) => {
       const input = body(request, registerSchema);
-      const settings = await readSettings(app.prisma);
+      const settings = await app.settings.read();
 
       if (!settings.registrationEnabled) {
         throw forbidden('Registration is currently closed');
+      }
+      // The maintenance guard exempts the whole auth surface so administrators
+      // can sign in and existing sessions can refresh. Signing *up* is not part
+      // of that: a new account created mid-maintenance could not use the panel
+      // anyway, and would be left holding an unverified address.
+      if (settings.maintenanceMode) {
+        throw new AppError(
+          503,
+          ErrorCode.MAINTENANCE_MODE,
+          settings.maintenanceMessage || 'The panel is undergoing maintenance.',
+        );
       }
 
       const existing = await app.prisma.user.findFirst({
@@ -274,7 +284,7 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
           },
         });
 
-        const settings = await readSettings(app.prisma);
+        const settings = await app.settings.read();
         const url = `${settings.panelUrl}/reset-password?token=${token}`;
         const mail = renderMail(
           'Reset your password',
@@ -443,7 +453,7 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
       const user = request.currentUser();
       if (user.emailVerified) return ok({ sent: false, alreadyVerified: true });
 
-      const settings = await readSettings(app.prisma);
+      const settings = await app.settings.read();
       await sendVerificationEmail(app, user.id, user.email, settings.panelUrl);
       return ok({ sent: true });
     },

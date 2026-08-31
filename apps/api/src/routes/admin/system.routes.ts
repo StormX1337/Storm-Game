@@ -406,6 +406,10 @@ export default async function adminSystemRoutes(app: FastifyInstance): Promise<v
     async (request) => {
       const input = body(request, updateSettingsSchema);
       const settings = await writeSettings(app.prisma, input);
+      // The maintenance guard reads from a cache on every request; without
+      // this, flipping the switch here would take effect only once that copy
+      // expired, and the administrator would watch nothing happen.
+      app.settings.invalidate();
 
       await app.audit.log(request, {
         action: 'admin.settings_updated',
