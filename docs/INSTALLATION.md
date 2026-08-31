@@ -429,12 +429,30 @@ agent in turn — if those three work, the install is sound.
 
 ```bash
 cd /opt/storm-panel
-docker compose exec postgres pg_dump -U storm storm | gzip > ~/storm-$(date +%F).sql.gz
-
-git pull
-docker compose build
-docker compose up -d
+./scripts/update.sh --check     # what would change
+./scripts/update.sh             # do it
 ```
 
-The `migrate` service applies new migrations before the API restarts. Migrations
+It dumps the database and copies `.env` first, fast-forwards, rebuilds,
+restarts, then waits for `/ready` and prints the health check — and refuses to
+start if the deployment has local edits that a pull would overwrite, rather
+than stashing someone's port change without saying so. If the panel does not
+come back it prints the API log and the exact command to roll back.
+
+Dumps land in `~/storm-backups`, ten kept (`STORM_BACKUP_DIR`,
+`STORM_KEEP_BACKUPS` to change that). The `.env` copy matters as much as the
+dump: it holds `ENCRYPTION_KEY`, and a database without it cannot decrypt a
+single node token.
+
+**Game servers keep running throughout.** They are containers on nodes; the
+panel restarting does not touch them, and consoles reconnect on their own.
+
+By hand, if you would rather:
+
+```bash
+docker compose exec -T postgres pg_dump -U storm storm | gzip > ~/storm-$(date +%F).sql.gz
+git pull && docker compose build && docker compose up -d
+```
+
+The `migrate` service applies new migrations before the API starts. Migrations
 are forward-only; roll back by restoring the dump.
