@@ -116,6 +116,34 @@ describe('panel updates', () => {
     }
   });
 
+  it('does not claim an update when it cannot tell which version it runs', async () => {
+    // An image built without the STORM_COMMIT argument. "Not up to date" then
+    // reads as "an update is available", and the panel goes on offering one
+    // after it has already been applied — which is exactly what it did.
+    const before = app.env.STORM_COMMIT;
+    app.env.STORM_COMMIT = 'unknown';
+    try {
+      const status = await app.updates.status();
+      assert.equal(status.available.comparable, false);
+      assert.equal(status.available.behindBy, 0);
+      assert.equal(status.canApply, false, 'offered an update it cannot know is needed');
+      assert.match(status.reason ?? '', /without a commit stamp/);
+    } finally {
+      app.env.STORM_COMMIT = before;
+    }
+  });
+
+  it('compares properly once the image carries a stamp', async () => {
+    const before = app.env.STORM_COMMIT;
+    app.env.STORM_COMMIT = 'a'.repeat(40);
+    try {
+      const status = await app.updates.status();
+      assert.equal(status.available.comparable, true);
+    } finally {
+      app.env.STORM_COMMIT = before;
+    }
+  });
+
   it('says why it cannot apply, rather than pretending it can', async () => {
     // No updater is connected in a test environment, and the panel has to be
     // honest about that instead of offering a button that does nothing.

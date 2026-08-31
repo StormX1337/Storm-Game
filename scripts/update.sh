@@ -174,6 +174,16 @@ else
 fi
 
 step "Building images"
+
+# Stamp the image with what it was built from. docker-compose.yml reads these
+# as build arguments, and without them the image reports its version as
+# "unknown" — so the panel cannot tell whether an update landed, and offers the
+# same one again forever. Exported after the merge, so this is the commit that
+# is actually being built.
+export STORM_COMMIT="$(git rev-parse HEAD)"
+export STORM_BUILT_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+ok "Stamped as ${STORM_COMMIT:0:7}"
+
 compose build || fail "The build failed. The old containers are still running."
 ok "Built"
 

@@ -33,6 +33,12 @@ export interface UpdateStatus {
   current: { version: string; commit: string; shortCommit: string; builtAt: string | null };
   available: {
     checked: boolean;
+    /**
+     * Whether the running version can be compared at all. An image built with
+     * no commit stamp cannot be, and "not up to date" would then read as "an
+     * update is available" when the honest answer is that nobody knows.
+     */
+    comparable: boolean;
     upToDate: boolean;
     commit: string | null;
     shortCommit: string | null;
@@ -100,6 +106,7 @@ export class UpdateService {
         current,
         available: {
           checked: false,
+          comparable: false,
           upToDate: true,
           commit: null,
           shortCommit: null,
@@ -126,6 +133,7 @@ export class UpdateService {
       current,
       available: {
         checked: remote !== null,
+        comparable,
         upToDate,
         commit: remote?.head ?? null,
         shortCommit: remote?.head.slice(0, 7) ?? null,

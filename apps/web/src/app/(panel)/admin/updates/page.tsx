@@ -51,6 +51,7 @@ interface UpdateStatus {
   current: { version: string; commit: string; shortCommit: string; builtAt: string | null };
   available: {
     checked: boolean;
+    comparable: boolean;
     upToDate: boolean;
     commit: string | null;
     shortCommit: string | null;
@@ -146,6 +147,15 @@ export default function UpdatesPage() {
                     <CheckCircle2 className="h-5 w-5 text-success" />
                     Up to date
                   </>
+                ) : !data.available.comparable ? (
+                  /* An unstamped image is not "behind" — it is unknown. Saying
+                     "Update available" here offers an update the panel has no
+                     way to know is needed, and goes on offering it after one
+                     has been applied. */
+                  <>
+                    <Info className="h-5 w-5 text-muted-foreground" />
+                    Version unknown
+                  </>
                 ) : data.available.checked ? (
                   <>
                     <Download className="h-5 w-5 text-primary" />
@@ -176,7 +186,9 @@ export default function UpdatesPage() {
                   detail={data.current.builtAt ? `built ${formatDate(data.current.builtAt)}` : null}
                 />
 
-                {!data.available.upToDate && data.available.shortCommit ? (
+                {!data.available.upToDate &&
+                data.available.comparable &&
+                data.available.shortCommit ? (
                   <>
                     <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" />
                     <Version
@@ -228,7 +240,10 @@ export default function UpdatesPage() {
                 banner above already says what is happening; a second copy that
                 advises a colliding run does not help.
               */}
-              {!data.available.upToDate && data.available.checked && !running ? (
+              {!data.available.upToDate &&
+              data.available.comparable &&
+              data.available.checked &&
+              !running ? (
                 data.canApply ? (
                   <Button
                     onClick={() => void onApply()}
@@ -254,7 +269,20 @@ export default function UpdatesPage() {
                 )
               ) : null}
 
-              {!data.available.checked && data.reason ? (
+              {!data.available.comparable && data.reason ? (
+                <div className="space-y-2 rounded-lg border border-border bg-secondary/40 p-3 text-sm">
+                  <p className="flex items-start gap-2">
+                    <Info className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                    <span>{data.reason}</span>
+                  </p>
+                  <p className="text-muted-foreground">
+                    Rebuild from the host and it will report its version again:
+                  </p>
+                  <code className="block break-all rounded bg-background p-2 font-mono text-xs">
+                    ./scripts/update.sh
+                  </code>
+                </div>
+              ) : !data.available.checked && data.reason ? (
                 <p className="text-sm text-muted-foreground">{data.reason}</p>
               ) : null}
             </CardContent>
