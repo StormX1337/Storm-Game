@@ -7,6 +7,7 @@ import {
   Activity,
   CalendarClock,
   Database,
+  Download,
   FolderTree,
   Gauge,
   HardDrive,
@@ -60,6 +61,7 @@ const SECTIONS: NavSection[] = [
       { href: '/admin/backups', label: 'Backup storage', icon: HardDrive, permission: 'backupstorage.manage' },
       { href: '/admin/audit', label: 'Audit log', icon: Shield, permission: 'audit.view' },
       { href: '/admin/settings', label: 'Settings', icon: Settings, permission: 'settings.manage' },
+      { href: '/admin/updates', label: 'Updates', icon: Download, permission: 'panel.update' },
     ],
   },
 ];

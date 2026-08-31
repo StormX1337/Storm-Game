@@ -290,6 +290,51 @@ continue.
 
 ---
 
+## Updating from the panel
+
+**Admin → Updates** shows what the panel runs, what the repository has, and
+every commit in between. Checking is always on and needs nothing: one outbound
+HTTPS request, cached for fifteen minutes.
+
+Pressing **Update now** is off until you install the host-side updater, and
+that is the whole design. The API container has no Docker socket, no host
+filesystem and runs unprivileged — giving it any of those to enable a button
+would mean that one hole in one web endpoint becomes root on the machine that
+runs every customer's server. So the panel writes a request into a directory
+it shares with the host, and a service on the host decides whether to honour
+it. The panel can ask; only the host can execute.
+
+```bash
+cd /opt/storm-panel
+sudo ./scripts/storm-updater.sh --install
+```
+
+Then add to `.env`:
+
+```dotenv
+UPDATE_CONTROL_DIR=/var/lib/storm/control
+```
+
+uncomment the matching volume on the `api` service in `docker-compose.yml`, and
+`docker compose up -d api`.
+
+What the updater will and will not do:
+
+- It applies **only** the commit the panel offered, checked against the branch
+  head at the moment of the request. Anything else is refused.
+- It validates the commit id as hexadecimal before it reaches a shell — a
+  request naming `abc; rm -rf /` is written to the failure status and dropped.
+- It runs `scripts/update.sh`, so the database is dumped first and the panel
+  is checked afterwards, exactly as a manual update would be.
+- It removes the request before starting, so a crash mid-update cannot leave
+  one that retries forever.
+
+`panel.update` is its own permission, held by OWNER and ADMIN and by nobody
+else — including STAFF, who can otherwise manage most of the panel. Requests
+are audited with who asked and which versions were involved.
+
+Watch it work with `journalctl -u storm-updater -f`.
+
 ## Disaster recovery
 
 **What matters**

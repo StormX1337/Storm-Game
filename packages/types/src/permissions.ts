@@ -57,6 +57,12 @@ export const Permission = {
   ADMIN_SERVERS: 'admin.servers',
   ADMIN_USERS: 'admin.users',
   ADMIN_DASHBOARD: 'admin.dashboard',
+  /**
+   * Applying a panel update. Deliberately its own permission and not folded
+   * into settings.manage: it replaces the running code, which is a different
+   * order of trust from changing a setting.
+   */
+  PANEL_UPDATE: 'panel.update',
 } as const;
 export type Permission = (typeof Permission)[keyof typeof Permission];
 
@@ -110,6 +116,7 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
   { key: Permission.ADMIN_SERVERS, category: 'admin', description: 'Act on every server in the panel' },
   { key: Permission.ADMIN_USERS, category: 'admin', description: 'Act on every user in the panel' },
   { key: Permission.ADMIN_DASHBOARD, category: 'admin', description: 'Access the administration area' },
+  { key: Permission.PANEL_UPDATE, category: 'admin', description: 'Check for and apply panel updates' },
 ];
 
 /**

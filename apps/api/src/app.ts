@@ -24,6 +24,7 @@ import webhookPlugin from './services/webhook.service.js';
 import databaseProvisionerPlugin from './services/database-provisioner.js';
 
 import { ServerService } from './services/server.service.js';
+import { UpdateService } from './services/update.service.js';
 import { ServerAccessService } from './services/server-access.service.js';
 
 import healthRoutes from './routes/health.routes.js';
@@ -125,6 +126,7 @@ export async function buildApp(options: BuildOptions = {}): Promise<FastifyInsta
   });
 
   app.decorate('servers', new ServerService(app));
+  app.decorate('updates', new UpdateService(app));
   app.decorate('serverAccess', new ServerAccessService(app));
 
   /* --------------------------------------------------------- swagger -- */

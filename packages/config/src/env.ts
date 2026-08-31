@@ -71,6 +71,25 @@ export const apiEnvSchema = z.object({
   ADMIN_USERNAME: z.string().optional(),
   ADMIN_PASSWORD: z.string().optional(),
 
+  /* ------------------------------------------------------------ updates -- */
+
+  /** Baked into the image at build time; "unknown" for a hand-built image. */
+  STORM_COMMIT: z.string().max(64).default('unknown'),
+  STORM_BUILT_AT: z.string().max(64).optional(),
+  /** `owner/repo` the panel compares itself against. */
+  UPDATE_REPOSITORY: z
+    .string()
+    .regex(/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/, 'Must be owner/repo')
+    .default('StormX1337/Storm-Game'),
+  UPDATE_BRANCH: z.string().max(120).default('main'),
+  UPDATE_CHECK_ENABLED: booleanish.default(true),
+  /**
+   * Shared with the host-side updater. The panel writes a request here; only
+   * the host may act on it. Empty disables applying updates from the panel,
+   * which is the default — the API deliberately has no way to reach Docker.
+   */
+  UPDATE_CONTROL_DIR: z.string().max(255).default(''),
+
   ENABLE_WORKERS: booleanish.default(true),
   /**
    * Multiplies every queue's base concurrency. Raise it on instances dedicated

@@ -60,6 +60,14 @@ RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
 ENV NODE_ENV=production
 WORKDIR /repo
 
+# What this image was built from. The panel reports it, and compares it against
+# the branch head to decide whether an update exists — so it has to describe the
+# running code, not whatever the host checkout happens to be at now.
+ARG STORM_COMMIT=unknown
+ARG STORM_BUILT_AT=
+ENV STORM_COMMIT=${STORM_COMMIT}
+ENV STORM_BUILT_AT=${STORM_BUILT_AT}
+
 COPY --from=builder /repo/node_modules ./node_modules
 COPY --from=builder /repo/package.json ./package.json
 COPY --from=builder /repo/pnpm-workspace.yaml ./pnpm-workspace.yaml

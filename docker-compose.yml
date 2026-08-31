@@ -78,6 +78,11 @@ services:
     build:
       context: .
       dockerfile: docker/api/Dockerfile
+      args:
+        # scripts/update.sh exports these; a manual build leaves them empty and
+        # the panel then reports its version as unknown rather than guessing.
+        STORM_COMMIT: ${STORM_COMMIT:-unknown}
+        STORM_BUILT_AT: ${STORM_BUILT_AT:-}
     restart: unless-stopped
     environment:
       NODE_ENV: production
@@ -104,8 +109,17 @@ services:
       ENABLE_SWAGGER: ${ENABLE_SWAGGER:-true}
       ENABLE_WORKERS: ${ENABLE_WORKERS:-true}
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-1}
+      UPDATE_REPOSITORY: ${UPDATE_REPOSITORY:-StormX1337/Storm-Game}
+      UPDATE_BRANCH: ${UPDATE_BRANCH:-main}
+      UPDATE_CHECK_ENABLED: ${UPDATE_CHECK_ENABLED:-true}
+      UPDATE_CONTROL_DIR: ${UPDATE_CONTROL_DIR:-}
     volumes:
       - backup-data:/var/lib/storm/backups
+      # Uncomment together with UPDATE_CONTROL_DIR to let the panel request an
+      # update. `scripts/storm-updater.sh --install` creates the directory with
+      # the ownership the API needs. Deliberately not on by default: it is the
+      # panel's only channel to anything on the host.
+      # - /var/lib/storm/control:/var/lib/storm/control
     depends_on:
       postgres:
         condition: service_healthy

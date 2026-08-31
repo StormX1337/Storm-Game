@@ -30,6 +30,58 @@ const idParam = z.object({ id: z.string().min(1).max(64) });
 export default async function adminSystemRoutes(app: FastifyInstance): Promise<void> {
   app.addHook('preHandler', app.authenticate);
 
+  /* --------------------------------------------------------- updates -- */
+
+  app.get(
+    '/updates',
+    {
+      preHandler: app.requirePermission(Permission.PANEL_UPDATE),
+      schema: { tags: ['Admin'], summary: 'Current version and whether an update exists' },
+    },
+    async () => ok(await app.updates.status()),
+  );
+
+  app.post(
+    '/updates/apply',
+    {
+      // Tighter than the rest of the admin surface: this replaces the running
+      // code, and a stolen session should not be able to do it on repeat.
+      config: { rateLimit: { max: 5, timeWindow: '10 minutes' } },
+      preHandler: app.requirePermission(Permission.PANEL_UPDATE),
+      schema: { tags: ['Admin'], summary: 'Ask the host-side updater to apply an update' },
+    },
+    async (request) => {
+      const input = body(request, z.object({ commit: z.string().min(7).max(40) }));
+      const current = await app.updates.status();
+
+      // Only ever the version the panel just offered. Without this the endpoint
+      // is "run any commit of anything the repository has ever held".
+      if (input.commit !== current.available.commit) {
+        throw badRequest('That is no longer the latest version. Refresh and try again.');
+      }
+      if (!current.canApply) {
+        throw badRequest(current.reason ?? 'This deployment cannot apply updates from the panel.');
+      }
+
+      const user = request.currentUser();
+      const job = await app.updates.request(input.commit, user.username);
+
+      await app.audit.log(request, {
+        action: 'admin.panel_update_requested',
+        targetType: 'panel',
+        targetId: job.id,
+        targetLabel: `${current.current.shortCommit} → ${current.available.shortCommit}`,
+        metadata: {
+          from: current.current.commit,
+          to: input.commit,
+          behindBy: current.available.behindBy,
+        },
+      });
+
+      return ok(job);
+    },
+  );
+
   /* -------------------------------------------------------- overview -- */
 
   app.get(
