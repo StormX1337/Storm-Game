@@ -137,5 +137,35 @@ for target in $(grep -ohE 'pnpm [a-z][a-z0-9:-]*' docs/*.md README.md 2>/dev/nul
   fi
 done
 
+
+# ------------------------------------------------- installing a node --
+
+printf '\nInstalling a node\n'
+
+for script in "$REPO"/scripts/*.sh; do
+  if bash -n "$script" 2>/dev/null; then
+    ok "$(basename "$script") parses"
+  else
+    bad "$(basename "$script") parses" "bash -n rejects it"
+  fi
+done
+
+if problems="$(node "$REPO/scripts/checks/installer-config.mjs")"; then
+  ok "the node installer writes a configuration the agent accepts"
+else
+  bad "the node installer writes a configuration the agent accepts" "$problems"
+fi
+
+# The panel serves the installer and the agent bundle off its own disk, so a
+# runtime image that does not carry them answers 404 to
+# `curl <panel>/install/node.sh` — working in development, broken in production.
+for needed in scripts dist/storm-agent.tar.gz pnpm-workspace.yaml; do
+  if grep -qE "^COPY --from=builder /repo/${needed}" "$REPO/docker/api/Dockerfile"; then
+    ok "the API image carries $needed"
+  else
+    bad "the API image carries $needed" "the install routes read it from disk at runtime"
+  fi
+done
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [[ "$fail" -eq 0 ]]
