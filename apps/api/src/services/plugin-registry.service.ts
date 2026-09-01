@@ -42,6 +42,23 @@ export interface ResolvedDownload {
 export const MAX_PLUGIN_BYTES = 256 * 1024 * 1024;
 
 /**
+ * The loaders a jar in `plugins/` can actually be loaded by.
+ *
+ * Filtering by project type instead of this is what put Fabric API and Sodium
+ * in front of someone running Paper: Modrinth calls them mods, they are mods,
+ * and dropping one in `plugins/` does exactly nothing. What decides whether a
+ * jar works is which loader built it, so that is what is asked for.
+ */
+export const BUKKIT_LOADERS = ['bukkit', 'spigot', 'paper', 'purpur', 'folia'] as const;
+
+/** True when a build was made for something in the Bukkit family. */
+export function loadableAsPlugin(loaders: string[]): boolean {
+  return loaders.some((loader) =>
+    (BUKKIT_LOADERS as readonly string[]).includes(loader.toLowerCase()),
+  );
+}
+
+/**
  * The plugin browser's connection to Modrinth.
  *
  * The rule that matters here: **a customer never supplies a URL.** They name a
@@ -103,8 +120,9 @@ export class PluginRegistryService {
 
   /** Plugins matching a search, newest and most used first. */
   async search(query: string, gameVersion?: string): Promise<PluginSearchResult[]> {
-    // Modrinth's facets are AND across groups, OR inside one.
-    const facets: string[][] = [['project_type:plugin', 'project_type:mod']];
+    // Facets are AND across groups and OR inside one, so this reads: built for
+    // any of the Bukkit-family loaders, and for this Minecraft version.
+    const facets: string[][] = [BUKKIT_LOADERS.map((loader) => `categories:${loader}`)];
     if (gameVersion) facets.push([`versions:${gameVersion}`]);
 
     const payload = await this.get<{ hits: ModrinthHit[] }>('/search', {
@@ -131,23 +149,27 @@ export class PluginRegistryService {
   async versions(projectId: string, gameVersion?: string): Promise<PluginVersion[]> {
     const payload = await this.get<ModrinthVersion[]>(`/project/${projectId}/version`);
 
-    return payload
-      .filter((version) => !gameVersion || version.game_versions.includes(gameVersion))
-      .map((version) => {
-        const file = primaryFile(version);
-        return {
-          versionId: version.id,
-          name: version.name,
-          versionNumber: version.version_number,
-          gameVersions: version.game_versions,
-          loaders: version.loaders,
-          releaseType: version.version_type,
-          publishedAt: version.date_published,
-          filename: file?.filename ?? '',
-          bytes: file?.size ?? 0,
-        };
-      })
-      .filter((version) => version.filename.endsWith('.jar'));
+    return (
+      payload
+        .filter((version) => !gameVersion || version.game_versions.includes(gameVersion))
+        .map((version) => {
+          const file = primaryFile(version);
+          return {
+            versionId: version.id,
+            name: version.name,
+            versionNumber: version.version_number,
+            gameVersions: version.game_versions,
+            loaders: version.loaders,
+            releaseType: version.version_type,
+            publishedAt: version.date_published,
+            filename: file?.filename ?? '',
+            bytes: file?.size ?? 0,
+          };
+        })
+        // A project can carry builds for several loaders. Offering the Fabric one
+        // to a Paper server would install a jar the server silently ignores.
+        .filter((version) => version.filename.endsWith('.jar') && loadableAsPlugin(version.loaders))
+    );
   }
 
   /**
@@ -159,6 +181,13 @@ export class PluginRegistryService {
     const version = await this.get<ModrinthVersion>(`/version/${versionId}`);
     const file = primaryFile(version);
     if (!file) throw badRequest('That version has no downloadable file');
+
+    if (!loadableAsPlugin(version.loaders)) {
+      throw badRequest(
+        `That build is for ${version.loaders.join(', ') || 'no known loader'}, which a plugins ` +
+          'folder cannot load. Pick a Paper, Spigot or Bukkit build.',
+      );
+    }
 
     const filename = sanitizeFilename(file.filename);
     if (!filename.toLowerCase().endsWith('.jar')) {

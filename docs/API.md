@@ -533,6 +533,15 @@ writes to a temporary name first, so a truncated or substituted download fails
 there instead of at the server's next start. Installing counts against the
 server's disk limit like any other file.
 
+Only builds for the Bukkit family — bukkit, spigot, paper, purpur, folia — are
+offered, and installing one for another loader is refused rather than merely
+hidden. A Fabric mod in `plugins/` is silently ignored by the server, which
+looks exactly like a plugin that does not work.
+
+**A node has to be new enough.** Installing calls an endpoint the agent gained
+with this feature, so a node still running an older agent answers 404 and the
+panel says so by name: update the agent on that node.
+
 `MODRINTH_API_URL` points the browser elsewhere — a mirror, or nothing at all
 on a panel without outbound internet, in which case searching answers 502 and
 the rest of the panel is unaffected.

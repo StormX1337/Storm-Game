@@ -33,6 +33,10 @@ describe('plugin browser', () => {
 
   /** What the stub registry answers with for /version/:id. */
   let versionResponse: unknown = null;
+  /** What it answers for /project/:id/version. */
+  let projectVersions: unknown[] = [];
+  /** The facets the panel asked the registry for, as sent. */
+  let lastFacets = '';
 
   const auth = () => ({ authorization: `Bearer ${customer.accessToken}` });
 
@@ -41,6 +45,7 @@ describe('plugin browser', () => {
     registry = createServer((request, response) => {
       response.setHeader('content-type', 'application/json');
       if (request.url?.startsWith('/search')) {
+        lastFacets = new URL(request.url, 'http://x').searchParams.get('facets') ?? '';
         response.end(
           JSON.stringify({
             hits: [
@@ -60,7 +65,10 @@ describe('plugin browser', () => {
         return;
       }
       if (request.url?.includes('/version')) {
-        response.end(JSON.stringify(versionResponse));
+        // /project/:id/version is a list; /version/:id is one.
+        response.end(
+          JSON.stringify(request.url.startsWith('/project/') ? projectVersions : versionResponse),
+        );
         return;
       }
       response.statusCode = 404;
@@ -235,13 +243,13 @@ describe('plugin browser', () => {
   /* ----------------------------------------- what a node may be told to get -- */
 
   /** Makes the stub answer with one file at whatever URL a test names. */
-  function versionServingFrom(url: string): void {
+  function versionServingFrom(url: string, loaders: string[] = ['paper']): void {
     versionResponse = {
       id: 'v1',
       name: 'v1',
       version_number: '1.0',
       game_versions: ['1.21'],
-      loaders: ['paper'],
+      loaders,
       version_type: 'release',
       date_published: new Date().toISOString(),
       files: [{ url, filename: 'plugin.jar', primary: true, size: 1024, hashes: {} }],
@@ -291,6 +299,86 @@ describe('plugin browser', () => {
       const response = await install();
       assert.equal(response.statusCode, 400, `${url} must be refused: ${response.body}`);
     }
+  });
+
+  it('asks the registry only for builds a plugins folder can load', async () => {
+    // Searching by project type is what put Fabric API and Sodium in front of
+    // someone running Paper. What decides whether a jar works is its loader.
+    lastFacets = '';
+    const response = await app.inject({
+      method: 'GET',
+      url: `/api/v1/servers/${minecraftServerId}/plugins/search?q=api`,
+      headers: auth(),
+    });
+    assert.equal(response.statusCode, 200, response.body);
+
+    const facets = JSON.parse(lastFacets) as string[][];
+    assert.ok(
+      facets[0]?.includes('categories:paper') && facets[0]?.includes('categories:spigot'),
+      `expected loader facets, got ${lastFacets}`,
+    );
+    assert.ok(!lastFacets.includes('project_type:mod'), 'asking for mods is what offered mods');
+  });
+
+  it('hides a build made for a loader this server does not use', async () => {
+    projectVersions = [
+      {
+        id: 'fabric-only',
+        name: 'Fabric build',
+        version_number: '1.0',
+        game_versions: ['1.21'],
+        loaders: ['fabric'],
+        version_type: 'release',
+        date_published: new Date().toISOString(),
+        files: [
+          {
+            url: 'https://cdn.modrinth.com/a.jar',
+            filename: 'a.jar',
+            primary: true,
+            size: 1,
+            hashes: {},
+          },
+        ],
+      },
+      {
+        id: 'paper-build',
+        name: 'Paper build',
+        version_number: '1.0',
+        game_versions: ['1.21'],
+        loaders: ['paper', 'spigot'],
+        version_type: 'release',
+        date_published: new Date().toISOString(),
+        files: [
+          {
+            url: 'https://cdn.modrinth.com/b.jar',
+            filename: 'b.jar',
+            primary: true,
+            size: 1,
+            hashes: {},
+          },
+        ],
+      },
+    ];
+
+    const response = await app.inject({
+      method: 'GET',
+      url: `/api/v1/servers/${minecraftServerId}/plugins/proj_x/versions`,
+      headers: auth(),
+    });
+    assert.equal(response.statusCode, 200, response.body);
+
+    const ids = response.json<{ data: { versionId: string }[] }>().data.map((v) => v.versionId);
+    assert.deepEqual(ids, ['paper-build'], 'a Fabric build does nothing in a plugins folder');
+  });
+
+  it('refuses to install a build for the wrong loader, whatever the list showed', async () => {
+    // Enforced rather than merely hidden: the version id is the caller's, and
+    // a stale page or a hand-made request must not get a Fabric jar installed.
+    versionServingFrom('https://cdn.modrinth.com/data/x/mod.jar', ['fabric']);
+
+    const response = await install();
+    assert.equal(response.statusCode, 400, response.body);
+    assert.match(response.json<{ error: { message: string } }>().error.message, /loader|Paper/i);
   });
 
   it('refuses anything that is not a plugin jar', async () => {

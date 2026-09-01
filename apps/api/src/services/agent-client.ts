@@ -162,11 +162,35 @@ export class AgentClient {
     let message = `Node "${node.name}" rejected the request`;
     let code: string = ErrorCode.NODE_UNREACHABLE;
     try {
-      const parsed = JSON.parse(text) as { error?: { message?: string; code?: string } };
-      if (parsed.error?.message) message = parsed.error.message;
-      if (parsed.error?.code) code = parsed.error.code;
+      const parsed = JSON.parse(text) as {
+        error?: { message?: string; code?: string } | string;
+        message?: string;
+      };
+      if (typeof parsed.error === 'object' && parsed.error?.message) {
+        message = parsed.error.message;
+        if (parsed.error.code) code = parsed.error.code;
+      } else if (parsed.message) {
+        // Not the agent's own error shape. Fastify's own replies — a 404 for an
+        // unknown route above all — put the reason in a top-level `message`
+        // and a plain string in `error`, so reading only `error.message` threw
+        // the reason away and left "the node rejected the request", which says
+        // nothing anyone can act on.
+        message = parsed.message;
+      } else if (text) {
+        message = text.slice(0, 300);
+      }
     } catch {
       if (text) message = text.slice(0, 300);
+    }
+
+    // A route the agent has never heard of means it is older than the panel,
+    // which is what happens when a panel update adds an endpoint and the nodes
+    // have not been updated with it. Nothing else produces this shape.
+    if (statusCode === 404 && /^Route \S+ not found$/.test(message)) {
+      message =
+        `Node "${node.name}" does not have that endpoint, so its agent is older than the panel. ` +
+        'Update the agent on that node.';
+      code = ErrorCode.NODE_UNREACHABLE;
     }
     // Client errors from the agent are the caller's problem; 5xx is the node's.
     const status = statusCode >= 400 && statusCode < 500 ? statusCode : 502;
