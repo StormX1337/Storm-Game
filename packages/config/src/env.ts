@@ -35,6 +35,18 @@ export const apiEnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   APP_NAME: z.string().default('Storm Panel'),
   APP_URL: z.string().url().default('http://localhost:3000'),
+  /**
+   * Where the plugin browser looks. Configurable for a panel behind a mirror
+   * or without general internet access; the default is Modrinth's own API.
+   */
+  MODRINTH_API_URL: z.string().url().default('https://api.modrinth.com/v2'),
+  /**
+   * Hosts a plugin download may come from, comma separated. The panel resolves
+   * download URLs from the registry rather than taking them from a customer,
+   * and then checks them against this — so a registry that started handing out
+   * links to somewhere else cannot turn a node into a fetcher for it.
+   */
+  MODRINTH_DOWNLOAD_HOSTS: z.string().default('cdn.modrinth.com'),
   API_HOST: z.string().default('0.0.0.0'),
   API_PORT: port.default(8080),
   API_PREFIX: z.string().default('/api'),

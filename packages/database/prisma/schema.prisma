@@ -369,6 +369,9 @@ model GameTemplate {
   logConfig   Json     @default("{}")
   defaultPorts Int[]   @default([])
   supportedVersions String[] @default([])
+  /// Optional panels a server built on this template gets, e.g. ["plugins"].
+  /// Empty for a game that has none, which is most of them.
+  features          String[] @default([])
 
   version  Int     @default(1)
   parentId String?

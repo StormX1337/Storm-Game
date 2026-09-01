@@ -35,6 +35,8 @@ export interface SeedTemplate {
   crashDetection: string;
   defaultPorts: number[];
   supportedVersions: string[];
+  /** Optional panels this template's servers get. Most games have none. */
+  features?: string[];
   configFiles: Record<string, unknown>;
   logConfig: Record<string, unknown>;
   variables: SeedTemplateVariable[];
@@ -80,6 +82,8 @@ export const SEED_TEMPLATES: SeedTemplate[] = [
     name: 'Minecraft: Java Edition',
     slug: 'minecraft-java',
     game: 'Minecraft Java',
+    // Paper, Spigot and Bukkit share a plugin ecosystem the panel can browse.
+    features: ['plugins'],
     category: 'Minecraft',
     description:
       'Vanilla, Paper, Purpur and Fabric compatible Minecraft Java Edition server running on Temurin JRE.',

@@ -119,6 +119,10 @@ export function toServerSummary(server: Row): ServerSummary {
           game: server.template.game,
           category: server.template.category,
           dockerImages: (server.template.dockerImages ?? {}) as Record<string, string>,
+          // What the panel may offer for this server beyond the standard tabs.
+          // The template decides, so a custom Minecraft template gets the
+          // plugin browser and a renamed one does not lose it.
+          features: server.template.features ?? [],
         }
       : null,
     owner: server.owner

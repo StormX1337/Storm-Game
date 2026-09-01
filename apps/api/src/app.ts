@@ -28,10 +28,12 @@ import databaseProvisionerPlugin from './services/database-provisioner.js';
 import { ServerService } from './services/server.service.js';
 import { UpdateService } from './services/update.service.js';
 import { ServerAccessService } from './services/server-access.service.js';
+import { PluginRegistryService } from './services/plugin-registry.service.js';
 
 import healthRoutes from './routes/health.routes.js';
 import authRoutes from './routes/auth.routes.js';
 import settingsRoutes from './routes/settings.routes.js';
+import pluginRoutes from './routes/plugins.routes.js';
 import accountRoutes from './routes/account.routes.js';
 import dashboardRoutes from './routes/dashboard.routes.js';
 import serverRoutes from './routes/servers.routes.js';
@@ -135,6 +137,7 @@ export async function buildApp(options: BuildOptions = {}): Promise<FastifyInsta
   app.decorate('servers', new ServerService(app));
   app.decorate('updates', new UpdateService(app));
   app.decorate('serverAccess', new ServerAccessService(app));
+  app.decorate('plugins', new PluginRegistryService(app));
 
   /* --------------------------------------------------------- swagger -- */
 
@@ -199,6 +202,7 @@ export async function buildApp(options: BuildOptions = {}): Promise<FastifyInsta
   await app.register(backupRoutes, { prefix: `${prefix}/servers` });
   await app.register(scheduleRoutes, { prefix: `${prefix}/servers` });
   await app.register(serverDatabaseRoutes, { prefix: `${prefix}/servers` });
+  await app.register(pluginRoutes, { prefix: `${prefix}/servers` });
   await app.register(adminUserRoutes, { prefix: `${prefix}/admin/users` });
   await app.register(adminNodeRoutes, { prefix: `${prefix}/admin/nodes` });
   await app.register(adminTemplateRoutes, { prefix: `${prefix}/admin/templates` });

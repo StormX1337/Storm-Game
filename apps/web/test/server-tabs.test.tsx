@@ -1,6 +1,22 @@
+import { readdirSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { render } from '@testing-library/react';
 import { SERVER_TABS, SERVER_TABS_NAV_CLASS } from '@/components/panel/sidebar';
+
+const SERVER_ROUTES = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../src/app/(panel)/servers/[id]',
+);
+
+/** The route segments that actually exist on disk under a server. */
+function routeSegments(): string[] {
+  return readdirSync(SERVER_ROUTES, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && !entry.name.startsWith('_'))
+    .map((entry) => entry.name)
+    .sort();
+}
 
 /**
  * Each tab is a route segment typed by hand next to a directory named the same
@@ -8,21 +24,12 @@ import { SERVER_TABS, SERVER_TABS_NAV_CLASS } from '@/components/panel/sidebar';
  * server is broken rather than like a typo.
  */
 describe('SERVER_TABS', () => {
-  it('covers every section of a server', () => {
-    expect(SERVER_TABS.map((tab) => tab.segment)).toEqual([
-      '',
-      'console',
-      'files',
-      'backups',
-      'schedules',
-      'databases',
-      'network',
-      'sftp',
-      'subusers',
-      'startup',
-      'activity',
-      'settings',
-    ]);
+  it('points every tab at a page that exists', () => {
+    const onDisk = new Set(routeSegments());
+    for (const tab of SERVER_TABS) {
+      if (!tab.segment) continue; // the overview is the bare server URL
+      expect(onDisk.has(tab.segment), `no page for the "${tab.label}" tab`).toBe(true);
+    }
   });
 
   it('has one overview tab, addressed by the bare server URL', () => {
@@ -60,20 +67,12 @@ describe('reaching every tab', () => {
   });
 
   it('offers every section the panel has', () => {
-    // A tab missing here is a page with no way to reach it.
-    expect(SERVER_TABS.map((tab) => tab.segment)).toEqual([
-      '',
-      'console',
-      'files',
-      'backups',
-      'schedules',
-      'databases',
-      'network',
-      'sftp',
-      'subusers',
-      'startup',
-      'activity',
-      'settings',
-    ]);
+    // A page with no tab is a page nobody can reach, and until this read the
+    // directory it could only compare one hand-written list against another —
+    // so it would have said nothing about a route added without a tab.
+    const tabs = new Set<string>(SERVER_TABS.map((tab) => tab.segment));
+    for (const segment of routeSegments()) {
+      expect(tabs.has(segment), `the "${segment}" page has no tab`).toBe(true);
+    }
   });
 });

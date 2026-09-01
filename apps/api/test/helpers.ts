@@ -29,7 +29,9 @@ export interface TestContext {
   cleanup: () => Promise<void>;
 }
 
-export async function createTestApp(options: { rateLimit?: boolean } = {}): Promise<TestContext> {
+export async function createTestApp(
+  options: { rateLimit?: boolean; env?: Partial<ApiEnv> } = {},
+): Promise<TestContext> {
   const env: ApiEnv = {
     ...loadApiEnv(),
     NODE_ENV: 'test',
@@ -39,6 +41,10 @@ export async function createTestApp(options: { rateLimit?: boolean } = {}): Prom
     LOG_LEVEL: 'fatal',
     LOGIN_RATE_LIMIT_MAX: 1000,
     RATE_LIMIT_MAX: 100000,
+    // Last, so a suite can point something at a stub it controls — an external
+    // registry, say, which a test can neither reach nor make answer with the
+    // hostile things worth asserting against.
+    ...options.env,
   };
 
   // Route-level limits (5 registrations per 10 minutes) would throttle a

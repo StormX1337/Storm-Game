@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   Activity,
+  Blocks,
   CalendarClock,
   Database,
   Download,
@@ -102,6 +103,10 @@ export const SERVER_TABS = [
   { segment: '', label: 'Overview', icon: Gauge },
   { segment: 'console', label: 'Console', icon: Activity },
   { segment: 'files', label: 'Files', icon: FolderTree },
+  // Only for a template that says its servers use plugins, which today means
+  // Minecraft: Java. Everything else never sees the tab, and the API answers
+  // 404 there regardless of what the panel draws.
+  { segment: 'plugins', label: 'Plugins', icon: Blocks, feature: 'plugins' },
   { segment: 'backups', label: 'Backups', icon: HardDrive },
   { segment: 'schedules', label: 'Schedules', icon: CalendarClock },
   { segment: 'databases', label: 'Databases', icon: Database },

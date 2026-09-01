@@ -70,6 +70,13 @@ export interface AllocationSummary {
   nodeId: string;
 }
 
+/** Optional panels a game template can turn on for its servers. */
+export const TemplateFeature = {
+  /** Browse and install plugins from Modrinth. Minecraft: Java only. */
+  PLUGINS: 'plugins',
+} as const;
+export type TemplateFeature = (typeof TemplateFeature)[keyof typeof TemplateFeature];
+
 export interface ServerSummary {
   id: string;
   uuid: string;
@@ -94,6 +101,13 @@ export interface ServerSummary {
      * point their container at an arbitrary registry.
      */
     dockerImages: Record<string, string>;
+    /**
+     * Optional panels this server gets, e.g. `['plugins']`. The template says
+     * so rather than the panel matching on a slug, so an operator's own
+     * Minecraft template keeps the plugin browser and a renamed one does not
+     * lose it.
+     */
+    features: TemplateFeature[];
   } | null;
   owner: { id: string; username: string; email: string } | null;
   primaryAllocation: AllocationSummary | null;

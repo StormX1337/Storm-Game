@@ -140,7 +140,13 @@ export default function ServerLayout({ children }: { children: React.ReactNode }
         */}
         <ScrollArea className="w-full border-b border-border">
           <nav className={SERVER_TABS_NAV_CLASS} aria-label="Server sections">
-            {SERVER_TABS.map((tab) => {
+            {SERVER_TABS.filter(
+              // A tab tied to a feature appears only where the template says
+              // its servers have it, so a Rust server never shows a plugin
+              // browser it has no use for.
+              (tab) =>
+                !('feature' in tab) || (server.template?.features ?? []).includes(tab.feature),
+            ).map((tab) => {
               const href = tab.segment ? `${base}/${tab.segment}` : base;
               const active = tab.segment ? pathname.startsWith(href) : pathname === base;
               return (

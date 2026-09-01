@@ -1,7 +1,9 @@
 import fs from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { createReadStream, createWriteStream } from 'node:fs';
 import { pipeline } from 'node:stream/promises';
 import path from 'node:path';
+import { request } from 'undici';
 import archiver from 'archiver';
 import unzipper from 'unzipper';
 import type { Readable } from 'node:stream';
@@ -138,6 +140,87 @@ export class FilesService {
     const stat = await fs.stat(target);
     await this.own(target);
     return stat.size;
+  }
+
+  /**
+   * Downloads a file into the server directory, and refuses anything that is
+   * not exactly what was asked for.
+   *
+   * This is how a plugin gets installed, so three things are not optional. The
+   * download is capped, because a server's disk is not the panel's to fill.
+   * The digest is checked, because "whatever that URL returned" is not an
+   * install — a mirror serving something else, or a truncated transfer, has to
+   * fail here rather than at the server's next start. And it lands on a
+   * temporary name first: a half-written jar that the game then tries to load
+   * is worse than no jar at all.
+   *
+   * The URL is not the caller's to choose. The panel resolves it from the
+   * registry and checks where it points; nothing here treats an arbitrary
+   * address as safe just because it arrived over an authenticated channel.
+   */
+  async fetchInto(
+    uuid: string,
+    requested: string,
+    source: { url: string; sha512?: string; maxBytes: number },
+  ): Promise<{ path: string; bytes: number; sha512: string }> {
+    const target = await this.paths.resolveChecked(uuid, requested);
+    const partial = `${target}.part`;
+    await fs.mkdir(path.dirname(target), { recursive: true });
+
+    const response = await request(source.url, {
+      method: 'GET',
+      maxRedirections: 3,
+      headers: { 'user-agent': 'StormPanel/1.0' },
+      headersTimeout: 30_000,
+      bodyTimeout: 10 * 60_000,
+    });
+
+    if (response.statusCode >= 400) {
+      response.body.destroy();
+      throw new AgentError(502, 'DOWNLOAD_FAILED', `The download answered ${response.statusCode}`);
+    }
+
+    const digest = createHash('sha512');
+    let bytes = 0;
+
+    try {
+      await pipeline(
+        response.body,
+        async function* (chunks: AsyncIterable<Buffer>) {
+          for await (const chunk of chunks) {
+            bytes += chunk.length;
+            if (bytes > source.maxBytes) {
+              // Thrown mid-stream so the transfer stops here rather than
+              // after the whole file has already been written.
+              throw new AgentError(
+                413,
+                'FILE_TOO_LARGE',
+                `The download is larger than ${source.maxBytes} bytes`,
+              );
+            }
+            digest.update(chunk);
+            yield chunk;
+          }
+        },
+        createWriteStream(partial),
+      );
+
+      const sha512 = digest.digest('hex');
+      if (source.sha512 && sha512 !== source.sha512.toLowerCase()) {
+        throw new AgentError(
+          502,
+          'CHECKSUM_MISMATCH',
+          'The download did not match the checksum the registry published',
+        );
+      }
+
+      await fs.rename(partial, target);
+      await this.own(target);
+      return { path: requested, bytes, sha512 };
+    } catch (error) {
+      await fs.rm(partial, { force: true }).catch(() => undefined);
+      throw error;
+    }
   }
 
   async createDirectory(uuid: string, requested: string, name: string): Promise<void> {

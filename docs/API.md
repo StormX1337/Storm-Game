@@ -502,6 +502,43 @@ Unauthenticated, for load balancers and monitoring.
 
 ---
 
+## Minecraft plugins
+
+|                                              |                                    |
+| -------------------------------------------- | ---------------------------------- |
+| `GET /servers/:id/plugins`                   | Jars in the server's `plugins` dir |
+| `GET /servers/:id/plugins/search?q=`         | Search the registry                |
+| `GET /servers/:id/plugins/:project/versions` | Downloadable builds                |
+| `POST /servers/:id/plugins`                  | Install `{ "versionId": "…" }`     |
+| `DELETE /servers/:id/plugins/:filename`      | Remove a jar                       |
+
+Reading needs `servers.files`, installing and removing `servers.files.write`.
+
+**Only where the template says so.** A `GameTemplate` carries a `features`
+list, and these endpoints exist for a server whose template includes
+`plugins` — everything else gets 404, including a caller who goes straight to
+the URL. That is a column rather than a match on the slug, so an operator's
+own Minecraft template keeps the browser and a renamed one does not lose it.
+
+**A caller never supplies a URL.** The request body is one opaque version id.
+The panel asks the registry what that resolves to, and checks the answer twice
+before any node is told to fetch it: against `MODRINTH_DOWNLOAD_HOSTS`, and
+against the addresses no outbound request should reach. Without that, "install
+this plugin" would be a way to make a node request an arbitrary address — its
+own metadata service, something on the operator's private network — and write
+the reply into a directory the customer reads through the file manager.
+
+The node verifies the sha512 the registry published, caps the transfer, and
+writes to a temporary name first, so a truncated or substituted download fails
+there instead of at the server's next start. Installing counts against the
+server's disk limit like any other file.
+
+`MODRINTH_API_URL` points the browser elsewhere — a mirror, or nothing at all
+on a panel without outbound internet, in which case searching answers 502 and
+the rest of the panel is unaffected.
+
+---
+
 ## Moving a server to another node
 
 ```http

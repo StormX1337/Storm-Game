@@ -81,6 +81,7 @@ async function seedTemplates(): Promise<void> {
       where: { slug: template.slug },
       create: {
         ...rest,
+        features: rest.features ?? [],
         dockerImages: rest.dockerImages,
         configFiles: rest.configFiles as object,
         logConfig: rest.logConfig as object,
@@ -101,6 +102,7 @@ async function seedTemplates(): Promise<void> {
         crashDetection: rest.crashDetection,
         defaultPorts: rest.defaultPorts,
         supportedVersions: rest.supportedVersions,
+        features: rest.features ?? [],
         configFiles: rest.configFiles as object,
         logConfig: rest.logConfig as object,
       },

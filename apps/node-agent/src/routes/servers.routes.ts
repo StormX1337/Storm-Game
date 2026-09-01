@@ -261,6 +261,34 @@ export default async function serverRoutes(app: FastifyInstance): Promise<void> 
     return ok({ path: normalizeDisplayPath(target), bytes });
   });
 
+  app.post('/servers/:uuid/files/fetch', async (request) => {
+    const { uuid } = uuidParam.parse(request.params);
+    const input = z
+      .object({
+        url: z.string().url().max(2048),
+        path: z.string().min(1).max(4096),
+        // Hex sha512 as the registry published it. Optional only because not
+        // every source publishes one; when it is there it is enforced.
+        sha512: z
+          .string()
+          .regex(/^[0-9a-fA-F]{128}$/)
+          .optional(),
+        maxBytes: z
+          .number()
+          .int()
+          .min(1)
+          .max(512 * 1024 * 1024),
+      })
+      .parse(request.body);
+
+    const result = await app.files.fetchInto(uuid, normalizeDisplayPath(input.path), {
+      url: input.url,
+      sha512: input.sha512,
+      maxBytes: input.maxBytes,
+    });
+    return ok(result);
+  });
+
   app.post('/servers/:uuid/files/rename', async (request) => {
     const { uuid } = uuidParam.parse(request.params);
     const input = z
