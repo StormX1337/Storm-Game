@@ -79,8 +79,26 @@
     --elevation-raised: var(--shadow-md), var(--highlight);
     --elevation-overlay: var(--shadow-lg), var(--highlight);
 
+    /*
+     * Glass.
+     *
+     * A translucent surface is only glass if there is something behind it
+     * worth seeing — hence the coloured wash and the faint grid on the body,
+     * which are what the blur has to work with. Saturation is pushed past
+     * 100% because blurring desaturates: without it the colour bleeding
+     * through arrives grey and the whole effect reads as dirty plastic.
+     */
+    --glass-bg: 0 0% 100%;
+    --glass-alpha: 0.62;
+    --glass-blur: 20px;
+    --glass-saturate: 170%;
+    --glass-border: 222 25% 25% / 0.1;
+    --glass-sheen: 0 0% 100% / 0.85;
+    --glass-sheen-fade: 222 25% 25% / 0.06;
+
     /* How strongly the ambient wash behind the panel shows through. */
-    --ambient: 0.055;
+    --ambient: 0.16;
+    --grid-ink: 222 30% 20% / 0.042;
   }
 
   .dark {
@@ -141,7 +159,18 @@
     --shadow-lg: 0 20px 48px -20px hsl(0 0% 0% / 0.7), 0 40px 88px -40px hsl(0 0% 0% / 0.6);
     --highlight: inset 0 1px 0 hsl(0 0% 100% / 0.055);
 
-    --ambient: 0.09;
+    /* Dark glass is a tinted pane, not a white one dimmed: the fill is the
+       card colour, and the edge is the only white in it. */
+    --glass-bg: 221 24% 16%;
+    --glass-alpha: 0.5;
+    --glass-blur: 22px;
+    --glass-saturate: 185%;
+    --glass-border: 0 0% 100% / 0.09;
+    --glass-sheen: 0 0% 100% / 0.24;
+    --glass-sheen-fade: 0 0% 100% / 0.03;
+
+    --ambient: 0.42;
+    --grid-ink: 213 30% 70% / 0.032;
   }
 
   * {
@@ -157,33 +186,56 @@
   }
 
   /*
-   * A wash of the brand colour behind everything.
+   * What the glass looks out on.
    *
-   * A flat near-black fills the screen evenly, and evenly lit is what makes
-   * a dark interface look switched off. Two very wide, very faint radial
-   * gradients give the ground somewhere to be brighter, so the cards above
-   * it have something to sit on.
+   * A translucent surface over a flat colour is not glass, it is a lighter
+   * rectangle — the effect lives or dies on there being something behind it
+   * to blur. So the ground carries three wide pools of colour and, over
+   * them, a grid faint enough to read as texture rather than as graph paper.
    *
-   * It follows `--primary`, which an administrator sets — so a panel branded
-   * green is washed green, not blue. Fixed and non-interactive: it must not
-   * scroll with the content or intercept a click.
+   * The pools follow `--primary` and the chart palette, so a panel branded
+   * green looks out on green. Both layers are fixed and non-interactive:
+   * they must not scroll with the content or intercept a click. The drift is
+   * a composited transform on a layer nothing else touches, so it costs a
+   * GPU blit per frame and no layout at all.
    */
   body::before {
+    content: '';
+    position: fixed;
+    inset: -25%;
+    z-index: -2;
+    pointer-events: none;
+    background: radial-gradient(
+        40rem 30rem at 42% 8%,
+        hsl(var(--primary) / var(--ambient)),
+        transparent 62%
+      ),
+      radial-gradient(
+        34rem 26rem at 80% 12%,
+        hsl(var(--chart-2) / calc(var(--ambient) * 0.85)),
+        transparent 60%
+      ),
+      radial-gradient(
+        40rem 30rem at 58% 88%,
+        hsl(var(--chart-3) / calc(var(--ambient) * 0.5)),
+        transparent 64%
+      );
+    animation: storm-drift 40s ease-in-out infinite alternate;
+    will-change: transform;
+  }
+
+  /* A grid for the blur to bend. Faded out towards the edges so it never
+     meets the viewport as a hard cut-off line. */
+  body::after {
     content: '';
     position: fixed;
     inset: 0;
     z-index: -1;
     pointer-events: none;
-    background: radial-gradient(
-        60rem 38rem at 12% -8%,
-        hsl(var(--primary) / var(--ambient)),
-        transparent 62%
-      ),
-      radial-gradient(
-        48rem 32rem at 100% 4%,
-        hsl(var(--chart-2) / calc(var(--ambient) * 0.7)),
-        transparent 58%
-      );
+    background-image: linear-gradient(to right, hsl(var(--grid-ink)) 1px, transparent 1px),
+      linear-gradient(to bottom, hsl(var(--grid-ink)) 1px, transparent 1px);
+    background-size: 46px 46px;
+    mask-image: radial-gradient(150% 125% at 50% 12%, #000 46%, transparent 96%);
   }
 
   /* Headings tighten as they grow, the way type is set rather than scaled. */
@@ -234,6 +286,72 @@
 }
 
 @layer components {
+  /*
+   * A pane of glass.
+   *
+   * Three things together, none of which works alone: a fill that lets the
+   * ground through, a blur with the saturation pushed past 100% (blurring
+   * desaturates, and without the compensation the colour arrives grey and
+   * the pane reads as dirty plastic), and an edge.
+   *
+   * The edge is the part usually skipped. Real glass catches light along the
+   * rim it is lit from and loses it around the far side, so a flat 1px
+   * border gives the game away immediately. `::before` paints a gradient
+   * *into* the border box and masks out the middle, which is the only way to
+   * get a border that changes colour along its own length.
+   */
+  .storm-glass {
+    position: relative;
+    /* Opaque until the blur is known to work. A translucent pane with
+       nothing blurring the grid behind it is not a softer surface, it is
+       text with a grid drawn through it. */
+    background-color: hsl(var(--card));
+    border: 1px solid hsl(var(--glass-border));
+    box-shadow: var(--shadow-sm);
+  }
+
+  @supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+    .storm-glass {
+      background-color: hsl(var(--glass-bg) / var(--glass-alpha));
+      -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+      backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    }
+  }
+
+  @supports (mask-composite: exclude) or (-webkit-mask-composite: xor) {
+    .storm-glass::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      padding: 1px;
+      border-radius: inherit;
+      pointer-events: none;
+      background: linear-gradient(
+        145deg,
+        hsl(var(--glass-sheen)),
+        hsl(var(--glass-sheen-fade)) 42%,
+        transparent 58%,
+        hsl(var(--glass-sheen-fade))
+      );
+      -webkit-mask:
+        linear-gradient(#000 0 0) content-box,
+        linear-gradient(#000 0 0);
+      -webkit-mask-composite: xor;
+      mask:
+        linear-gradient(#000 0 0) content-box,
+        linear-gradient(#000 0 0);
+      mask-composite: exclude;
+    }
+
+    /* The pane's own children have to sit above the rim, or the gradient
+       draws over the first thing inside it. */
+    .storm-glass > * {
+      position: relative;
+      z-index: 1;
+    }
+  }
+
   /* For a card that is also a link or a button. It rises on hover, which is
      the whole of the affordance — no border colour change, no scale. */
   .storm-interactive {
@@ -348,7 +466,21 @@
   }
 }
 
+@keyframes storm-drift {
+  from {
+    transform: translate3d(-2%, -1.5%, 0) scale(1.02);
+  }
+  to {
+    transform: translate3d(2%, 1.5%, 0) scale(1.07);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  /* The ground holds still. */
+  body::before {
+    animation: none;
+  }
+
   /* Someone who has asked for less movement gets the depth without the
      motion — the hover shadow still says "this is a link". */
   .storm-interactive,

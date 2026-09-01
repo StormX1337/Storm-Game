@@ -178,7 +178,7 @@ function ToastViewport({
         return (
           <div
             key={toast.id}
-            className="pointer-events-auto flex items-start gap-3 rounded-xl border border-border bg-popover/95 p-3.5 shadow-overlay backdrop-blur"
+            className="storm-glass pointer-events-auto flex items-start gap-3 rounded-xl p-3.5 shadow-overlay"
             style={{ animation: 'storm-fade-in 180ms ease-out' }}
           >
             <Icon

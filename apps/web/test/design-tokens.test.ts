@@ -97,6 +97,31 @@ describe('design tokens', () => {
     expect(missing, `shadow tokens with no dark value: ${missing.join(', ')}`).toEqual([]);
   });
 
+  it('lets the two themes disagree about everything except shape', () => {
+    // `.dark` is an override block. A token defined in only one of the two
+    // is a token the other theme silently inherits or silently lacks, and
+    // glass has a lot of them — fill, blur, saturation, the colour of the
+    // rim light, how much ground shows through. The exemptions are the ones
+    // that are deliberately shared, and naming them here means adding a
+    // token is a decision rather than an omission.
+    const shared = new Set([
+      '--radius',
+      '--elevation-card',
+      '--elevation-raised',
+      '--elevation-overlay',
+    ]);
+
+    const lightOnly = [...light.keys()].filter((token) => !dark.has(token) && !shared.has(token));
+    const darkOnly = [...dark.keys()].filter((token) => !light.has(token));
+
+    expect(lightOnly, `defined for the light theme only: ${lightOnly.join(', ')}`).toEqual([]);
+    expect(darkOnly, `defined for the dark theme only: ${darkOnly.join(', ')}`).toEqual([]);
+
+    // And the exemptions have to be real, or this test passes by naming
+    // tokens that no longer exist.
+    for (const token of shared) expect(light.has(token), `${token} is gone`).toBe(true);
+  });
+
   it('keeps the default brand colour on the token the stylesheet ships', () => {
     // `useBrandColor` overwrites --primary on the root element. If the
     // stylesheet's own light value ever drifts from the default hex an

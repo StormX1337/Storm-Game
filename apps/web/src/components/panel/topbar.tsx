@@ -59,7 +59,7 @@ export function Topbar({ onOpenSidebar }: { onOpenSidebar: () => void }) {
     : '';
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-3 border-b border-border bg-background/85 px-4 backdrop-blur-md sm:px-6">
+    <header className="storm-glass sticky top-0 z-30 flex h-16 shrink-0 items-center gap-3 rounded-none border-x-0 border-t-0 px-4 [--glass-alpha:0.4] sm:px-6">
       <Button
         variant="ghost"
         size="icon"

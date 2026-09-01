@@ -142,10 +142,11 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
 
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-border transition-transform duration-200 lg:static lg:translate-x-0',
-          // Translucent over the ambient wash rather than a flat block, so the
-          // navigation belongs to the same room as the content beside it.
-          'bg-surface/85 backdrop-blur-xl',
+          'fixed inset-y-0 left-0 z-50 flex w-64 flex-col transition-transform duration-200 lg:static lg:translate-x-0',
+          // A pane, like everything else — but darker, because the eye reads
+          // the brighter plane as the nearer one and the navigation sits
+          // behind the content it navigates.
+          'storm-glass rounded-none border-y-0 border-l-0 [--glass-alpha:0.4]',
           open ? 'translate-x-0' : '-translate-x-full',
         )}
       >
