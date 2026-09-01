@@ -95,6 +95,23 @@ test.describe('authentication', () => {
     await page.getByLabel('Password', { exact: true }).fill('E2ePassword123!');
     await page.getByRole('button', { name: 'Create account' }).click();
 
+    // Registration is deliberately rate limited to five in ten minutes, so
+    // running this suite twice in a row hits the limit rather than a bug. Say
+    // that plainly: the alternative is a timeout on the line below, which
+    // reads like the panel is broken and sends the next person hunting.
+    const limited = page.getByText(/too many|rate limit/i);
+    if (
+      await limited
+        .first()
+        .isVisible({ timeout: 3_000 })
+        .catch(() => false)
+    ) {
+      test.skip(
+        true,
+        'the registration rate limit is doing its job — wait ten minutes, or run against a fresh stack',
+      );
+    }
+
     await page.waitForURL('**/dashboard', { timeout: 30_000 });
     await expect(page.getByRole('heading', { name: /Welcome back/ })).toBeVisible();
     await expect(page.getByText('Total servers')).toBeVisible();
@@ -297,5 +314,148 @@ test.describe('administration', () => {
     });
     // Signing in for this run must be recorded.
     await expect(page.getByText('Login').first()).toBeVisible({ timeout: 20_000 });
+  });
+});
+
+/**
+ * The settings that reach the browser, and the admin controls on a server.
+ *
+ * These exist for a failure mode the unit tests structurally cannot catch: a
+ * component that renders perfectly against a mocked payload of the wrong
+ * shape. That shipped once here — a card asked a paginated endpoint for
+ * `.items`, which paginated endpoints do not return, and the unit test agreed
+ * because the same wrong shape was written into its mock. It looked fine until
+ * a browser loaded it and the card offered nothing at all.
+ *
+ * So each of these drives the real API and asserts on real values coming back.
+ */
+test.describe('panel settings reach the browser', () => {
+  // These are panel-wide rows, so every test here puts back what it changed.
+  const RESTORE = {
+    panelName: 'Storm Panel',
+    announcement: '',
+    announcementLevel: 'info',
+    brandColor: '#2563eb',
+  };
+
+  test.afterEach(async ({ request }) => {
+    await request.patch('/api/v1/admin/settings', { data: RESTORE });
+  });
+
+  test('renaming the panel renames it everywhere', async ({ page, request }) => {
+    const name = `Panel ${unique()}`;
+    const response = await request.patch('/api/v1/admin/settings', { data: { panelName: name } });
+    expect(response.status()).toBe(200);
+
+    await page.goto('/dashboard');
+    // The sidebar reads the public settings endpoint, so seeing the new name
+    // proves that whole chain: write, read without a session, provider, brand.
+    await expect(page.getByText(name).first()).toBeVisible({ timeout: 25_000 });
+  });
+
+  test('an announcement appears, and stays dismissed', async ({ page, request }) => {
+    const message = `Scheduled maintenance ${unique()}`;
+    await request.patch('/api/v1/admin/settings', {
+      data: { announcement: message, announcementLevel: 'warning' },
+    });
+
+    await page.goto('/dashboard');
+    await expect(page.getByText(message)).toBeVisible({ timeout: 25_000 });
+
+    await page.getByRole('button', { name: /dismiss announcement/i }).click();
+    await expect(page.getByText(message)).toBeHidden();
+
+    // Dismissal is remembered per message, so a reload must not bring it back.
+    await page.reload();
+    await expect(page.getByText(message)).toBeHidden({ timeout: 20_000 });
+  });
+
+  test('serves branding without a session, and nothing else', async ({ request }) => {
+    const response = await request.get('/api/v1/settings');
+    expect(response.status()).toBe(200);
+
+    const settings = (await response.json()).data;
+    expect(typeof settings.panelName).toBe('string');
+    expect(typeof settings.brandColor).toBe('string');
+    // How the panel is run stays behind the admin API.
+    expect(settings).not.toHaveProperty('defaultMemoryLimit');
+    expect(settings).not.toHaveProperty('backupRetentionDays');
+  });
+});
+
+test.describe('server administration', () => {
+  test('the limits card is filled from the server, not from a default', async ({ page }) => {
+    await page.goto('/servers');
+    const link = await firstServerLink(page);
+    test.skip(link === null, 'this environment has no servers to administer');
+
+    await link!.click();
+    await page.waitForURL(/\/servers\/[^/]+/, { timeout: 25_000 });
+    await serverTab(page, 'Settings').click();
+
+    await expect(page.getByText('Resource limits')).toBeVisible({ timeout: 25_000 });
+
+    // A number, and the server's own — a card rendering zeros would mean the
+    // payload never reached it.
+    const memory = page.getByLabel('Memory', { exact: true });
+    await expect(memory).toBeVisible();
+    expect(Number(await memory.inputValue())).toBeGreaterThan(0);
+    expect(Number(await page.getByLabel('Disk', { exact: true }).inputValue())).toBeGreaterThan(0);
+  });
+
+  test('the move card lists the nodes the API actually returns', async ({ page, request }) => {
+    // The regression test for a bug that shipped: the card read a paginated
+    // endpoint as if it returned `{ items }`, so its list was always empty. No
+    // mock catches that — the unit test had the same wrong shape written into
+    // it. Only a browser talking to the real API does.
+    //
+    // It needs a node that is online and is not the one the server already
+    // runs on, and hoping the environment has one is how this test passes
+    // while proving nothing. So it makes one: register it, mint its token, and
+    // send the heartbeat that a real agent would. That is the only thing which
+    // turns a node ONLINE, and it is all public API.
+    const suffix = unique();
+    const created = await request.post('/api/v1/admin/nodes', {
+      data: {
+        name: `e2e-move-${suffix}`,
+        location: 'Test',
+        hostname: '127.0.0.1',
+        ip: '10.99.0.1',
+        scheme: 'http',
+        cpuCores: 4,
+        memoryTotal: 32768,
+        diskTotal: 204800,
+      },
+    });
+    expect(created.status()).toBe(201);
+    // Registering a node mints its first credentials in the same response —
+    // that is how the installer gets them — so no second call is needed.
+    const { node, token } = (await created.json()).data;
+
+    try {
+      const beat = await request.post('/api/v1/internal/heartbeat', {
+        headers: { authorization: `Bearer ${token.tokenId}.${token.token}` },
+        data: { agentVersion: '1.0.0', system: { dockerVersion: '27.0.0' } },
+      });
+      expect(beat.status(), 'the heartbeat is what makes a node ONLINE').toBe(200);
+
+      await page.goto('/servers');
+      const link = await firstServerLink(page);
+      test.skip(link === null, 'this environment has no servers to administer');
+
+      await link!.click();
+      await page.waitForURL(/\/servers\/[^/]+/, { timeout: 25_000 });
+      await serverTab(page, 'Settings').click();
+      await expect(page.getByText('Move to another node')).toBeVisible({ timeout: 25_000 });
+
+      // The node just brought online has to be offered. An empty chooser here
+      // is exactly the shipped bug.
+      await page.getByRole('combobox').last().click();
+      await expect(
+        page.getByRole('option', { name: new RegExp(`e2e-move-${suffix}`) }),
+      ).toBeVisible({ timeout: 15_000 });
+    } finally {
+      await request.delete(`/api/v1/admin/nodes/${node.id}`);
+    }
   });
 });

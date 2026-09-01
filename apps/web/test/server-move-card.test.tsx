@@ -112,6 +112,23 @@ describe('ServerMoveCard', () => {
     expect(screen.queryByText('Move to another node')).not.toBeInTheDocument();
   });
 
+  it('reads the node list through the paginated helper', async () => {
+    // The bug this pins down shipped: `/admin/nodes` is paginated and answers
+    // with the array as `data`, so `api.get(...).items` is always undefined and
+    // the card silently offers nothing. Asserting the returned shape cannot
+    // catch it — the mock would just carry the same wrong assumption — so this
+    // asserts which helper was called instead.
+    const { api, apiPaginated } = await import('@/lib/api');
+    vi.mocked(api.get).mockClear();
+    vi.mocked(apiPaginated).mockClear();
+
+    renderAs('OWNER', []);
+    await screen.findByText('Move to another node');
+
+    expect(apiPaginated).toHaveBeenCalledWith('/admin/nodes', expect.anything());
+    expect(api.get).not.toHaveBeenCalledWith('/admin/nodes', expect.anything());
+  });
+
   it('never offers a node the move would be refused for', async () => {
     // The current node, one in maintenance and one offline are all rejected by
     // the preflight. Listing them would send an administrator to a 409.
