@@ -72,11 +72,29 @@ export function ResourceChart({
 
   const body =
     data.length === 0 ? (
+      /*
+       * The chart's own furniture, drawn empty: gridlines and a baseline,
+       * with the reason written across them. A line of grey text alone in a
+       * box reads as something that failed to load — this reads as a chart
+       * waiting for its first sample, which is what it is.
+       */
       <div
-        className="flex items-center justify-center text-sm text-muted-foreground"
+        className="relative flex items-center justify-center overflow-hidden rounded-lg"
         style={{ height }}
+        aria-hidden={false}
       >
-        {emptyMessage}
+        <div
+          className="pointer-events-none absolute inset-0 opacity-60"
+          style={{
+            backgroundImage:
+              'linear-gradient(to bottom, hsl(var(--border) / 0.55) 1px, transparent 1px)',
+            backgroundSize: `100% ${Math.max(24, Math.round(height / 5))}px`,
+          }}
+        />
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 border-t border-dashed border-border" />
+        <p className="relative rounded-full border border-border bg-card/80 px-3 py-1 text-xs text-muted-foreground backdrop-blur-sm">
+          {emptyMessage}
+        </p>
       </div>
     ) : (
       <ResponsiveContainer width="100%" height={height}>

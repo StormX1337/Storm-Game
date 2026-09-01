@@ -20,7 +20,14 @@ export const TableHeader = React.forwardRef<
   HTMLTableSectionElement,
   React.HTMLAttributes<HTMLTableSectionElement>
 >(({ className, ...props }, ref) => (
-  <thead ref={ref} className={cn('[&_tr]:border-b [&_tr]:border-border', className)} {...props} />
+  // Sunken, so the header reads as the edge of the table rather than as its
+  // first row — which matters most on a long list, where the eye comes back
+  // to it after scrolling.
+  <thead
+    ref={ref}
+    className={cn('bg-surface-sunken/60 [&_tr]:border-b [&_tr]:border-border', className)}
+    {...props}
+  />
 ));
 TableHeader.displayName = 'TableHeader';
 
@@ -39,8 +46,11 @@ export const TableRow = React.forwardRef<
   <tr
     ref={ref}
     className={cn(
-      'border-b border-border transition-colors',
-      interactive && 'cursor-pointer hover:bg-secondary/40',
+      'border-b border-border transition-colors last:border-0',
+      // Every row responds to the pointer, not only the clickable ones: on a
+      // wide table it is how you keep your place across the columns.
+      'hover:bg-secondary/25',
+      interactive && 'cursor-pointer hover:bg-secondary/45',
       className,
     )}
     {...props}

@@ -76,6 +76,13 @@ export interface StatCardProps {
   className?: string;
 }
 
+const TONE_CHIP: Record<NonNullable<StatCardProps['tone']>, string> = {
+  default: 'border-primary/20 bg-primary/10 text-primary',
+  success: 'border-success/20 bg-success/10 text-success',
+  warning: 'border-warning/20 bg-warning/10 text-warning',
+  destructive: 'border-destructive/20 bg-destructive/10 text-destructive',
+};
+
 export function StatCard({
   label,
   value,
@@ -87,7 +94,7 @@ export function StatCard({
   className,
 }: StatCardProps) {
   return (
-    <Card className={cn('p-5', className)}>
+    <Card className={cn('relative overflow-hidden p-5', className)}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -111,8 +118,16 @@ export function StatCard({
         </div>
 
         {Icon ? (
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border bg-secondary/50">
-            <Icon className="h-4 w-4 text-muted-foreground" />
+          // Tinted with the figure's own tone rather than left grey: on a
+          // wall of stat cards the colour is what tells you which one is the
+          // one in trouble, before you have read a single number.
+          <div
+            className={cn(
+              'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border',
+              TONE_CHIP[tone],
+            )}
+          >
+            <Icon className="h-4 w-4" />
           </div>
         ) : null}
       </div>
@@ -155,8 +170,16 @@ export function UsageMeter({
   const percent = usagePercent(used, limit);
   const unlimited = !limit || limit <= 0;
 
-  // Colour only shifts once usage is genuinely worth attention.
-  const tone = percent >= 90 ? 'bg-destructive' : percent >= 75 ? 'bg-warning' : 'bg-primary';
+  // Colour only shifts once usage is genuinely worth attention. The glow is
+  // named per tone rather than taken from `currentColor`: the bar sets a
+  // background, not a text colour, so `currentColor` there would be whatever
+  // the surrounding paragraph happened to be.
+  const tone =
+    percent >= 90
+      ? 'bg-destructive shadow-[0_0_10px_-1px_hsl(var(--destructive)/0.7)]'
+      : percent >= 75
+        ? 'bg-warning shadow-[0_0_10px_-1px_hsl(var(--warning)/0.7)]'
+        : 'bg-primary shadow-[0_0_10px_-1px_hsl(var(--primary)/0.7)]';
 
   return (
     <div className={cn('space-y-2', className)}>

@@ -142,7 +142,10 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
 
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-border bg-surface transition-transform duration-200 lg:static lg:translate-x-0',
+          'fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-border transition-transform duration-200 lg:static lg:translate-x-0',
+          // Translucent over the ambient wash rather than a flat block, so the
+          // navigation belongs to the same room as the content beside it.
+          'bg-surface/85 backdrop-blur-xl',
           open ? 'translate-x-0' : '-translate-x-full',
         )}
       >
@@ -185,15 +188,16 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
                         href={item.href}
                         onClick={onClose}
                         className={cn(
-                          'group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                          'group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium',
+                          'transition-[background-color,color,box-shadow] duration-150',
                           active
-                            ? 'bg-primary/10 text-primary'
+                            ? 'bg-primary/12 text-primary shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.2)]'
                             : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground',
                         )}
                         aria-current={active ? 'page' : undefined}
                       >
                         {active ? (
-                          <span className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r-full bg-primary" />
+                          <span className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r-full bg-primary shadow-[0_0_10px_hsl(var(--primary)/0.7)]" />
                         ) : null}
                         <item.icon className="h-4 w-4 shrink-0" />
                         <span className="truncate">{item.label}</span>
@@ -213,7 +217,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
             className={cn(
               'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
               pathname.startsWith('/account')
-                ? 'bg-primary/10 text-primary'
+                ? 'bg-primary/12 text-primary shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.2)]'
                 : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground',
             )}
           >

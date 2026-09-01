@@ -49,7 +49,7 @@ export const DialogContent = React.forwardRef<
         // screen and clips every other line in it. On a phone that is most of
         // the content. The inset leaves the rounded corners visible there.
         'max-sm:w-[calc(100%-1.5rem)] [&>*]:min-w-0',
-        'border border-border bg-card p-6 shadow-2xl duration-200 sm:rounded-xl',
+        'border border-border bg-card p-6 shadow-overlay duration-200 sm:rounded-xl',
         'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0',
         'data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
         'max-h-[92vh] overflow-y-auto',
@@ -115,7 +115,7 @@ export const DropdownMenuSub = DropdownMenuPrimitive.Sub;
 export const DropdownMenuSubTrigger = DropdownMenuPrimitive.SubTrigger;
 
 const menuContentClasses =
-  'z-50 min-w-[10rem] overflow-hidden rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-xl ' +
+  'z-50 min-w-[10rem] overflow-hidden rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-overlay ' +
   'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 ' +
   'data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95';
 
@@ -243,7 +243,7 @@ export const PopoverContent = React.forwardRef<
       align={align}
       sideOffset={sideOffset}
       className={cn(
-        'z-50 w-72 rounded-lg border border-border bg-popover p-4 text-popover-foreground shadow-xl outline-none',
+        'z-50 w-72 rounded-lg border border-border bg-popover p-4 text-popover-foreground shadow-overlay outline-none',
         'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
         className,
       )}
@@ -268,7 +268,7 @@ export const TooltipContent = React.forwardRef<
       ref={ref}
       sideOffset={sideOffset}
       className={cn(
-        'z-50 overflow-hidden rounded-md border border-border bg-popover px-2.5 py-1.5 text-xs text-popover-foreground shadow-lg',
+        'z-50 overflow-hidden rounded-md border border-border bg-popover px-2.5 py-1.5 text-xs text-popover-foreground shadow-overlay',
         'data-[state=delayed-open]:animate-in data-[state=delayed-open]:fade-in-0 data-[state=delayed-open]:zoom-in-95',
         className,
       )}
@@ -291,7 +291,7 @@ export const SelectTrigger = React.forwardRef<
   <SelectPrimitive.Trigger
     ref={ref}
     className={cn(
-      'flex h-9 w-full items-center justify-between gap-2 rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm',
+      'flex h-9 w-full items-center justify-between gap-2 rounded-lg border border-input bg-surface-sunken px-3 py-2 text-sm shadow-xs transition-[border-color,box-shadow] hover:border-muted-foreground/30',
       'placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 focus:ring-offset-background',
       'disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 [&>span]:text-left',
       className,
@@ -315,7 +315,7 @@ export const SelectContent = React.forwardRef<
       ref={ref}
       position={position}
       className={cn(
-        'relative z-50 max-h-96 min-w-[8rem] overflow-hidden rounded-lg border border-border bg-popover text-popover-foreground shadow-xl',
+        'relative z-50 max-h-96 min-w-[8rem] overflow-hidden rounded-lg border border-border bg-popover text-popover-foreground shadow-overlay',
         'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
         position === 'popper' && 'data-[side=bottom]:translate-y-1 data-[side=top]:-translate-y-1',
         className,

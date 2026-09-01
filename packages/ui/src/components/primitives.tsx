@@ -18,7 +18,10 @@ export const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDi
   ({ className, ...props }, ref) => (
     <div
       ref={ref}
-      className={cn('rounded-xl border border-border bg-card text-card-foreground', className)}
+      className={cn(
+        'rounded-xl border border-border bg-card text-card-foreground shadow-card',
+        className,
+      )}
       {...props}
     />
   ),
@@ -76,9 +79,10 @@ export const Input = React.forwardRef<
     type={type}
     ref={ref}
     className={cn(
-      'flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors',
+      'flex h-9 w-full rounded-lg border border-input bg-surface-sunken px-3 py-1 text-sm shadow-xs',
+      'transition-[border-color,box-shadow,background-color] duration-150 hover:border-muted-foreground/30',
       'file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground',
-      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background',
+      'focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-0',
       'disabled:cursor-not-allowed disabled:opacity-50',
       'aria-[invalid=true]:border-destructive aria-[invalid=true]:focus-visible:ring-destructive',
       className,
@@ -95,9 +99,10 @@ export const Textarea = React.forwardRef<
   <textarea
     ref={ref}
     className={cn(
-      'flex min-h-[80px] w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm',
-      'placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-      'focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50',
+      'flex min-h-[80px] w-full rounded-lg border border-input bg-surface-sunken px-3 py-2 text-sm shadow-xs',
+      'transition-[border-color,box-shadow] duration-150 placeholder:text-muted-foreground',
+      'focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/30',
+      'focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50',
       className,
     )}
     {...props}
@@ -249,18 +254,23 @@ Switch.displayName = 'Switch';
 
 /* ----------------------------------------------------------------- badges -- */
 
+/*
+ * A tinted fill with a matching hairline ring, rather than a flat block of
+ * colour. The ring is what keeps a status badge legible where it sits on a
+ * card that is nearly the same value as the tint itself.
+ */
 const badgeVariants = cva(
   'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors whitespace-nowrap',
   {
     variants: {
       variant: {
-        default: 'border-transparent bg-primary/15 text-primary',
+        default: 'border-primary/25 bg-primary/12 text-primary',
         secondary: 'border-border bg-secondary text-secondary-foreground',
         outline: 'border-border text-foreground',
-        success: 'border-transparent bg-success/15 text-success',
-        warning: 'border-transparent bg-warning/15 text-warning',
-        destructive: 'border-transparent bg-destructive/15 text-destructive',
-        muted: 'border-transparent bg-muted text-muted-foreground',
+        success: 'border-success/25 bg-success/12 text-success',
+        warning: 'border-warning/25 bg-warning/12 text-warning',
+        destructive: 'border-destructive/25 bg-destructive/12 text-destructive',
+        muted: 'border-border bg-muted text-muted-foreground',
       },
     },
     defaultVariants: { variant: 'default' },
@@ -283,12 +293,16 @@ export const Progress = React.forwardRef<
 >(({ className, value, indicatorClassName, ...props }, ref) => (
   <ProgressPrimitive.Root
     ref={ref}
-    className={cn('relative h-2 w-full overflow-hidden rounded-full bg-secondary', className)}
+    className={cn(
+      'relative h-1.5 w-full overflow-hidden rounded-full bg-surface-sunken',
+      'shadow-[inset_0_1px_2px_hsl(222_40%_4%/0.18)]',
+      className,
+    )}
     {...props}
   >
     <ProgressPrimitive.Indicator
       className={cn(
-        'h-full w-full flex-1 bg-primary transition-transform duration-500',
+        'h-full w-full flex-1 rounded-full bg-primary transition-transform duration-500 ease-out',
         indicatorClassName,
       )}
       style={{ transform: `translateX(-${100 - Math.min(100, Math.max(0, value ?? 0))}%)` }}

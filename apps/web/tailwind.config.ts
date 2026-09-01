@@ -67,10 +67,29 @@ const config: Config = {
         },
       },
       borderRadius: {
+        '2xl': 'calc(var(--radius) + 8px)',
         xl: 'calc(var(--radius) + 4px)',
         lg: 'var(--radius)',
         md: 'calc(var(--radius) - 2px)',
         sm: 'calc(var(--radius) - 4px)',
+      },
+      /*
+       * Elevation comes from the tokens, so `shadow-sm` is a height rather
+       * than a colour: black on the dark ground, a soft blue-grey on the
+       * light one. Overriding Tailwind's own scale is the point — a stray
+       * `shadow-md` somewhere then lands in the same language as everything
+       * else instead of stamping a hard grey rectangle on charcoal.
+       */
+      boxShadow: {
+        xs: 'var(--shadow-xs)',
+        sm: 'var(--shadow-sm)',
+        DEFAULT: 'var(--shadow-sm)',
+        md: 'var(--shadow-md)',
+        lg: 'var(--shadow-lg)',
+        xl: 'var(--shadow-lg)',
+        card: 'var(--elevation-card)',
+        raised: 'var(--elevation-raised)',
+        overlay: 'var(--elevation-overlay)',
       },
       fontFamily: {
         sans: ['var(--font-sans)', 'ui-sans-serif', 'system-ui', 'sans-serif'],

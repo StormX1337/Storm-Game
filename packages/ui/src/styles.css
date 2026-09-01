@@ -53,7 +53,34 @@
     --chart-4: 35 92% 50%;
     --chart-5: 340 75% 55%;
 
-    --radius: 0.7rem;
+    --radius: 0.8rem;
+
+    /*
+     * One elevation language, defined per theme rather than per component.
+     *
+     * A shadow that works on paper white is invisible on charcoal, and the
+     * black one that reads on charcoal turns light mode grubby — so the
+     * scale is a token, and `shadow-sm` means the same *height* in both
+     * themes rather than the same colour.
+     *
+     * `--highlight` is the hairline of light along a surface's top edge.
+     * It is what separates a card from the ground when the ground is nearly
+     * the same colour, and it is the difference between a panel that looks
+     * drawn and one that looks lit.
+     */
+    --shadow-xs: 0 1px 2px -1px hsl(222 30% 12% / 0.1);
+    --shadow-sm: 0 1px 2px -1px hsl(222 30% 12% / 0.12), 0 2px 8px -4px hsl(222 30% 12% / 0.08);
+    --shadow-md: 0 6px 16px -6px hsl(222 30% 12% / 0.14), 0 12px 32px -16px hsl(222 30% 12% / 0.12);
+    --shadow-lg: 0 16px 40px -16px hsl(222 30% 12% / 0.18),
+      0 32px 72px -32px hsl(222 30% 12% / 0.16);
+    --highlight: inset 0 1px 0 hsl(0 0% 100% / 0.7);
+
+    --elevation-card: var(--shadow-sm), var(--highlight);
+    --elevation-raised: var(--shadow-md), var(--highlight);
+    --elevation-overlay: var(--shadow-lg), var(--highlight);
+
+    /* How strongly the ambient wash behind the panel shows through. */
+    --ambient: 0.055;
   }
 
   .dark {
@@ -61,11 +88,14 @@
     --background: 222 24% 5%;
     --foreground: 213 24% 94%;
 
-    --surface: 220 20% 7%;
-    --surface-raised: 220 18% 9%;
-    --surface-sunken: 224 26% 4%;
+    /* The navigation sits *below* the content it navigates, so it is darker
+       than a card rather than lighter — the eye reads the brighter plane as
+       the nearer one. */
+    --surface: 222 22% 6%;
+    --surface-raised: 220 18% 10%;
+    --surface-sunken: 224 26% 3.5%;
 
-    --card: 220 20% 7.5%;
+    --card: 221 20% 9%;
     --card-foreground: 213 24% 94%;
 
     --popover: 220 20% 8%;
@@ -92,8 +122,8 @@
     --warning: 38 92% 55%;
     --warning-foreground: 222 47% 8%;
 
-    --border: 218 16% 15%;
-    --input: 218 16% 17%;
+    --border: 218 16% 16%;
+    --input: 218 16% 18%;
     --ring: 217 91% 60%;
 
     --chart-1: 217 91% 62%;
@@ -101,6 +131,17 @@
     --chart-3: 168 76% 46%;
     --chart-4: 38 92% 58%;
     --chart-5: 340 82% 62%;
+
+    /* Deeper and softer: on a dark ground a shadow has to fall further to be
+       seen at all, and the top highlight drops to a whisper — any more and
+       every card wears a visible white line. */
+    --shadow-xs: 0 1px 2px -1px hsl(0 0% 0% / 0.5);
+    --shadow-sm: 0 1px 2px -1px hsl(0 0% 0% / 0.55), 0 2px 10px -6px hsl(0 0% 0% / 0.5);
+    --shadow-md: 0 8px 20px -8px hsl(0 0% 0% / 0.6), 0 16px 40px -20px hsl(0 0% 0% / 0.55);
+    --shadow-lg: 0 20px 48px -20px hsl(0 0% 0% / 0.7), 0 40px 88px -40px hsl(0 0% 0% / 0.6);
+    --highlight: inset 0 1px 0 hsl(0 0% 100% / 0.055);
+
+    --ambient: 0.09;
   }
 
   * {
@@ -115,19 +156,64 @@
     text-rendering: optimizeLegibility;
   }
 
+  /*
+   * A wash of the brand colour behind everything.
+   *
+   * A flat near-black fills the screen evenly, and evenly lit is what makes
+   * a dark interface look switched off. Two very wide, very faint radial
+   * gradients give the ground somewhere to be brighter, so the cards above
+   * it have something to sit on.
+   *
+   * It follows `--primary`, which an administrator sets — so a panel branded
+   * green is washed green, not blue. Fixed and non-interactive: it must not
+   * scroll with the content or intercept a click.
+   */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background: radial-gradient(
+        60rem 38rem at 12% -8%,
+        hsl(var(--primary) / var(--ambient)),
+        transparent 62%
+      ),
+      radial-gradient(
+        48rem 32rem at 100% 4%,
+        hsl(var(--chart-2) / calc(var(--ambient) * 0.7)),
+        transparent 58%
+      );
+  }
+
+  /* Headings tighten as they grow, the way type is set rather than scaled. */
+  h1,
+  h2,
+  h3 {
+    letter-spacing: -0.015em;
+  }
+
+  /* Figures that change in place — a CPU reading, a byte count — must not
+     jog sideways as their digits change width. */
+  .tabular-nums,
+  [class*='tabular-nums'] {
+    font-variant-numeric: tabular-nums;
+  }
+
   /* Scrollbars: visible enough to grab, quiet enough to ignore. */
   ::-webkit-scrollbar {
-    width: 10px;
-    height: 10px;
+    width: 8px;
+    height: 8px;
   }
   ::-webkit-scrollbar-track {
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background-color: hsl(var(--border));
+    background-color: hsl(var(--muted-foreground) / 0.25);
     border-radius: 999px;
     border: 2px solid transparent;
     background-clip: content-box;
+    transition: background-color 150ms;
   }
   ::-webkit-scrollbar-thumb:hover {
     background-color: hsl(var(--muted-foreground) / 0.5);
@@ -141,12 +227,42 @@
 }
 
 @layer components {
-  /* Panels sit on the background with a hairline edge and a soft inner light,
-     which reads as depth without resorting to heavy shadows or gradients. */
+  /* Panels sit on the background with a hairline edge, a lit top edge and a
+     shadow to fall into, which reads as depth without a heavy gradient. */
   .storm-panel {
     background-color: hsl(var(--card));
     border: 1px solid hsl(var(--border));
-    border-radius: var(--radius);
+    border-radius: calc(var(--radius) + 4px);
+    box-shadow: var(--elevation-card);
+  }
+
+  /* For a card that is also a link or a button. It rises on hover, which is
+     the whole of the affordance — no border colour change, no scale. */
+  .storm-interactive {
+    transition:
+      box-shadow 180ms ease,
+      transform 180ms ease,
+      border-color 180ms ease;
+  }
+  .storm-interactive:hover {
+    box-shadow: var(--elevation-raised);
+    border-color: hsl(var(--border) / 1.6);
+    transform: translateY(-2px);
+  }
+  .storm-interactive:active {
+    transform: translateY(0);
+    box-shadow: var(--elevation-card);
+  }
+
+  /*
+   * A control that should look pressable: lit along its top edge, sitting on
+   * a shadow tinted with its own colour rather than a generic grey one. It
+   * is what separates a primary button from a coloured rectangle.
+   */
+  .storm-key {
+    box-shadow:
+      0 1px 2px hsl(222 40% 4% / 0.24),
+      inset 0 1px 0 hsl(0 0% 100% / 0.16);
   }
 
   .storm-glass {
@@ -159,6 +275,17 @@
     background-image: linear-gradient(to right, hsl(var(--border) / 0.5) 1px, transparent 1px),
       linear-gradient(to bottom, hsl(var(--border) / 0.5) 1px, transparent 1px);
     background-size: 56px 56px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Someone who has asked for less movement gets the depth without the
+     motion — the hover shadow still says "this is a link". */
+  .storm-interactive,
+  .storm-interactive:hover,
+  .storm-interactive:active {
+    transform: none;
+    transition-property: box-shadow, border-color;
   }
 }
 

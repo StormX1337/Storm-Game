@@ -11,13 +11,16 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: 'bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm',
+        // `storm-key` lights the top edge and drops a shadow, so a filled
+        // button reads as a key to press rather than a coloured rectangle.
+        default: 'storm-key bg-primary text-primary-foreground hover:bg-primary/90',
         secondary:
-          'bg-secondary text-secondary-foreground hover:bg-secondary/80 border border-border',
-        outline: 'border border-border bg-transparent hover:bg-secondary/60 hover:text-foreground',
+          'bg-secondary text-secondary-foreground hover:bg-secondary/80 border border-border shadow-xs',
+        outline:
+          'border border-border bg-transparent shadow-xs hover:border-muted-foreground/30 hover:bg-secondary/60 hover:text-foreground',
         ghost: 'hover:bg-secondary/70 hover:text-foreground',
-        destructive: 'bg-destructive text-destructive-foreground hover:bg-destructive/90 shadow-sm',
-        success: 'bg-success text-success-foreground hover:bg-success/90 shadow-sm',
+        destructive: 'storm-key bg-destructive text-destructive-foreground hover:bg-destructive/90',
+        success: 'storm-key bg-success text-success-foreground hover:bg-success/90',
         link: 'text-primary underline-offset-4 hover:underline',
       },
       size: {

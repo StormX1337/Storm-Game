@@ -92,7 +92,10 @@ export default function DashboardPage() {
         />
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
+      {/* `items-start` so each column ends where its content does. Stretched
+          to match its taller neighbour, the server list grew a half-screen of
+          empty card below the last server. */}
+      <div className="grid items-start gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader className="flex-row items-center justify-between">
             <CardTitle>Your servers</CardTitle>

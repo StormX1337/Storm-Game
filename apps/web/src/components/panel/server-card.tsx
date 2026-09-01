@@ -37,8 +37,8 @@ export function ServerCard({
     <Link href={`/servers/${server.shortId}`} className="group block focus:outline-none">
       <Card
         className={cn(
-          'h-full p-4 transition-all duration-150',
-          'hover:border-primary/40 hover:shadow-lg group-focus-visible:border-primary',
+          'storm-interactive h-full p-4',
+          'hover:border-primary/40 group-focus-visible:border-primary',
         )}
       >
         <div className="flex items-start justify-between gap-3">
