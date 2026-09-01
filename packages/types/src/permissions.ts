@@ -23,6 +23,7 @@ export const Permission = {
   SERVERS_SUSPEND: 'servers.suspend',
   SERVERS_CONSOLE: 'servers.console',
   SERVERS_COMMAND: 'servers.command',
+  SERVERS_PLAYERS: 'servers.players',
   SERVERS_FILES: 'servers.files',
   SERVERS_FILES_WRITE: 'servers.files.write',
   SERVERS_BACKUPS: 'servers.backups',
@@ -106,6 +107,11 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
     description: 'Suspend or unsuspend a server',
   },
   { key: Permission.SERVERS_CONSOLE, category: 'console', description: 'Read live console output' },
+  {
+    key: Permission.SERVERS_PLAYERS,
+    category: 'console',
+    description: 'Manage operators, the whitelist and bans',
+  },
   {
     key: Permission.SERVERS_COMMAND,
     category: 'console',
@@ -216,6 +222,7 @@ export const CUSTOMER_PERMISSIONS: Permission[] = [
   Permission.SERVERS_REINSTALL,
   Permission.SERVERS_CONSOLE,
   Permission.SERVERS_COMMAND,
+  Permission.SERVERS_PLAYERS,
   Permission.SERVERS_FILES,
   Permission.SERVERS_FILES_WRITE,
   Permission.SERVERS_BACKUPS,

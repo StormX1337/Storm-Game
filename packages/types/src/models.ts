@@ -74,6 +74,8 @@ export interface AllocationSummary {
 export const TemplateFeature = {
   /** Browse and install plugins from Modrinth. Minecraft: Java only. */
   PLUGINS: 'plugins',
+  /** Operators, whitelist and bans. Minecraft: Java only. */
+  PLAYERS: 'players',
 } as const;
 export type TemplateFeature = (typeof TemplateFeature)[keyof typeof TemplateFeature];
 

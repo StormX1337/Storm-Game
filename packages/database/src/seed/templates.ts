@@ -82,8 +82,10 @@ export const SEED_TEMPLATES: SeedTemplate[] = [
     name: 'Minecraft: Java Edition',
     slug: 'minecraft-java',
     game: 'Minecraft Java',
-    // Paper, Spigot and Bukkit share a plugin ecosystem the panel can browse.
-    features: ['plugins'],
+    // Paper, Spigot and Bukkit share a plugin ecosystem the panel can browse,
+    // and Minecraft keeps its operators, whitelist and bans in files the panel
+    // can read and commands it can send.
+    features: ['plugins', 'players'],
     category: 'Minecraft',
     description:
       'Vanilla, Paper, Purpur and Fabric compatible Minecraft Java Edition server running on Temurin JRE.',

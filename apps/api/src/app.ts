@@ -34,6 +34,7 @@ import healthRoutes from './routes/health.routes.js';
 import authRoutes from './routes/auth.routes.js';
 import settingsRoutes from './routes/settings.routes.js';
 import pluginRoutes from './routes/plugins.routes.js';
+import playerRoutes from './routes/players.routes.js';
 import accountRoutes from './routes/account.routes.js';
 import dashboardRoutes from './routes/dashboard.routes.js';
 import serverRoutes from './routes/servers.routes.js';
@@ -203,6 +204,7 @@ export async function buildApp(options: BuildOptions = {}): Promise<FastifyInsta
   await app.register(scheduleRoutes, { prefix: `${prefix}/servers` });
   await app.register(serverDatabaseRoutes, { prefix: `${prefix}/servers` });
   await app.register(pluginRoutes, { prefix: `${prefix}/servers` });
+  await app.register(playerRoutes, { prefix: `${prefix}/servers` });
   await app.register(adminUserRoutes, { prefix: `${prefix}/admin/users` });
   await app.register(adminNodeRoutes, { prefix: `${prefix}/admin/nodes` });
   await app.register(adminTemplateRoutes, { prefix: `${prefix}/admin/templates` });

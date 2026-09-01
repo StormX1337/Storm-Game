@@ -539,6 +539,43 @@ the rest of the panel is unaffected.
 
 ---
 
+## Minecraft players
+
+|                                               |                               |
+| --------------------------------------------- | ----------------------------- |
+| `GET /servers/:id/players`                    | Operators, whitelist and bans |
+| `POST/DELETE /servers/:id/players/operators`  | Op and deop                   |
+| `POST/DELETE /servers/:id/players/whitelist`  | Add and remove                |
+| `POST /servers/:id/players/whitelist/enabled` | Enforce the whitelist or not  |
+| `POST/DELETE /servers/:id/players/bans`       | Ban and pardon                |
+| `POST/DELETE /servers/:id/players/ip-bans`    | Ban and pardon an address     |
+| `POST /servers/:id/players/kick`              | Kick someone who is on now    |
+
+Needs `servers.players`, and the template's `features` must include `players`.
+The permission exists apart from `servers.command` so a sub-user can be trusted
+with opping and banning without being handed the console.
+
+**Reading comes from the files; changing goes through the console.** Minecraft
+holds these lists in memory while it runs and rewrites `ops.json`,
+`whitelist.json` and the ban files itself — so a panel that edited them
+underneath would show a change the game never had, and lose it at shutdown.
+Every change is therefore the command the game already understands, which means
+**the server has to be running**; a change attempted while it is off comes back
+409 saying so. Reading works either way, and the response carries `live` so the
+panel can say whether it is showing live state or the last thing written.
+
+`whitelistEnabled` comes from `white-list` in server.properties, not from the
+list: the two are separate in Minecraft, and a whitelist that is never
+consulted looks exactly like one that is.
+
+Player names are validated as Mojang defines them — three to sixteen letters,
+digits or underscores — and ban reasons may not contain a line break. That is
+not tidiness: the agent submits a console command by writing it followed by a
+newline, so a name containing one would run whatever came after it, and
+`servers.players` would quietly become full console access.
+
+---
+
 ## Moving a server to another node
 
 ```http

@@ -68,6 +68,41 @@ export const consoleCommandSchema = z.object({
   command: z.string().min(1).max(4000),
 });
 
+/**
+ * A Minecraft username, as Mojang defines one: three to sixteen characters of
+ * letters, digits and underscores.
+ *
+ * This is a security boundary, not a nicety. Every player action is carried
+ * out as a console command, and the agent submits a command by writing it to
+ * the process followed by a newline — so a "name" containing one would be a
+ * second command. Holding `servers.players` is meant to allow opping and
+ * banning, not arbitrary console access, and this regex is what keeps the
+ * difference real.
+ */
+export const minecraftUsername = z
+  .string()
+  .trim()
+  .regex(/^[A-Za-z0-9_]{3,16}$/, 'Minecraft names are 3-16 letters, digits or underscores');
+
+/** Free text that travels in a command, so the same newline rule applies. */
+const commandSafeText = z
+  .string()
+  .trim()
+  .max(120)
+  .regex(/^[^\r\n]*$/, 'This cannot contain a line break');
+
+export const playerActionSchema = z.object({
+  name: minecraftUsername,
+  reason: commandSafeText.optional(),
+});
+
+export const banIpSchema = z.object({
+  ip: z.string().trim().ip(),
+  reason: commandSafeText.optional(),
+});
+
+export const whitelistToggleSchema = z.object({ enabled: z.boolean() });
+
 export const reinstallSchema = z.object({
   /** Wipe the data directory before reinstalling. */
   wipe: z.boolean().default(false),

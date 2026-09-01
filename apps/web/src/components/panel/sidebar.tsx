@@ -19,6 +19,7 @@ import {
   Settings,
   Shield,
   KeyRound,
+  UserCog,
   Users,
   Webhook,
   X,
@@ -107,6 +108,7 @@ export const SERVER_TABS = [
   // Minecraft: Java. Everything else never sees the tab, and the API answers
   // 404 there regardless of what the panel draws.
   { segment: 'plugins', label: 'Plugins', icon: Blocks, feature: 'plugins' },
+  { segment: 'players', label: 'Players', icon: UserCog, feature: 'players' },
   { segment: 'backups', label: 'Backups', icon: HardDrive },
   { segment: 'schedules', label: 'Schedules', icon: CalendarClock },
   { segment: 'databases', label: 'Databases', icon: Database },

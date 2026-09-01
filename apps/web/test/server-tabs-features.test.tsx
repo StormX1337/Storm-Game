@@ -17,6 +17,8 @@ describe('server tabs', () => {
 
   it('offers the plugin browser only to a template that declares it', () => {
     expect(visibleFor(['plugins'])).toContain('Plugins');
+    expect(visibleFor(['players'])).toContain('Players');
+    expect(visibleFor(['plugins'])).not.toContain('Players');
     expect(visibleFor([])).not.toContain('Plugins');
     expect(visibleFor(['something-else'])).not.toContain('Plugins');
   });
@@ -28,7 +30,10 @@ describe('server tabs', () => {
     for (const label of ['Overview', 'Console', 'Files', 'Backups', 'Settings', 'Startup']) {
       expect(always).toContain(label);
     }
-    expect(always.length).toBe(SERVER_TABS.length - 1);
+    // Derived, not a number typed by hand: adding a second feature tab broke
+    // the hard-coded version, which said nothing about what it meant to check.
+    const featureTabs = SERVER_TABS.filter((tab) => 'feature' in tab).length;
+    expect(always.length).toBe(SERVER_TABS.length - featureTabs);
   });
 
   it('keeps the plugin tab pointed at the route that exists', () => {
