@@ -227,19 +227,27 @@ export default function CreateServerPage() {
                   type="button"
                   onClick={() => setTemplateId(entry.id)}
                   className={cn(
-                    'rounded-xl border p-4 text-left transition-all',
+                    'storm-interactive rounded-xl border bg-card p-4 text-left shadow-card',
+                    'focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40',
                     templateId === entry.id
-                      ? 'border-primary bg-primary/[0.06] ring-1 ring-primary'
-                      : 'border-border hover:border-primary/40 hover:bg-secondary/40',
+                      ? 'border-primary ring-1 ring-primary'
+                      : 'border-border hover:border-primary/40',
                   )}
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <Gamepad2
+                    {/* A tinted chip rather than a loose grey glyph: at three
+                        cards across, it is what gives the row a rhythm to
+                        scan instead of twelve identical blocks of text. */}
+                    <span
                       className={cn(
-                        'h-5 w-5 shrink-0',
-                        templateId === entry.id ? 'text-primary' : 'text-muted-foreground',
+                        'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border transition-colors',
+                        templateId === entry.id
+                          ? 'border-primary/30 bg-primary/15 text-primary'
+                          : 'border-border bg-secondary/60 text-muted-foreground',
                       )}
-                    />
+                    >
+                      <Gamepad2 className="h-4 w-4" />
+                    </span>
                     {templateId === entry.id ? (
                       <Check className="h-4 w-4 shrink-0 text-primary" />
                     ) : null}

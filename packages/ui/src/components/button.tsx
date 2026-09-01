@@ -6,8 +6,18 @@ import { cva, type VariantProps } from 'class-variance-authority';
 import { Loader2 } from 'lucide-react';
 import { cn } from '../lib/cn';
 
+/*
+ * The focus ring is a soft halo in the brand colour rather than a hard line
+ * held off the button by an offset. The offset version needs the page colour
+ * behind it to look right, which is exactly what a button in a toolbar, a
+ * table row or a dialog footer does not have.
+ */
 const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium transition-[background-color,border-color,color,box-shadow,transform] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 active:translate-y-px [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0',
+  'inline-flex select-none items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium ' +
+    'transition-[background-color,background-image,border-color,color,box-shadow,transform] duration-150 ' +
+    'focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40 ' +
+    'disabled:pointer-events-none disabled:opacity-45 disabled:shadow-none ' +
+    'active:translate-y-px [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0',
   {
     variants: {
       variant: {
@@ -15,20 +25,20 @@ const buttonVariants = cva(
         // button reads as a key to press rather than a coloured rectangle.
         default: 'storm-key bg-primary text-primary-foreground hover:bg-primary/90',
         secondary:
-          'bg-secondary text-secondary-foreground hover:bg-secondary/80 border border-border shadow-xs',
+          'storm-key-quiet border border-border bg-secondary text-secondary-foreground shadow-xs hover:bg-secondary/80',
         outline:
-          'border border-border bg-transparent shadow-xs hover:border-muted-foreground/30 hover:bg-secondary/60 hover:text-foreground',
-        ghost: 'hover:bg-secondary/70 hover:text-foreground',
+          'storm-key-quiet border border-border bg-transparent shadow-xs hover:border-muted-foreground/30 hover:bg-secondary/60 hover:text-foreground',
+        ghost: 'hover:bg-secondary/70 hover:text-foreground active:bg-secondary',
         destructive: 'storm-key bg-destructive text-destructive-foreground hover:bg-destructive/90',
         success: 'storm-key bg-success text-success-foreground hover:bg-success/90',
         link: 'text-primary underline-offset-4 hover:underline',
       },
       size: {
-        sm: 'h-8 px-3 text-xs',
+        sm: 'h-8 rounded-md px-3 text-xs',
         default: 'h-9 px-4',
-        lg: 'h-11 px-6 text-base',
+        lg: 'h-11 rounded-xl px-6 text-base',
         icon: 'h-9 w-9',
-        'icon-sm': 'h-8 w-8',
+        'icon-sm': 'h-8 w-8 rounded-md',
       },
     },
     defaultVariants: { variant: 'default', size: 'default' },

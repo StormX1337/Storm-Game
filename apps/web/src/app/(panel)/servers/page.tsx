@@ -119,13 +119,13 @@ export default function ServersPage() {
           </SelectContent>
         </Select>
 
-        <div className="flex rounded-lg border border-border p-0.5">
+        <div className="storm-segment-track flex">
           <button
             type="button"
             onClick={() => setView('grid')}
             className={cn(
-              'rounded-md p-1.5 transition-colors',
-              view === 'grid' ? 'bg-secondary text-foreground' : 'text-muted-foreground',
+              'storm-segment p-1.5 text-muted-foreground hover:text-foreground',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
             )}
             aria-label="Grid view"
             aria-pressed={view === 'grid'}
@@ -136,8 +136,8 @@ export default function ServersPage() {
             type="button"
             onClick={() => setView('table')}
             className={cn(
-              'rounded-md p-1.5 transition-colors',
-              view === 'table' ? 'bg-secondary text-foreground' : 'text-muted-foreground',
+              'storm-segment p-1.5 text-muted-foreground hover:text-foreground',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
             )}
             aria-label="Table view"
             aria-pressed={view === 'table'}

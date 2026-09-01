@@ -213,10 +213,12 @@ export const Checkbox = React.forwardRef<
   <CheckboxPrimitive.Root
     ref={ref}
     className={cn(
-      'peer h-4 w-4 shrink-0 rounded border border-input shadow-sm transition-colors',
-      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
-      'disabled:cursor-not-allowed disabled:opacity-50',
+      'peer h-4 w-4 shrink-0 rounded-[5px] border border-input shadow-xs',
+      'transition-[background-color,border-color,box-shadow] duration-150 hover:border-muted-foreground/40',
+      'focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40',
+      'disabled:cursor-not-allowed disabled:opacity-45',
       'data-[state=checked]:border-primary data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground',
+      'data-[state=checked]:shadow-[0_1px_3px_hsl(var(--primary)/0.4)]',
       className,
     )}
     {...props}
@@ -239,15 +241,25 @@ export const Switch = React.forwardRef<
   <SwitchPrimitive.Root
     ref={ref}
     className={cn(
-      'peer inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors',
-      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
-      'disabled:cursor-not-allowed disabled:opacity-50',
+      'peer inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent',
+      'transition-colors duration-200 shadow-[inset_0_1px_2px_hsl(222_40%_4%/0.2)]',
+      'focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40',
+      'disabled:cursor-not-allowed disabled:opacity-45',
       'data-[state=checked]:bg-primary data-[state=unchecked]:bg-input',
       className,
     )}
     {...props}
   >
-    <SwitchPrimitive.Thumb className="pointer-events-none block h-4 w-4 rounded-full bg-background shadow-lg ring-0 transition-transform data-[state=checked]:translate-x-4 data-[state=unchecked]:translate-x-0" />
+    {/* The thumb carries its own shadow so it reads as sitting *in* the track
+        rather than as a second colour painted on it. */}
+    <SwitchPrimitive.Thumb
+      className={cn(
+        'pointer-events-none block h-5 w-5 rounded-full bg-background ring-0',
+        'shadow-[0_1px_2px_hsl(222_40%_4%/0.35),0_1px_3px_hsl(222_40%_4%/0.2)]',
+        'transition-transform duration-200 ease-out',
+        'data-[state=checked]:translate-x-5 data-[state=unchecked]:translate-x-0',
+      )}
+    />
   </SwitchPrimitive.Root>
 ));
 Switch.displayName = 'Switch';

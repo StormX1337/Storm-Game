@@ -391,7 +391,7 @@ export const TabsList = React.forwardRef<
   <TabsPrimitive.List
     ref={ref}
     className={cn(
-      'inline-flex items-center justify-start gap-1 rounded-lg bg-secondary/60 p-1 text-muted-foreground',
+      'storm-segment-track inline-flex items-center justify-start gap-1 text-muted-foreground',
       className,
     )}
     {...props}
@@ -406,9 +406,9 @@ export const TabsTrigger = React.forwardRef<
   <TabsPrimitive.Trigger
     ref={ref}
     className={cn(
-      'inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-all',
-      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50',
-      'data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-sm',
+      'storm-segment inline-flex items-center justify-center gap-1.5 whitespace-nowrap px-3 py-1.5 text-sm font-medium',
+      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:pointer-events-none disabled:opacity-45',
+      'hover:text-foreground',
       className,
     )}
     {...props}
