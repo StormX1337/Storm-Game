@@ -4,6 +4,10 @@ import { afterEach, vi } from 'vitest';
 
 afterEach(cleanup);
 
+// jsdom has no layout, so it never implemented this — and Radix calls it to
+// bring the highlighted option into view the moment a select opens.
+Element.prototype.scrollIntoView ??= function scrollIntoView() {};
+
 // jsdom implements neither, and Radix and the charts both reach for them.
 globalThis.ResizeObserver ??= class {
   observe() {}

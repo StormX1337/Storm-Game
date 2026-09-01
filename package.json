@@ -20,7 +20,7 @@
     "format": "prettier --write \"**/*.{ts,tsx,js,mjs,json,md,css,yml}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,mjs,json,md,css,yml}\"",
     "test": "pnpm -r --no-bail test && pnpm test:scripts",
-    "test:scripts": "bash scripts/test-update-rewrite.sh",
+    "test:scripts": "bash scripts/test-update-rewrite.sh && bash scripts/test-fresh-install.sh",
     "test:e2e": "playwright test --config tests/e2e/playwright.config.ts",
     "db:generate": "pnpm --filter @storm/database run generate",
     "db:migrate": "pnpm --filter @storm/database run migrate",

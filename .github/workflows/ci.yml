@@ -99,8 +99,8 @@ jobs:
 
       - run: pnpm -r test
 
-      # The update script is what every deployment runs, and it is not covered
-      # by any package's suite.
+      # The update script and the documented install are what every operator
+      # runs, and neither is covered by any package's suite.
       - run: pnpm test:scripts
 
   e2e:

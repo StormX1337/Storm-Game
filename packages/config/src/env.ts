@@ -146,11 +146,33 @@ export class EnvValidationError extends Error {
   }
 }
 
+/**
+ * Drops variables that are present but empty.
+ *
+ * `.env.example` ships several keys with nothing after the `=`, because an
+ * operator is meant to fill in the ones they want — and Docker Compose passes
+ * those through as `""` rather than leaving them unset. To zod an empty string
+ * is a value, so an optional field with a format check rejects it: a fresh
+ * install following the guide failed to boot with "ADMIN_EMAIL: Invalid email"
+ * for a line the operator had deliberately left blank.
+ *
+ * Not set and set to nothing are the same thing to whoever wrote the file, so
+ * they are the same thing here. A required field still fails, and says it is
+ * required rather than complaining about the format of "".
+ */
+function withoutBlanks(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const out: NodeJS.ProcessEnv = {};
+  for (const [key, value] of Object.entries(source)) {
+    if (value !== '') out[key] = value;
+  }
+  return out;
+}
+
 export function parseEnv<T extends z.ZodTypeAny>(
   schema: T,
   source: NodeJS.ProcessEnv = process.env,
 ): z.infer<T> {
-  const result = schema.safeParse(source);
+  const result = schema.safeParse(withoutBlanks(source));
   if (!result.success) {
     throw new EnvValidationError(
       result.error.issues.map((issue) => `${issue.path.join('.') || 'env'}: ${issue.message}`),

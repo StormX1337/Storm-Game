@@ -418,6 +418,15 @@ one database.
 
 ## Verifying the install
 
+Before starting anything, `./scripts/test-fresh-install.sh` replays the steps
+above in a scratch directory and checks the result: that the generated `.env`
+satisfies the API's own validation, that every variable Compose has no default
+for is actually in it, that the file parses, and that every service, script and
+`pnpm` command this guide names exists. It needs no Docker daemon and touches
+nothing, so it is safe to run on a machine you are about to install on. It does
+not build or pull images — `docker compose up -d --build` is still what proves
+those.
+
 ```bash
 # Every container healthy, `migrate` exited 0
 docker compose ps
