@@ -182,6 +182,13 @@ describe('plugin browser', () => {
     await app.prisma.server.deleteMany({ where: { nodeId } });
     await app.prisma.serverAllocation.deleteMany({ where: { nodeId } });
     await app.prisma.node.delete({ where: { id: nodeId } }).catch(() => undefined);
+    // The copy goes with it. Against a throwaway CI database leaving it behind
+    // costs nothing; against the database somebody develops on it means a new
+    // "Minecraft: Java Edition (test ...)" in the template list after every run.
+    await app.prisma.templateVariable.deleteMany({ where: { templateId: minecraftTemplate.id } });
+    await app.prisma.gameTemplate
+      .delete({ where: { id: minecraftTemplate.id } })
+      .catch(() => undefined);
     for (const id of createdUsers) await deleteUser(app, id);
     await cleanup();
     await new Promise<void>((resolve) => registry.close(() => resolve()));

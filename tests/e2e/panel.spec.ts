@@ -174,7 +174,12 @@ test.describe('panel', () => {
     const continueButton = page.getByRole('button', { name: 'Continue' });
     await expect(continueButton).toBeDisabled();
 
-    await page.getByRole('button', { name: /Minecraft: Java Edition/ }).click();
+    // The first match, not the only one: a panel can carry several templates
+    // whose names begin this way, and any of them exercises the wizard.
+    await page
+      .getByRole('button', { name: /Minecraft: Java Edition/ })
+      .first()
+      .click();
     await expect(continueButton).toBeEnabled();
     await continueButton.click();
 
@@ -246,6 +251,62 @@ test.describe('panel', () => {
         .getByRole('columnheader', { name: 'Name' })
         .or(page.getByText(/This folder is empty|No files match/)),
     ).toBeVisible({ timeout: 25_000 });
+  });
+
+  test('server sections stack into a rail on a desktop and wrap on a phone', async ({ page }) => {
+    await page.goto('/servers');
+
+    const firstServer = await firstServerLink(page);
+    test.skip(firstServer === null, 'no servers exist in this environment');
+
+    await firstServer!.click();
+    await page.waitForURL(/\/servers\/[^/]+$/, { timeout: 30_000 });
+
+    const tabs = page.getByLabel('Server sections').getByRole('link');
+    await expect(tabs.first()).toBeVisible({ timeout: 25_000 });
+
+    /**
+     * Where the tabs actually sit. Rows and columns are counted from the
+     * rendered boxes rather than from class names, so this measures the layout
+     * a customer gets instead of the one the markup intends.
+     */
+    const geometry = () =>
+      tabs.evaluateAll((nodes) => {
+        const width = document.documentElement.clientWidth;
+        const boxes = nodes.map((node) => node.getBoundingClientRect());
+        return {
+          count: boxes.length,
+          rows: new Set(boxes.map((box) => Math.round(box.top))).size,
+          columns: new Set(boxes.map((box) => Math.round(box.left))).size,
+          // A tab whose right edge is past the viewport cannot be reached by
+          // scrolling the page, only the strip — which is how Settings went
+          // missing on a phone once already.
+          offscreen: boxes.filter((box) => box.right > width + 1 || box.left < -1).length,
+        };
+      });
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await expect.poll(async () => (await geometry()).columns, { timeout: 10_000 }).toBe(1);
+
+    const desktop = await geometry();
+    expect(desktop.count).toBeGreaterThan(5);
+    // One tab per row, all sharing a left edge: a vertical rail, not a row.
+    expect(desktop.rows).toBe(desktop.count);
+    expect(desktop.offscreen).toBe(0);
+
+    await page.setViewportSize({ width: 414, height: 900 });
+    await expect.poll(async () => (await geometry()).rows, { timeout: 10_000 }).toBeGreaterThan(1);
+
+    const phone = await geometry();
+    expect(phone.count).toBe(desktop.count);
+    expect(phone.rows).toBeLessThan(phone.count);
+    expect(phone.offscreen).toBe(0);
+
+    // Reachable, not merely present: the last tab still navigates at this width.
+    const last = tabs.last();
+    const href = await last.getAttribute('href');
+    await last.click();
+    await page.waitForURL(`**${href}`, { timeout: 30_000 });
   });
 
   test('account security page exposes the security controls', async ({ page }) => {

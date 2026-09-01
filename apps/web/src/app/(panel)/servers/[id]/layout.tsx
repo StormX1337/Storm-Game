@@ -54,6 +54,11 @@ export default function ServerLayout({ children }: { children: React.ReactNode }
 
   const status = live[server.id]?.status ?? server.status;
   const base = `/servers/${params.id}`;
+  // A tab tied to a feature appears only where the template says its servers
+  // have it, so a Rust server never shows a plugin browser it has no use for.
+  const visibleTabs = SERVER_TABS.filter(
+    (tab) => !('feature' in tab) || (server.template?.features ?? []).includes(tab.feature),
+  );
   const address = server.primaryAllocation
     ? `${server.primaryAllocation.ip}:${server.primaryAllocation.port}`
     : null;
@@ -128,49 +133,60 @@ export default function ServerLayout({ children }: { children: React.ReactNode }
         ) : null}
 
         {/*
-          Twelve tabs do not fit a phone. Held on one line they scrolled
-          sideways, which hid eight of them behind a gesture with nothing on
-          screen to suggest it existed — Settings, where the reinstall lives,
-          was simply unreachable.
+          One navigation, laid out two ways.
 
-          Wrapping instead needs no breakpoint: they sit on one line wherever
-          they fit and fall onto a second where they do not, so there is no
-          width at which some are off screen. A guessed breakpoint gets this
-          wrong at exactly the width it was set to.
+          Wide enough and it is a rail down the left, the shape people know
+          from other panels: icon over label, the current one filled rather
+          than underlined.
+
+          Narrow and it falls back to the wrapped row, which is what a phone
+          needs — a rail beside the content leaves too little of it, and the
+          tabs held on one line scrolled sideways with nothing on screen to
+          say so, which once put Settings and the reinstall it holds out of
+          reach entirely. Wrapping has no width at which anything is hidden.
+
+          Two navigations would have been simpler to write and wrong: both sit
+          in the document whatever the width, so a page would carry the same
+          landmark twice and a test would not know which it had found.
         */}
-        <ScrollArea className="w-full border-b border-border">
-          <nav className={SERVER_TABS_NAV_CLASS} aria-label="Server sections">
-            {SERVER_TABS.filter(
-              // A tab tied to a feature appears only where the template says
-              // its servers have it, so a Rust server never shows a plugin
-              // browser it has no use for.
-              (tab) =>
-                !('feature' in tab) || (server.template?.features ?? []).includes(tab.feature),
-            ).map((tab) => {
-              const href = tab.segment ? `${base}/${tab.segment}` : base;
-              const active = tab.segment ? pathname.startsWith(href) : pathname === base;
-              return (
-                <Link
-                  key={tab.segment || 'overview'}
-                  href={href}
-                  className={cn(
-                    'relative flex items-center gap-1.5 whitespace-nowrap px-3 py-2.5 text-sm font-medium transition-colors',
-                    active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
-                  )}
-                  aria-current={active ? 'page' : undefined}
-                >
-                  <tab.icon className="h-3.5 w-3.5" />
-                  {tab.label}
-                  {active ? (
-                    <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-primary" />
-                  ) : null}
-                </Link>
-              );
-            })}
-          </nav>
-        </ScrollArea>
+        <div className="lg:flex lg:items-start lg:gap-6">
+          <ScrollArea className="w-full border-b border-border lg:w-auto lg:shrink-0 lg:border-b-0 lg:border-r">
+            <nav
+              className={cn(
+                SERVER_TABS_NAV_CLASS,
+                'lg:w-[104px] lg:flex-col lg:gap-1 lg:pb-0 lg:pr-2',
+              )}
+              aria-label="Server sections"
+            >
+              {visibleTabs.map((tab) => {
+                const href = tab.segment ? `${base}/${tab.segment}` : base;
+                const active = tab.segment ? pathname.startsWith(href) : pathname === base;
+                return (
+                  <Link
+                    key={tab.segment || 'overview'}
+                    href={href}
+                    className={cn(
+                      'relative flex items-center gap-1.5 whitespace-nowrap px-3 py-2.5 text-sm font-medium transition-colors',
+                      'lg:w-full lg:flex-col lg:gap-1.5 lg:rounded-lg lg:px-2 lg:py-3 lg:text-2xs',
+                      active
+                        ? 'text-foreground lg:bg-secondary'
+                        : 'text-muted-foreground hover:text-foreground lg:hover:bg-secondary/50',
+                    )}
+                    aria-current={active ? 'page' : undefined}
+                  >
+                    <tab.icon className="h-3.5 w-3.5 lg:h-5 lg:w-5" />
+                    {tab.label}
+                    {active ? (
+                      <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-primary lg:hidden" />
+                    ) : null}
+                  </Link>
+                );
+              })}
+            </nav>
+          </ScrollArea>
 
-        <div className="animate-fade-in">{children}</div>
+          <div className="min-w-0 flex-1 animate-fade-in lg:pt-0">{children}</div>
+        </div>
       </div>
     </ServerProvider>
   );
