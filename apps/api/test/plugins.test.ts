@@ -3,7 +3,7 @@ import { createServer, type Server as HttpServer } from 'node:http';
 import { after, before, describe, it } from 'node:test';
 import type { FastifyInstance } from 'fastify';
 import { hashPassword } from '@storm/security';
-import { createTestApp, deleteUser, registerUser, uniqueSuffix } from './helpers.js';
+import { cloneTemplate, createTestApp, deleteUser, registerUser, uniqueSuffix } from './helpers.js';
 import type { RegisteredUser } from './helpers.js';
 
 /**
@@ -29,6 +29,7 @@ describe('plugin browser', () => {
   let nodeId: string;
   let minecraftServerId: string;
   let otherGameServerId: string;
+  let minecraftTemplate: { id: string; slug: string };
   const createdUsers: string[] = [];
 
   /** What the stub registry answers with for /version/:id. */
@@ -137,12 +138,19 @@ describe('plugin browser', () => {
       oomKill: true,
     };
 
+    // A private copy: this suite toggles features, and the seeded template is
+    // shared with every other suite running at the same time.
+    minecraftTemplate = await cloneTemplate(app, 'minecraft-java', ['plugins']);
+
     const make = async (
       slug: string,
       name: string,
       environment: Record<string, string> = {},
     ): Promise<string> => {
-      const template = await app.prisma.gameTemplate.findFirstOrThrow({ where: { slug } });
+      const template =
+        slug === 'minecraft-java'
+          ? { id: minecraftTemplate.id }
+          : await app.prisma.gameTemplate.findFirstOrThrow({ where: { slug } });
       const created = await app.inject({
         method: 'POST',
         url: '/api/v1/servers',
@@ -216,13 +224,11 @@ describe('plugin browser', () => {
     // The reason the feature is a column and not a name match: an operator's
     // own Minecraft template must keep the browser, and turning it off must
     // actually turn it off.
-    const template = await app.prisma.gameTemplate.findFirstOrThrow({
-      where: { slug: 'minecraft-java' },
+    // This suite's own template, so switching it off disturbs nobody else.
+    const template = await app.prisma.gameTemplate.findUniqueOrThrow({
+      where: { id: minecraftTemplate.id },
     });
 
-    // Restored even when the assertion throws. Templates are panel-wide rows,
-    // so a run that dies here would leave every later run of this suite — and
-    // the developer's own panel — with the browser switched off.
     try {
       await app.prisma.gameTemplate.update({ where: { id: template.id }, data: { features: [] } });
 

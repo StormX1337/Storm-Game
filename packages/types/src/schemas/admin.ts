@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { cuidLikeId, emailSchema, passwordSchema, usernameSchema } from './common.js';
 import { ALL_PERMISSIONS } from '../permissions.js';
+import { TEMPLATE_FEATURES } from '../models.js';
 
 const permissionEnum = z.enum(ALL_PERMISSIONS as [string, ...string[]]);
 
@@ -134,6 +135,17 @@ export const createTemplateSchema = z.object({
   logConfig: z.record(z.unknown()).default({}),
   defaultPorts: z.array(z.number().int().min(1).max(65535)).max(32).default([]),
   supportedVersions: z.array(z.string().max(64)).max(200).default([]),
+  /**
+   * The optional panels this template's servers get.
+   *
+   * A closed list rather than free text: each value turns on real endpoints,
+   * so an operator inventing one would get a switch that does nothing, and the
+   * panel would have no way to tell that from a typo.
+   */
+  features: z
+    .array(z.enum(TEMPLATE_FEATURES as [string, ...string[]]))
+    .max(TEMPLATE_FEATURES.length)
+    .default([]),
   variables: z.array(templateVariableSchema).max(100).default([]),
   isActive: z.boolean().default(true),
 });

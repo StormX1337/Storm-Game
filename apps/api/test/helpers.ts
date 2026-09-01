@@ -104,6 +104,55 @@ export async function registerUser(app: FastifyInstance): Promise<RegisteredUser
   };
 }
 
+/**
+ * A private copy of a seeded template, for a suite that changes one.
+ *
+ * Templates are panel-wide rows and `node --test` runs the files in parallel,
+ * so a suite that toggles the shared `minecraft-java` breaks every other suite
+ * reading it for as long as the toggle lasts — which is exactly what happened:
+ * two suites passed alone and failed together. Owning a copy removes the race
+ * rather than timing around it.
+ */
+export async function cloneTemplate(
+  app: FastifyInstance,
+  slug: string,
+  features: string[],
+): Promise<{ id: string; slug: string }> {
+  const source = await app.prisma.gameTemplate.findUniqueOrThrow({ where: { slug } });
+  const {
+    id: _id,
+    uuid: _uuid,
+    createdAt: _createdAt,
+    updatedAt: _updatedAt,
+    parentId: _parentId,
+    ...rest
+  } = source;
+
+  const copy = await app.prisma.gameTemplate.create({
+    data: {
+      ...rest,
+      name: `${source.name} (test ${uniqueSuffix()})`,
+      slug: `${slug}-test-${uniqueSuffix()}`,
+      features,
+      dockerImages: source.dockerImages as object,
+      configFiles: source.configFiles as object,
+      logConfig: source.logConfig as object,
+    },
+  });
+
+  // The variables a template requires are what server creation validates, so
+  // a copy without them would refuse every server built on it.
+  const variables = await app.prisma.templateVariable.findMany({
+    where: { templateId: source.id },
+  });
+  for (const variable of variables) {
+    const { id: _varId, templateId: _templateId, ...definition } = variable;
+    await app.prisma.templateVariable.create({ data: { ...definition, templateId: copy.id } });
+  }
+
+  return { id: copy.id, slug: copy.slug };
+}
+
 export function collectCookies(header: string | string[] | undefined): string {
   if (!header) return '';
   const values = Array.isArray(header) ? header : [header];

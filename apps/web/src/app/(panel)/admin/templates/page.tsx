@@ -2,7 +2,16 @@
 
 import * as React from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Copy, Download, Gamepad2, MoreVertical, Package, Search, Trash2 } from 'lucide-react';
+import {
+  Copy,
+  Download,
+  Gamepad2,
+  MoreVertical,
+  Package,
+  Search,
+  SlidersHorizontal,
+  Trash2,
+} from 'lucide-react';
 import {
   Badge,
   Button,
@@ -22,10 +31,11 @@ import {
   Field,
   Input,
   Skeleton,
+  Switch,
   useConfirm,
   useToast,
 } from '@storm/ui';
-import type { TemplateSummary } from '@storm/types';
+import { TEMPLATE_FEATURES, TEMPLATE_FEATURE_INFO, type TemplateSummary } from '@storm/types';
 import { api, apiPaginated, errorMessage } from '@/lib/api';
 import { formatDate } from '@/lib/format';
 
@@ -36,6 +46,7 @@ export default function AdminTemplatesPage() {
 
   const [search, setSearch] = React.useState('');
   const [cloning, setCloning] = React.useState<TemplateSummary | null>(null);
+  const [editingPanels, setEditingPanels] = React.useState<TemplateSummary | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ['admin', 'templates', search],
@@ -136,6 +147,10 @@ export default function AdminTemplatesPage() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          <DropdownMenuItem onSelect={() => setEditingPanels(template)}>
+                            <SlidersHorizontal />
+                            Optional panels
+                          </DropdownMenuItem>
                           <DropdownMenuItem onSelect={() => setCloning(template)}>
                             <Copy />
                             Duplicate
@@ -202,6 +217,17 @@ export default function AdminTemplatesPage() {
         </Card>
       )}
 
+      {editingPanels ? (
+        <PanelsDialog
+          template={editingPanels}
+          onClose={() => setEditingPanels(null)}
+          onSaved={() => {
+            setEditingPanels(null);
+            invalidate();
+          }}
+        />
+      ) : null}
+
       {cloning ? (
         <CloneDialog
           template={cloning}
@@ -213,6 +239,92 @@ export default function AdminTemplatesPage() {
         />
       ) : null}
     </div>
+  );
+}
+
+/**
+ * Which optional panels a template's servers get.
+ *
+ * Here rather than in a page of its own: an operator reaches it from the
+ * template it belongs to, and the sidebar does not grow an entry for something
+ * adjusted once per template.
+ *
+ * The switches are a closed list because each one turns on real endpoints. An
+ * operator inventing a name would get a setting nothing reads, and no way to
+ * tell that from a typo — so the API refuses one too.
+ */
+function PanelsDialog({
+  template,
+  onClose,
+  onSaved,
+}: {
+  template: TemplateSummary;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const toast = useToast();
+  const [chosen, setChosen] = React.useState<string[]>(template.features ?? []);
+
+  const save = useMutation({
+    mutationFn: () => api.patch(`/admin/templates/${template.id}`, { features: chosen }),
+    onSuccess: () => {
+      toast.success('Panels updated', 'Servers on this template pick it up straight away.');
+      onSaved();
+    },
+    onError: (error) => toast.error('Could not save that', errorMessage(error)),
+  });
+
+  const toggle = (feature: string, on: boolean): void => {
+    setChosen((current) =>
+      on ? [...new Set([...current, feature])] : current.filter((item) => item !== feature),
+    );
+  };
+
+  return (
+    <Dialog open onOpenChange={(open) => (open ? undefined : onClose())}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Optional panels</DialogTitle>
+          <DialogDescription>
+            Extra tabs for servers built on {template.name}. Off by default, because most games have
+            nothing that fits.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          {TEMPLATE_FEATURES.map((feature) => {
+            const info = TEMPLATE_FEATURE_INFO[feature];
+            return (
+              <label
+                key={feature}
+                className="flex items-start justify-between gap-4 rounded-lg border border-border p-3"
+              >
+                <span className="min-w-0">
+                  <span className="block font-medium">{info.label}</span>
+                  <span className="mt-0.5 block text-sm leading-relaxed text-muted-foreground">
+                    {info.description}
+                  </span>
+                </span>
+                <Switch
+                  checked={chosen.includes(feature)}
+                  onCheckedChange={(on) => toggle(feature, on)}
+                  aria-label={info.label}
+                />
+              </label>
+            );
+          })}
+        </div>
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button onClick={() => save.mutate()} loading={save.isPending}>
+            Save
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

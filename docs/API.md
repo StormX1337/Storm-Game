@@ -502,6 +502,29 @@ Unauthenticated, for load balancers and monitoring.
 
 ---
 
+## Optional panels per template
+
+A `GameTemplate` carries `features`: the optional panels its servers get.
+`PATCH /admin/templates/:id` accepts it, and **Admin → Game templates → ⋯ →
+Optional panels** is where an operator sets it. It is not a sidebar entry —
+it belongs to the template, and is adjusted about once per template.
+
+Only names the panel actually implements are accepted; anything else is
+refused rather than stored. A value nothing reads would be a switch an
+operator could set and then wonder about, and a typo would look exactly like a
+real setting.
+
+| Feature   | What it adds                                          |
+| --------- | ----------------------------------------------------- |
+| `plugins` | The plugin browser below. Bukkit-family servers only. |
+| `players` | Operators, whitelist and bans. Minecraft: Java only.  |
+
+Turning one on takes effect immediately — the endpoints read the template row
+on each request, and the server payload carries `template.features`, which is
+what draws the tab.
+
+---
+
 ## Minecraft plugins
 
 |                                              |                                    |

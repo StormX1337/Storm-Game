@@ -79,6 +79,26 @@ export const TemplateFeature = {
 } as const;
 export type TemplateFeature = (typeof TemplateFeature)[keyof typeof TemplateFeature];
 
+/** Every feature, for validating what an administrator picks. */
+export const TEMPLATE_FEATURES = Object.values(TemplateFeature);
+
+/** What each one gives a server, shown beside its switch. */
+export const TEMPLATE_FEATURE_INFO: Record<
+  TemplateFeature,
+  { label: string; description: string }
+> = {
+  plugins: {
+    label: 'Plugin browser',
+    description:
+      'Search Modrinth and install plugins into the server. Only makes sense where a jar in a plugins folder is loaded — Paper, Spigot, Bukkit and their relatives.',
+  },
+  players: {
+    label: 'Player management',
+    description:
+      'Operators, whitelist and bans, read from the files the game writes and changed through its console commands. Minecraft: Java only.',
+  },
+};
+
 export interface ServerSummary {
   id: string;
   uuid: string;
@@ -341,6 +361,8 @@ export interface TemplateSummary {
   dockerImages: Record<string, string>;
   defaultPorts: number[];
   supportedVersions: string[];
+  /** The optional panels this template's servers get. */
+  features: TemplateFeature[];
   version: number;
   isActive: boolean;
   serverCount: number;

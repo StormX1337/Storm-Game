@@ -3,7 +3,7 @@ import { after, before, describe, it } from 'node:test';
 import type { FastifyInstance } from 'fastify';
 import type { Node } from '@storm/database';
 import { hashPassword } from '@storm/security';
-import { createTestApp, deleteUser, registerUser, uniqueSuffix } from './helpers.js';
+import { cloneTemplate, createTestApp, deleteUser, registerUser, uniqueSuffix } from './helpers.js';
 import type { RegisteredUser } from './helpers.js';
 
 /**
@@ -22,6 +22,7 @@ describe('player management', () => {
   let adminToken: string;
   let nodeId: string;
   let serverId: string;
+  let template: { id: string; slug: string };
   const createdUsers: string[] = [];
 
   /** Every command the routes asked the node to run. */
@@ -97,9 +98,10 @@ describe('player management', () => {
     nodeId = node.id;
     await app.prisma.serverAllocation.create({ data: { nodeId, ip: '127.0.0.1', port: 27511 } });
 
-    const template = await app.prisma.gameTemplate.findFirstOrThrow({
-      where: { slug: 'minecraft-java' },
-    });
+    // A private copy: one of these tests switches the feature off, and the
+    // seeded template is shared with every suite running alongside this one.
+    template = await cloneTemplate(app, 'minecraft-java', ['plugins', 'players']);
+
     const created = await app.inject({
       method: 'POST',
       url: '/api/v1/servers',
@@ -138,6 +140,8 @@ describe('player management', () => {
     await app.prisma.server.deleteMany({ where: { nodeId } });
     await app.prisma.serverAllocation.deleteMany({ where: { nodeId } });
     await app.prisma.node.delete({ where: { id: nodeId } }).catch(() => undefined);
+    await app.prisma.templateVariable.deleteMany({ where: { templateId: template.id } });
+    await app.prisma.gameTemplate.delete({ where: { id: template.id } }).catch(() => undefined);
     for (const id of createdUsers) await deleteUser(app, id);
     await cleanup();
   });
@@ -299,8 +303,8 @@ describe('player management', () => {
   });
 
   it('is absent on a game that does not work this way', async () => {
-    const template = await app.prisma.gameTemplate.findFirstOrThrow({
-      where: { slug: 'minecraft-java' },
+    const current = await app.prisma.gameTemplate.findUniqueOrThrow({
+      where: { id: template.id },
     });
     try {
       await app.prisma.gameTemplate.update({
@@ -317,7 +321,7 @@ describe('player management', () => {
     } finally {
       await app.prisma.gameTemplate.update({
         where: { id: template.id },
-        data: { features: template.features },
+        data: { features: current.features },
       });
     }
   });

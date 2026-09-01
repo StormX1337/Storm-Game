@@ -1,5 +1,6 @@
 import { bigIntToNumber } from '@storm/database';
 import type {
+  TemplateFeature,
   ActivityLogView,
   AllocationSummary,
   AuditLogView,
@@ -341,6 +342,7 @@ export function toTemplateSummary(template: Row): TemplateSummary {
     dockerImages: (template.dockerImages ?? {}) as Record<string, string>,
     defaultPorts: template.defaultPorts ?? [],
     supportedVersions: template.supportedVersions ?? [],
+    features: (template.features ?? []) as TemplateFeature[],
     version: template.version,
     isActive: template.isActive,
     serverCount: template._count?.servers ?? 0,
