@@ -1,11 +1,24 @@
 'use client';
 
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { ShieldAlert } from 'lucide-react';
-import { Card } from '@storm/ui';
+import { Card, ScrollArea, cn } from '@storm/ui';
+import { ADMIN_TABS, SERVER_TABS_NAV_CLASS } from '@/components/panel/sidebar';
 import { useAuth } from '@/lib/auth-context';
 
+/**
+ * The administration area, with its sections as tabs rather than as eleven
+ * sidebar entries.
+ *
+ * They were longer than the content beside them, and every one is somewhere an
+ * operator goes occasionally rather than constantly — so they read better here,
+ * where a server's sections already live, and the sidebar keeps to the three
+ * places people actually move between.
+ */
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  const { isAdmin, loading } = useAuth();
+  const { isAdmin, loading, can } = useAuth();
+  const pathname = usePathname();
 
   if (loading) return null;
 
@@ -25,5 +38,39 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     );
   }
 
-  return <div className="mx-auto max-w-7xl animate-fade-in">{children}</div>;
+  // Same gate the sidebar applied, so an account that could reach only the
+  // audit log still reaches only that.
+  const visible = ADMIN_TABS.filter((tab) => can(tab.permission));
+
+  return (
+    <div className="mx-auto max-w-7xl animate-fade-in space-y-6">
+      <ScrollArea className="w-full border-b border-border">
+        <nav className={SERVER_TABS_NAV_CLASS} aria-label="Administration sections">
+          {visible.map((tab) => {
+            const href = tab.segment ? `/admin/${tab.segment}` : '/admin';
+            const active = tab.segment ? pathname.startsWith(href) : pathname === '/admin';
+            return (
+              <Link
+                key={tab.segment || 'overview'}
+                href={href}
+                className={cn(
+                  'relative flex items-center gap-1.5 whitespace-nowrap px-3 py-2.5 text-sm font-medium transition-colors',
+                  active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
+                )}
+                aria-current={active ? 'page' : undefined}
+              >
+                <tab.icon className="h-3.5 w-3.5" />
+                {tab.label}
+                {active ? (
+                  <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-primary" />
+                ) : null}
+              </Link>
+            );
+          })}
+        </nav>
+      </ScrollArea>
+
+      {children}
+    </div>
+  );
 }

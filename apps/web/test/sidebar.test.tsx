@@ -28,41 +28,35 @@ describe('Sidebar', () => {
 
     expect(screen.getByRole('link', { name: /Dashboard/ })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Servers/ })).toBeInTheDocument();
-    expect(screen.queryByText('Administration')).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Administration/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Audit log/ })).not.toBeInTheDocument();
   });
 
-  it('shows every administration entry to an owner', () => {
-    // Each of these is gated on a permission string typed by hand. A typo
-    // there hides the entry forever and nothing else would notice.
+  it('offers an owner the administration area, as one entry', () => {
+    // It used to list all eleven sections here. They are tabs on /admin now —
+    // the strip was longer than the content beside it — so what the sidebar
+    // owes is a way in, and admin-tabs.test.tsx owns the rest.
     renderAs(ALL_PERMISSIONS, true);
 
-    expect(screen.getByText('Administration')).toBeInTheDocument();
-    for (const label of [
-      'Overview',
-      'All servers',
-      'Users',
-      'Nodes',
-      'Game templates',
-      'Database hosts',
-      'Backup storage',
-      'Audit log',
-      'Settings',
-    ]) {
+    expect(screen.getByRole('link', { name: /Administration/ })).toHaveAttribute('href', '/admin');
+  });
+
+  it('does not put the sections back in the sidebar', () => {
+    // Listing them in both places is the state this move was meant to leave.
+    renderAs(ALL_PERMISSIONS, true);
+
+    for (const label of ['Backup storage', 'Database hosts', 'Game templates', 'Audit log']) {
       expect(
-        screen.getByRole('link', { name: new RegExp(label) }),
-        `missing "${label}"`,
-      ).toBeInTheDocument();
+        screen.queryByRole('link', { name: new RegExp(label) }),
+        `"${label}" belongs on the admin page now`,
+      ).not.toBeInTheDocument();
     }
   });
 
-  it('hides the entries a staff account may not use', () => {
-    // Admin, but only holding the audit permission: the audit log appears and
-    // the rest of the section does not.
+  it('keeps the area out of reach of an account that cannot use it', () => {
+    // Admin, but holding nothing that reaches the overview: no way in at all,
+    // rather than a link to a page that refuses them.
     renderAs(['audit.view'], true);
-
-    expect(screen.getByRole('link', { name: /Audit log/ })).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: /Backup storage/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: /Database hosts/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Administration/ })).not.toBeInTheDocument();
   });
 });

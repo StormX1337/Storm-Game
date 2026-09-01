@@ -52,44 +52,46 @@ const SECTIONS: NavSection[] = [
     ],
   },
   {
-    title: 'Administration',
+    // No section heading: with one entry it would just repeat the link.
     adminOnly: true,
     items: [
-      {
-        href: '/admin',
-        label: 'Overview',
-        icon: Gauge,
-        exact: true,
-        permission: 'admin.dashboard',
-      },
-      { href: '/admin/servers', label: 'All servers', icon: Server, permission: 'admin.servers' },
-      { href: '/admin/users', label: 'Users', icon: Users, permission: 'users.manage' },
-      { href: '/admin/nodes', label: 'Nodes', icon: Network, permission: 'nodes.manage' },
-      {
-        href: '/admin/templates',
-        label: 'Game templates',
-        icon: Package,
-        permission: 'templates.manage',
-      },
-      {
-        href: '/admin/databases',
-        label: 'Database hosts',
-        icon: Database,
-        permission: 'databasehosts.manage',
-      },
-      {
-        href: '/admin/backups',
-        label: 'Backup storage',
-        icon: HardDrive,
-        permission: 'backupstorage.manage',
-      },
-      { href: '/admin/audit', label: 'Audit log', icon: Shield, permission: 'audit.view' },
-      { href: '/admin/webhooks', label: 'Webhooks', icon: Webhook, permission: 'webhooks.manage' },
-      { href: '/admin/settings', label: 'Settings', icon: Settings, permission: 'settings.manage' },
-      { href: '/admin/updates', label: 'Updates', icon: Download, permission: 'panel.update' },
+      // One entry, not eleven. The sections live as tabs on the page itself,
+      // the way a server's do — the sidebar was longer than the content beside
+      // it, and every one of these is somewhere an operator goes occasionally.
+      { href: '/admin', label: 'Administration', icon: Shield, permission: 'admin.dashboard' },
     ],
   },
 ];
+
+/**
+ * The administration sections, as tabs on `/admin`.
+ *
+ * Each carries the permission that gated it in the sidebar, so a support
+ * account that could only see the audit log still sees only that.
+ */
+export const ADMIN_TABS = [
+  { segment: '', label: 'Overview', icon: Gauge, permission: 'admin.dashboard' },
+  { segment: 'servers', label: 'All servers', icon: Server, permission: 'admin.servers' },
+  { segment: 'users', label: 'Users', icon: Users, permission: 'users.manage' },
+  { segment: 'nodes', label: 'Nodes', icon: Network, permission: 'nodes.manage' },
+  { segment: 'templates', label: 'Game templates', icon: Package, permission: 'templates.manage' },
+  {
+    segment: 'databases',
+    label: 'Database hosts',
+    icon: Database,
+    permission: 'databasehosts.manage',
+  },
+  {
+    segment: 'backups',
+    label: 'Backup storage',
+    icon: HardDrive,
+    permission: 'backupstorage.manage',
+  },
+  { segment: 'audit', label: 'Audit log', icon: Shield, permission: 'audit.view' },
+  { segment: 'webhooks', label: 'Webhooks', icon: Webhook, permission: 'webhooks.manage' },
+  { segment: 'settings', label: 'Settings', icon: Settings, permission: 'settings.manage' },
+  { segment: 'updates', label: 'Updates', icon: Download, permission: 'panel.update' },
+] as const;
 
 /** Server-scoped links, shown while a server is open. */
 /**
