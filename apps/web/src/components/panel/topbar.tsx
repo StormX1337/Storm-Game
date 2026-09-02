@@ -59,7 +59,12 @@ export function Topbar({ onOpenSidebar }: { onOpenSidebar: () => void }) {
     : '';
 
   return (
-    <header className="storm-glass sticky top-0 z-30 flex h-16 shrink-0 items-center gap-3 rounded-none border-x-0 border-t-0 px-4 [--glass-alpha:0.4] sm:px-6">
+    // Overlay glass, not card glass: the page scrolls *underneath* this. At a
+    // card's transparency the text sliding past came through the search field
+    // and the icons, which is the same defect as a toast you can read the page
+    // through — and the reason a component must pick one of the two named
+    // treatments rather than dial its own number.
+    <header className="storm-glass storm-glass-overlay sticky top-0 z-30 flex h-16 shrink-0 items-center gap-3 rounded-none border-x-0 border-t-0 px-4 sm:px-6">
       <Button
         variant="ghost"
         size="icon"

@@ -142,7 +142,10 @@ export default async function adminServerRoutes(app: FastifyInstance): Promise<v
       if (!storage) {
         throw conflict(
           'Moving a server needs a shared backup storage (S3 or compatible). ' +
-            "A local one lives on the node's own disk, which the destination cannot read.",
+            "A local one lives on the node's own disk, which the destination cannot read. " +
+            // Where to go next, because the reason alone leaves an operator
+            // holding a correct explanation and no way to act on it.
+            'Add one under Administration → Backup storage.',
         );
       }
 

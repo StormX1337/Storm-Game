@@ -152,7 +152,10 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
           // A pane, like everything else — but darker, because the eye reads
           // the brighter plane as the nearer one and the navigation sits
           // behind the content it navigates.
-          'storm-glass rounded-none border-y-0 border-l-0 [--glass-alpha:0.4]',
+          // On a phone this is a drawer over the page, so it takes the same
+          // opacity a dialog does. Beside the content on a desktop it would
+          // survive less, but one navigation cannot be two surfaces.
+          'storm-glass storm-glass-overlay rounded-none border-y-0 border-l-0',
           open ? 'translate-x-0' : '-translate-x-full',
         )}
       >

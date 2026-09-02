@@ -90,6 +90,16 @@
      */
     --glass-bg: 0 0% 100%;
     --glass-alpha: 0.62;
+    /*
+     * A pane that floats over content rather than over the page.
+     *
+     * A card sits on the ground, where the wash and the grid are exactly what
+     * it should let through. A toast, a menu or a dialog lands on top of
+     * whatever happened to be there — a table, a paragraph, another card — and
+     * at the same transparency you read both at once. An alert nobody can read
+     * is worse than no alert.
+     */
+    --glass-alpha-overlay: 0.95;
     --glass-blur: 20px;
     --glass-saturate: 170%;
     --glass-border: 222 25% 25% / 0.1;
@@ -163,6 +173,7 @@
        card colour, and the edge is the only white in it. */
     --glass-bg: 221 24% 16%;
     --glass-alpha: 0.5;
+    --glass-alpha-overlay: 0.93;
     --glass-blur: 22px;
     --glass-saturate: 185%;
     --glass-border: 0 0% 100% / 0.09;
@@ -350,6 +361,11 @@
       position: relative;
       z-index: 1;
     }
+  }
+
+  /* Everything that floats over content rather than over the page. */
+  .storm-glass-overlay {
+    --glass-alpha: var(--glass-alpha-overlay);
   }
 
   /* For a card that is also a link or a button. It rises on hover, which is

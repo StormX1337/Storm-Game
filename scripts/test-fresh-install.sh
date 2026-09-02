@@ -104,18 +104,35 @@ fi
 printf '\nWhat the guide tells you to run\n'
 cd "$REPO"
 
-# The service is the first token after the verb that is not a flag. Taking the
-# last token instead reads `docker compose exec api node` as a service called
-# "node", which is the command.
-for service in $(grep -ohE 'docker compose (exec|run|logs)( +-[A-Za-z]+)* +[a-z][a-z0-9-]*' \
-                   docs/INSTALLATION.md docs/DEPLOYMENT.md \
-                 | sed -E 's/.*(exec|run|logs)( +-[A-Za-z]+)* +//' | sort -u); do
-  if docker compose config --services 2>/dev/null | grep -qx "$service"; then
-    ok "service \"$service\" exists"
-  else
-    bad "service \"$service\" exists" "the guide runs it, compose does not define it"
-  fi
-done
+# Read once, and check that reading worked.
+#
+# This used to run `docker compose config --services 2>/dev/null` inside the
+# loop, so a run where that command failed for any reason produced an empty
+# list and every service was reported as missing from compose. It fired about
+# one run in ten and accused the wrong file: somebody would go looking through
+# docker-compose.yml for a service defined plainly at the top of it. A check
+# that cannot tell "the file is wrong" from "I could not read the file" is
+# worse than no check.
+if compose_services=$(docker compose config --services 2>&1); then
+  # The service is the first token after the verb that is not a flag. Taking
+  # the last token instead reads `docker compose exec api node` as a service
+  # called "node", which is the command.
+  for service in $(grep -ohE 'docker compose (exec|run|logs)( +-[A-Za-z]+)* +[a-z][a-z0-9-]*' \
+                     docs/INSTALLATION.md docs/DEPLOYMENT.md \
+                   | sed -E 's/.*(exec|run|logs)( +-[A-Za-z]+)* +//' | sort -u); do
+    if printf '%s\n' "$compose_services" | grep -qx "$service"; then
+      ok "service \"$service\" exists"
+    else
+      bad "service \"$service\" exists" "the guide runs it, compose does not define it"
+    fi
+  done
+else
+  # One true failure instead of one true one and four invented ones. Nothing
+  # can be said about which services compose defines when compose could not be
+  # read, and saying it anyway sends the reader to the wrong file.
+  bad "docker compose config can be read" \
+      "$(printf '%s' "$compose_services" | head -n 1)"
+fi
 
 for script in $(grep -oE '\./scripts/[a-z-]+\.sh' docs/INSTALLATION.md docs/DEPLOYMENT.md | cut -d: -f2- | sort -u); do
   if [[ -x "$script" ]]; then

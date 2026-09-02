@@ -112,6 +112,54 @@ describe('storm-* design classes', () => {
     expect(missing, `animated but never declared: ${missing.join(', ')}`).toEqual([]);
   });
 
+  it('gives every floating pane the opacity that makes it readable', () => {
+    // The token being right is half of it. An error toast shipped at a card's
+    // transparency with the settings card legible through the message, and
+    // the token test could not see that, because the component simply never
+    // asked for the overlay treatment.
+    //
+    // These two modules are the surfaces that land on top of content: dialogs,
+    // menus, popovers, selects and toasts. Anything in them that is glass has
+    // to be overlay glass.
+    const floating = [
+      path.resolve(HERE, '../../../packages/ui/src/components/overlays.tsx'),
+      path.resolve(HERE, '../../../packages/ui/src/components/toast.tsx'),
+    ];
+
+    let checked = 0;
+    for (const file of floating) {
+      for (const name of classNamesIn(readFileSync(file, 'utf8'))) {
+        if (name !== 'storm-glass') continue;
+        checked += 1;
+      }
+
+      // Counting occurrences rather than the deduplicated set: one plain
+      // `storm-glass` among five paired ones is exactly the bug.
+      const source = readFileSync(file, 'utf8');
+      const glass = source.match(/\bstorm-glass\b/g)?.length ?? 0;
+      const overlay = source.match(/\bstorm-glass-overlay\b/g)?.length ?? 0;
+      expect(glass, `${path.basename(file)} has an unpaired storm-glass`).toBe(overlay * 2);
+    }
+
+    expect(checked, 'neither floating module uses glass at all any more').toBeGreaterThan(0);
+  });
+
+  it('leaves the two opacities named, rather than dialled per component', () => {
+    // Both halves of this bug came from one habit. The top bar and the
+    // navigation each set `[--glass-alpha:0.4]` inline — thinner than a card,
+    // on surfaces the page scrolls underneath — so text slid legibly through
+    // the search field. A component picks `storm-glass` or
+    // `storm-glass-overlay`; the numbers live in the stylesheet, where both
+    // themes and the legibility floor are checked.
+    const offenders: string[] = [];
+    for (const file of files) {
+      if (/\[--glass-alpha:/.test(readFileSync(file, 'utf8'))) {
+        offenders.push(path.relative(path.resolve(HERE, '../..'), file));
+      }
+    }
+    expect(offenders, `these set their own glass opacity: ${offenders.join(', ')}`).toEqual([]);
+  });
+
   it('carries no class the panel has stopped using', () => {
     // Dead rules in a shared stylesheet are worse than missing ones: the next
     // person finds `.storm-panel`, uses it, and it drifts from the component

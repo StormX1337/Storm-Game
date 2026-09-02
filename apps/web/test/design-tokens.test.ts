@@ -122,6 +122,24 @@ describe('design tokens', () => {
     for (const token of shared) expect(light.has(token), `${token} is gone`).toBe(true);
   });
 
+  it('makes a pane that floats over content read as one that does not', () => {
+    // A card sits on the ground, and the wash and grid behind it are exactly
+    // what it should let through. A toast lands on top of whatever was there —
+    // a table, a paragraph — and at a card's transparency you read both at
+    // once. That shipped: an error toast over a settings card, with the card's
+    // text legible straight through the message.
+    for (const theme of [light, dark]) {
+      const card = Number(theme.get('--glass-alpha'));
+      const overlay = Number(theme.get('--glass-alpha-overlay'));
+
+      expect(Number.isFinite(card) && Number.isFinite(overlay)).toBe(true);
+      expect(overlay, 'an overlay has to be more opaque than a card').toBeGreaterThan(card);
+      // And opaque enough to actually read against. Below this the text
+      // underneath still comes through.
+      expect(overlay).toBeGreaterThanOrEqual(0.9);
+    }
+  });
+
   it('keeps the default brand colour on the token the stylesheet ships', () => {
     // `useBrandColor` overwrites --primary on the root element. If the
     // stylesheet's own light value ever drifts from the default hex an

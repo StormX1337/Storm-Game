@@ -49,7 +49,7 @@ export const DialogContent = React.forwardRef<
         // screen and clips every other line in it. On a phone that is most of
         // the content. The inset leaves the rounded corners visible there.
         'max-sm:w-[calc(100%-1.5rem)] [&>*]:min-w-0',
-        'storm-glass p-6 shadow-overlay duration-200 sm:rounded-xl',
+        'storm-glass storm-glass-overlay p-6 shadow-overlay duration-200 sm:rounded-xl',
         'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0',
         'data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
         'max-h-[92vh] overflow-y-auto',
@@ -115,7 +115,7 @@ export const DropdownMenuSub = DropdownMenuPrimitive.Sub;
 export const DropdownMenuSubTrigger = DropdownMenuPrimitive.SubTrigger;
 
 const menuContentClasses =
-  'storm-glass z-50 min-w-[10rem] overflow-hidden rounded-lg p-1 text-popover-foreground shadow-overlay ' +
+  'storm-glass storm-glass-overlay z-50 min-w-[10rem] overflow-hidden rounded-lg p-1 text-popover-foreground shadow-overlay ' +
   'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 ' +
   'data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95';
 
@@ -243,7 +243,7 @@ export const PopoverContent = React.forwardRef<
       align={align}
       sideOffset={sideOffset}
       className={cn(
-        'storm-glass z-50 w-72 rounded-lg p-4 text-popover-foreground shadow-overlay outline-none',
+        'storm-glass storm-glass-overlay z-50 w-72 rounded-lg p-4 text-popover-foreground shadow-overlay outline-none',
         'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
         className,
       )}
@@ -315,7 +315,7 @@ export const SelectContent = React.forwardRef<
       ref={ref}
       position={position}
       className={cn(
-        'storm-glass z-50 max-h-96 min-w-[8rem] overflow-hidden rounded-lg text-popover-foreground shadow-overlay',
+        'storm-glass storm-glass-overlay z-50 max-h-96 min-w-[8rem] overflow-hidden rounded-lg text-popover-foreground shadow-overlay',
         'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
         position === 'popper' && 'data-[side=bottom]:translate-y-1 data-[side=top]:-translate-y-1',
         className,
