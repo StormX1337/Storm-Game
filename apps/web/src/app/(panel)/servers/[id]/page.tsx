@@ -110,7 +110,7 @@ export default function ServerOverviewPage() {
         <StatCard
           label="Memory"
           value={stats ? formatBytes(stats.memoryBytes) : '—'}
-          hint={`of ${formatMib(server.limits.memoryLimit, 0)}`}
+          hint={`of ${formatMib(server.limits.memoryLimit)}`}
           icon={MemoryStick}
           tone={
             stats && usagePercent(stats.memoryBytes, memoryLimitBytes) > 90 ? 'warning' : 'default'
@@ -119,7 +119,7 @@ export default function ServerOverviewPage() {
         <StatCard
           label="Disk"
           value={stats ? formatBytes(stats.diskBytes) : '—'}
-          hint={`of ${formatMib(server.limits.diskLimit, 0)}`}
+          hint={`of ${formatMib(server.limits.diskLimit)}`}
           icon={HardDrive}
           tone={stats && usagePercent(stats.diskBytes, diskLimitBytes) > 90 ? 'warning' : 'default'}
         />
@@ -152,7 +152,7 @@ export default function ServerOverviewPage() {
                 format: (value) => formatBytes(value),
               },
             ]}
-            yFormatter={(value) => formatBytes(value, 0)}
+            yFormatter={(value) => formatBytes(value)}
             emptyMessage="Start the server to collect memory samples."
           />
 
@@ -174,7 +174,7 @@ export default function ServerOverviewPage() {
                 format: (value) => formatBytes(value),
               },
             ]}
-            yFormatter={(value) => formatBytes(value, 0)}
+            yFormatter={(value) => formatBytes(value)}
             emptyMessage="Network counters appear once the server is running."
           />
         </div>
@@ -190,14 +190,14 @@ export default function ServerOverviewPage() {
                 icon={MemoryStick}
                 used={stats?.memoryBytes ?? 0}
                 limit={memoryLimitBytes}
-                formatValue={(value) => formatBytes(value, 0)}
+                formatValue={(value) => formatBytes(value)}
               />
               <UsageMeter
                 label="Disk"
                 icon={HardDrive}
                 used={stats?.diskBytes ?? 0}
                 limit={diskLimitBytes}
-                formatValue={(value) => formatBytes(value, 0)}
+                formatValue={(value) => formatBytes(value)}
               />
               <UsageMeter
                 label="CPU"

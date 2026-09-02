@@ -18,9 +18,33 @@ import {
 describe('formatBytes', () => {
   it('scales to the right unit', () => {
     expect(formatBytes(512)).toBe('512 B');
-    expect(formatBytes(1024)).toBe('1.0 KiB');
-    expect(formatBytes(1024 ** 2)).toBe('1.0 MiB');
+    expect(formatBytes(1024)).toBe('1 KiB');
+    expect(formatBytes(1024 ** 2)).toBe('1 MiB');
     expect(formatBytes(1024 ** 3 * 2.5)).toBe('2.5 GiB');
+  });
+
+  it('spends a decimal only where it distinguishes two figures', () => {
+    // Both of these were on screen at once: a chart axis tick and the disk
+    // figure beside it. A fixed zero made two different ticks read
+    // "1 GiB, 1 GiB"; a fixed one wrote "259.5 MiB" next to "10 GiB".
+    expect(formatBytes(1024 ** 3 * 1.07)).toBe('1.1 GiB');
+    expect(formatBytes(1024 ** 3 * 1.9)).toBe('1.9 GiB');
+    expect(formatBytes(1024 ** 2 * 259.5)).toBe('260 MiB');
+    expect(formatBytes(1024 ** 2 * 763)).toBe('763 MiB');
+
+    // Ten is the turn: below it a decimal earns its place, at it the figure is
+    // already precise enough to read.
+    expect(formatBytes(1024 ** 2 * 9.9)).toBe('9.9 MiB');
+    expect(formatBytes(1024 ** 2 * 10)).toBe('10 MiB');
+
+    // And a decimal that came out zero is not a decimal. An exact limit
+    // printed as "2.0 GiB" beside the same limit as "2 GiB" is what sent me
+    // looking at this in the first place.
+    expect(formatBytes(1024 ** 3 * 2)).toBe('2 GiB');
+    expect(formatBytes(1024 ** 3 * 2.1)).toBe('2.1 GiB');
+
+    // A caller that needs a fixed shape still gets one.
+    expect(formatBytes(1024 ** 2 * 259.5, 1)).toBe('259.5 MiB');
   });
 
   it('shows whole bytes without a decimal', () => {
@@ -43,8 +67,18 @@ describe('formatBytes', () => {
 describe('formatMib', () => {
   it('reads API limits as MiB', () => {
     // A 2048 MiB memory limit has to read as 2 GiB, not 2 KiB.
-    expect(formatMib(2048)).toBe('2.0 GiB');
-    expect(formatMib(512)).toBe('512.0 MiB');
+    expect(formatMib(2048)).toBe('2 GiB');
+    expect(formatMib(512)).toBe('512 MiB');
+
+    // A limit is written the same way as the figure it limits: the card said
+    // "of 2 GiB" while the meter under it said "0 B / 2.0 GiB".
+    //
+    // 10.5 GiB rather than a round 2: at exactly two the two rules happen to
+    // agree, so the first version of this line passed against a formatMib
+    // that pinned its own precision — which is the whole thing it is here to
+    // catch.
+    expect(formatMib(10_752)).toBe(formatBytes(10_752 * 1024 * 1024));
+    expect(formatMib(2048)).toBe(formatBytes(2048 * 1024 * 1024));
   });
 });
 

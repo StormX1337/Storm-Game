@@ -15,15 +15,36 @@ export const LOCALE = 'en-GB';
 
 const BYTE_UNITS = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB'];
 
-export function formatBytes(bytes: number, decimals = 1): string {
+/**
+ * A byte figure, with enough precision to tell two of them apart and no more.
+ *
+ * A fixed one decimal writes "259.5 MiB" next to a limit of "10 GiB" on the
+ * same card. A fixed zero makes a chart axis read "1 GiB, 1 GiB" for two
+ * different ticks, which is worse: it looks like the chart is broken.
+ *
+ * So the precision follows the mantissa. Under ten it earns a decimal, at ten
+ * or over it does not, raw bytes never get one, and a decimal that turned out
+ * to be zero is dropped — a limit of exactly two gibibytes is "2 GiB", not
+ * "2.0 GiB", and printing it both ways on one card is how this started.
+ *
+ * Pass `decimals` to override where a caller genuinely needs a fixed shape.
+ */
+export function formatBytes(bytes: number, decimals?: number): string {
   if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
   const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), BYTE_UNITS.length - 1);
   const value = bytes / 1024 ** exponent;
-  return `${value.toFixed(exponent === 0 ? 0 : decimals)} ${BYTE_UNITS[exponent]}`;
+  const places = exponent === 0 ? 0 : (decimals ?? (value >= 10 ? 0 : 1));
+  const text = value.toFixed(places).replace(/\.0+$/, '');
+  return `${text} ${BYTE_UNITS[exponent]}`;
 }
 
-/** Values the API reports in MiB (limits, node capacity). */
-export function formatMib(mib: number, decimals = 1): string {
+/**
+ * Values the API reports in MiB (limits, node capacity).
+ *
+ * `decimals` is passed straight through rather than defaulted, so a limit is
+ * written the same way here as the figure it is a limit on.
+ */
+export function formatMib(mib: number, decimals?: number): string {
   return formatBytes(mib * 1024 * 1024, decimals);
 }
 

@@ -72,13 +72,34 @@ export function PowerControls({
   const isBusy = BUSY.includes(status);
   const transitioning = status === 'STARTING' || status === 'STOPPING';
 
+  const canStart = !isRunning && !isBusy && can('servers.start');
+  const canRestart = !isBusy && can('servers.restart');
+  const canStop = isRunning && can('servers.stop');
+  // Kill stays available while a server is stuck mid-transition, which is
+  // exactly when it is needed.
+  const canKill = (isRunning || transitioning) && can('servers.kill');
+
+  /*
+   * Exactly one filled button, and it is the one you came here to press.
+   *
+   * The row used to carry three different treatments at once — a filled
+   * green, two filled greys and an outlined red — which reads as four
+   * unrelated things rather than one control. Worse, the filled one was
+   * always Start, so a running server offered a bright disabled button and
+   * left the action you actually wanted looking secondary.
+   *
+   * A filled button that cannot be pressed is the other half of the same
+   * problem: dimming a saturated fill to 45% leaves a muddy shape that still
+   * draws the eye. So a button drops to the outline treatment the moment it
+   * is unavailable, and the fill moves to whichever action is live.
+   */
   return (
     <div className="flex flex-wrap items-center gap-2">
       <Button
         size={size}
-        variant="success"
+        variant={canStart ? 'success' : 'outline'}
         onClick={() => void run('start')}
-        disabled={isRunning || isBusy || !can('servers.start')}
+        disabled={!canStart}
         loading={pending === 'start'}
       >
         <Play />
@@ -87,9 +108,9 @@ export function PowerControls({
 
       <Button
         size={size}
-        variant="secondary"
+        variant="outline"
         onClick={() => void run('restart')}
-        disabled={isBusy || !can('servers.restart')}
+        disabled={!canRestart}
         loading={pending === 'restart'}
       >
         <RotateCw />
@@ -98,9 +119,9 @@ export function PowerControls({
 
       <Button
         size={size}
-        variant="secondary"
+        variant={canStop ? 'secondary' : 'outline'}
         onClick={() => void run('stop')}
-        disabled={!isRunning || !can('servers.stop')}
+        disabled={!canStop}
         loading={pending === 'stop'}
       >
         <Square />
@@ -111,11 +132,9 @@ export function PowerControls({
         size={size}
         variant="outline"
         onClick={() => void run('kill')}
-        // Kill stays available while a server is stuck mid-transition, which is
-        // exactly when it is needed.
-        disabled={(!isRunning && !transitioning) || !can('servers.kill')}
+        disabled={!canKill}
         loading={pending === 'kill'}
-        className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+        className="text-destructive hover:border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
       >
         <Skull />
         Kill

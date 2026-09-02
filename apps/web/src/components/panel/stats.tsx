@@ -76,11 +76,20 @@ export interface StatCardProps {
   className?: string;
 }
 
+/**
+ * The chip carries the tone, and the ordinary tone is no colour at all.
+ *
+ * Tinting `default` was a mistake: on the server overview every card is
+ * `default` almost all of the time, so four identical blue squares marched
+ * across the top competing with the figures beside them. Colour that appears
+ * on everything cannot single anything out — which was the entire argument
+ * for putting it there.
+ */
 const TONE_CHIP: Record<NonNullable<StatCardProps['tone']>, string> = {
-  default: 'border-primary/20 bg-primary/10 text-primary',
-  success: 'border-success/20 bg-success/10 text-success',
-  warning: 'border-warning/20 bg-warning/10 text-warning',
-  destructive: 'border-destructive/20 bg-destructive/10 text-destructive',
+  default: 'border-border bg-secondary/50 text-muted-foreground',
+  success: 'border-success/25 bg-success/12 text-success',
+  warning: 'border-warning/25 bg-warning/12 text-warning',
+  destructive: 'border-destructive/25 bg-destructive/12 text-destructive',
 };
 
 export function StatCard({
