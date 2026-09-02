@@ -50,6 +50,8 @@ import adminUserRoutes from './routes/admin/users.routes.js';
 import adminNodeRoutes from './routes/admin/nodes.routes.js';
 import adminTemplateRoutes from './routes/admin/templates.routes.js';
 import adminSystemRoutes from './routes/admin/system.routes.js';
+import adminRoleRoutes from './routes/admin/roles.routes.js';
+import adminJobRoutes from './routes/admin/jobs.routes.js';
 import adminServerRoutes from './routes/admin/servers.routes.js';
 
 import { registerServerSocket } from './ws/server-socket.js';
@@ -213,6 +215,8 @@ export async function buildApp(options: BuildOptions = {}): Promise<FastifyInsta
   await app.register(adminNodeRoutes, { prefix: `${prefix}/admin/nodes` });
   await app.register(adminTemplateRoutes, { prefix: `${prefix}/admin/templates` });
   await app.register(adminServerRoutes, { prefix: `${prefix}/admin/servers` });
+  await app.register(adminRoleRoutes, { prefix: `${prefix}/admin/roles` });
+  await app.register(adminJobRoutes, { prefix: `${prefix}/admin/jobs` });
   await app.register(adminSystemRoutes, { prefix: `${prefix}/admin` });
   await app.register(internalRoutes, { prefix: `${prefix}/internal` });
 

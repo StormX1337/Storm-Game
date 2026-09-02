@@ -103,6 +103,7 @@ export default async function adminUserRoutes(app: FastifyInstance): Promise<voi
           roleId: role.id,
           emailVerifiedAt: input.emailVerified ? new Date() : null,
           extraPermissions: input.extraPermissions,
+          deniedPermissions: input.deniedPermissions,
           ...(input.limits ?? {}),
         },
         include: { role: { include: { permissions: true } }, twoFactor: true },
@@ -200,6 +201,7 @@ export default async function adminUserRoutes(app: FastifyInstance): Promise<voi
           ? { emailVerifiedAt: input.emailVerified ? new Date() : null }
           : {}),
         ...(input.extraPermissions ? { extraPermissions: input.extraPermissions } : {}),
+        ...(input.deniedPermissions ? { deniedPermissions: input.deniedPermissions } : {}),
         ...(input.password ? { passwordHash: await hashPassword(input.password) } : {}),
         ...(input.limits ?? {}),
       },

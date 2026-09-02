@@ -1,3 +1,5 @@
+import { readdirSync } from 'node:fs';
+import path from 'node:path';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { ADMIN_EMAIL, ADMIN_PASSWORD, ANONYMOUS } from './fixtures';
 
@@ -11,6 +13,12 @@ import { ADMIN_EMAIL, ADMIN_PASSWORD, ANONYMOUS } from './fixtures';
  * the panel rate-limits authentication on purpose. Tests that need to be
  * anonymous say so.
  */
+
+/** The administration pages as they exist, not as somebody remembered them. */
+// `__dirname` rather than `import.meta.url`: Playwright transpiles these specs
+// to CommonJS, where import.meta does not exist. The config next door does the
+// same thing for the same reason.
+const ADMIN_ROUTES = path.resolve(__dirname, '../../apps/web/src/app/(panel)/admin');
 
 function unique(): string {
   return Math.random().toString(36).slice(2, 10);
@@ -333,25 +341,24 @@ test.describe('panel', () => {
 
 test.describe('administration', () => {
   test('every admin section renders', async ({ page }) => {
-    const sections: [string, RegExp][] = [
-      ['/admin', /Administration/],
-      ['/admin/users', /Users/],
-      ['/admin/nodes', /Nodes/],
-      ['/admin/servers', /All servers/],
-      ['/admin/templates', /Game templates/],
-      ['/admin/audit', /Audit log/],
-      ['/admin/databases', /Database hosts/],
-      ['/admin/backups', /Backup storage/],
-      ['/admin/settings', /Settings/],
-      ['/admin/webhooks', /Webhooks/],
-      ['/admin/updates', /Updates/],
-    ];
+    // Read off disk rather than typed out. The list was hand-written, so two
+    // new sections were added and this kept passing without ever opening
+    // them — which is the one thing it exists to do.
+    const routes = readdirSync(ADMIN_ROUTES, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && !entry.name.startsWith('_'))
+      .map((entry) => `/admin/${entry.name}`)
+      .sort();
 
-    for (const [path, heading] of sections) {
+    expect(routes.length).toBeGreaterThan(10);
+
+    for (const path of ['/admin', ...routes]) {
       await page.goto(path);
-      await expect(page.getByRole('heading', { name: heading }).first()).toBeVisible({
+      // Every section leads with a heading. A page that throws renders the
+      // error boundary instead, which has no h1 of its own.
+      await expect(page.locator('h1').first(), `${path} rendered no heading`).toBeVisible({
         timeout: 20_000,
       });
+      await expect(page.getByText('Something went wrong'), `${path} crashed`).toHaveCount(0);
     }
   });
 

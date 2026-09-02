@@ -52,6 +52,11 @@ export function toUserDetail(user: Row, serverCount = 0): UserDetail {
   return {
     ...toUserSummary(user),
     permissions: [...permissions] as Permission[],
+    // The two lists as well as the result of applying them. An operator
+    // editing the overrides needs to see what is set, not only what it added
+    // up to — otherwise every edit starts by guessing.
+    extraPermissions: (user.extraPermissions ?? []) as Permission[],
+    deniedPermissions: (user.deniedPermissions ?? []) as Permission[],
     limits: {
       serverLimit: user.serverLimit,
       cpuLimit: user.cpuLimit,

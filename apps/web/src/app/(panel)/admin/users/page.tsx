@@ -9,6 +9,7 @@ import {
   MoreVertical,
   Plus,
   Search,
+  ShieldCheck,
   ShieldOff,
   Trash2,
   UserCheck,
@@ -50,6 +51,7 @@ import {
 import type { RoleName, UserSummary } from '@storm/types';
 import { ApiError, api, apiPaginated, errorMessage } from '@/lib/api';
 import { formatDate, formatRelative, initials } from '@/lib/format';
+import { UserPermissionsDialog } from '@/components/panel/user-permissions-dialog';
 import { useAuth } from '@/lib/auth-context';
 
 interface UserRow extends UserSummary {
@@ -77,6 +79,10 @@ export default function AdminUsersPage() {
   const [role, setRole] = React.useState('all');
   const [page, setPage] = React.useState(1);
   const [creating, setCreating] = React.useState(false);
+  const [permissionsFor, setPermissionsFor] = React.useState<{
+    id: string;
+    username: string;
+  } | null>(null);
   const perPage = 25;
 
   React.useEffect(() => {
@@ -260,6 +266,10 @@ export default function AdminUsersPage() {
                           {row.suspended ? <UserCheck /> : <Ban />}
                           {row.suspended ? 'Restore access' : 'Suspend'}
                         </DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => setPermissionsFor(row)}>
+                          <ShieldCheck />
+                          Permissions
+                        </DropdownMenuItem>
                         <DropdownMenuItem onSelect={() => resetPassword.mutate(row.id)}>
                           <KeyRound />
                           Reset password
@@ -308,6 +318,14 @@ export default function AdminUsersPage() {
 
       {data ? (
         <Pagination page={page} perPage={perPage} total={data.meta.total} onPageChange={setPage} />
+      ) : null}
+
+      {permissionsFor ? (
+        <UserPermissionsDialog
+          userId={permissionsFor.id}
+          username={permissionsFor.username}
+          onClose={() => setPermissionsFor(null)}
+        />
       ) : null}
 
       {creating ? (

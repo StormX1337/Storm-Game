@@ -32,7 +32,12 @@ export interface UserSummary {
 }
 
 export interface UserDetail extends UserSummary {
+  /** What this account can actually do: its role, plus extra, minus denied. */
   permissions: Permission[];
+  /** Granted beyond the role. */
+  extraPermissions: Permission[];
+  /** Taken away despite the role. */
+  deniedPermissions: Permission[];
   limits: UserLimits;
   serverCount: number;
   updatedAt: string;

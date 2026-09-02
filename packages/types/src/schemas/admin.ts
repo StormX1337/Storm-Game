@@ -34,7 +34,18 @@ export const createUserSchema = z.object({
   role: z.enum(['OWNER', 'ADMIN', 'STAFF', 'SUPPORT', 'CUSTOMER']),
   emailVerified: z.boolean().default(false),
   limits: userLimitsSchema.partial().optional(),
+  /**
+   * Permissions this account holds beyond its role, and permissions it loses
+   * despite its role.
+   *
+   * Both are honoured by the auth layer on every request — the deny list has
+   * been subtracted from the effective set since the beginning. It had no way
+   * in: not the schema, not the routes, not the panel. A security control that
+   * is enforced but cannot be set is not a control, and the first person to
+   * need it would have reached for the database.
+   */
   extraPermissions: z.array(permissionEnum).max(100).default([]),
+  deniedPermissions: z.array(permissionEnum).max(100).default([]),
 });
 
 export const updateUserSchema = createUserSchema
