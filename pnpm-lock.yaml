@@ -125,6 +125,9 @@ importers:
       undici:
         specifier: 7.2.3
         version: 7.2.3
+      unzipper:
+        specifier: 0.12.3
+        version: 0.12.3
       ws:
         specifier: 8.18.0
         version: 8.18.0
@@ -141,6 +144,9 @@ importers:
       '@types/pg':
         specifier: 8.11.10
         version: 8.11.10
+      '@types/unzipper':
+        specifier: 0.10.10
+        version: 0.10.10
       '@types/ws':
         specifier: 8.5.13
         version: 8.5.13

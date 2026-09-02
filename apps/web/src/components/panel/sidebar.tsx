@@ -15,6 +15,7 @@ import {
   LayoutDashboard,
   Network,
   Package,
+  Package2,
   Server,
   Settings,
   Shield,
@@ -110,6 +111,7 @@ export const SERVER_TABS = [
   // Minecraft: Java. Everything else never sees the tab, and the API answers
   // 404 there regardless of what the panel draws.
   { segment: 'plugins', label: 'Plugins', icon: Blocks, feature: 'plugins' },
+  { segment: 'modpacks', label: 'Modpacks', icon: Package2, feature: 'modpacks' },
   { segment: 'players', label: 'Players', icon: UserCog, feature: 'players' },
   { segment: 'backups', label: 'Backups', icon: HardDrive },
   { segment: 'schedules', label: 'Schedules', icon: CalendarClock },

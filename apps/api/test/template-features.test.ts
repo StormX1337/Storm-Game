@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { TEMPLATE_FEATURES } from '@storm/types';
 import { after, before, describe, it } from 'node:test';
 import type { FastifyInstance } from 'fastify';
 import { hashPassword } from '@storm/security';
@@ -110,7 +111,13 @@ describe('template features', () => {
   it('refuses a feature the panel does not have', async () => {
     // Free text here would be a switch an operator could set and then wonder
     // about: nothing reads it, and a typo looks exactly like a real value.
-    for (const bad of [['modpacks'], ['Plugins'], ['plugins', 'nonsense'], ['']]) {
+    //
+    // The invalid one is built rather than named. This test used to say
+    // "modpacks", which was a fine example of a feature that did not exist
+    // until modpacks were built, and then it failed for the one reason that
+    // had nothing to do with what it checks.
+    const notAFeature = `${TEMPLATE_FEATURES.join('-')}-nope`;
+    for (const bad of [[notAFeature], ['Plugins'], ['plugins', 'nonsense'], ['']]) {
       const response = await patch(bad);
       assert.equal(response.statusCode, 400, `${JSON.stringify(bad)} must be refused`);
     }

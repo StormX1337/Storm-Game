@@ -76,11 +76,23 @@ export const TemplateFeature = {
   PLUGINS: 'plugins',
   /** Operators, whitelist and bans. Minecraft: Java only. */
   PLAYERS: 'players',
+  /** Browse and install Modrinth modpacks. Fabric servers only. */
+  MODPACKS: 'modpacks',
 } as const;
 export type TemplateFeature = (typeof TemplateFeature)[keyof typeof TemplateFeature];
 
 /** Every feature, for validating what an administrator picks. */
 export const TEMPLATE_FEATURES = Object.values(TemplateFeature);
+
+/**
+ * The one loader a modpack can be installed for.
+ *
+ * Here rather than in the API because the panel has to explain the rule and
+ * the API has to enforce it. Two copies of a constant like this drift, and the
+ * way it shows up is a page that says a server is ready and an endpoint that
+ * refuses it.
+ */
+export const MODPACK_LOADER = 'fabric';
 
 /** What each one gives a server, shown beside its switch. */
 export const TEMPLATE_FEATURE_INFO: Record<
@@ -96,6 +108,11 @@ export const TEMPLATE_FEATURE_INFO: Record<
     label: 'Player management',
     description:
       'Operators, whitelist and bans, read from the files the game writes and changed through its console commands. Minecraft: Java only.',
+  },
+  modpacks: {
+    label: 'Modpack browser',
+    description:
+      'Search Modrinth for modpacks and install one into a stopped server. Only Fabric packs can be installed, because Fabric is the only modded loader whose server jar starts from the same command line as vanilla.',
   },
 };
 

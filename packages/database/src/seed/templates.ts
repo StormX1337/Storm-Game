@@ -85,7 +85,7 @@ export const SEED_TEMPLATES: SeedTemplate[] = [
     // Paper, Spigot and Bukkit share a plugin ecosystem the panel can browse,
     // and Minecraft keeps its operators, whitelist and bans in files the panel
     // can read and commands it can send.
-    features: ['plugins', 'players'],
+    features: ['plugins', 'players', 'modpacks'],
     category: 'Minecraft',
     description:
       'Vanilla, Paper, Purpur and Fabric compatible Minecraft Java Edition server running on Temurin JRE.',
@@ -152,6 +152,41 @@ elif [ "\$PROJECT" = "vanilla" ]; then
     echo "[storm] Mojang lists no version \$VERSION." >&2; exit 1;
   }
   DOWNLOAD=\$(fetch "\$URL" | jq -r '.downloads.server.url')
+
+elif [ "\$PROJECT" = "fabric" ]; then
+  # Fabric is the one modded loader this template can run, and the reason is
+  # the startup command. Its meta API hands out a launchable server jar, so
+  # "java -jar <jar> nogui" still applies. Forge and NeoForge ship an installer
+  # that has to be run first and then started through a different command line
+  # entirely, which one template cannot express — so they are not offered at
+  # all rather than offered and broken.
+  echo "[storm] Resolving fabric \$VERSION from the Fabric meta API ..."
+  META="https://meta.fabricmc.net/v2/versions"
+
+  if [ "\$VERSION" = "latest" ]; then
+    # Stable only. The game list leads with snapshots, so taking the first
+    # entry installs whatever was published this week.
+    VERSION=\$(fetch "\$META/game" | jq -r '[.[] | select(.stable == true) | .version] | first // empty')
+    [ -n "\$VERSION" ] || {
+      echo "[storm] Fabric lists no stable game version." >&2; exit 1;
+    }
+    echo "[storm] Latest stable is \$VERSION"
+  fi
+
+  LOADER=\$(fetch "\$META/loader/\$VERSION" | jq -r '[.[] | select(.loader.stable == true) | .loader.version] | first // empty')
+  [ -n "\$LOADER" ] || {
+    echo "[storm] Fabric has no stable loader for \$VERSION." >&2
+    echo "[storm] Set SERVER_DOWNLOAD_URL on this server to install it anyway." >&2
+    exit 1
+  }
+
+  INSTALLER=\$(fetch "\$META/installer" | jq -r '[.[] | select(.stable == true) | .version] | first // empty')
+  [ -n "\$INSTALLER" ] || {
+    echo "[storm] Fabric lists no stable installer." >&2; exit 1;
+  }
+
+  echo "[storm] fabric \$VERSION, loader \$LOADER, installer \$INSTALLER"
+  DOWNLOAD="\$META/loader/\$VERSION/\$LOADER/\$INSTALLER/server/jar"
 
 elif [ "\$PROJECT" = "purpur" ]; then
   # Purpur is its own project with its own API. Asking PaperMC for it never
@@ -258,12 +293,16 @@ echo "[storm] Install complete."
       },
       {
         name: 'Project',
-        description: 'paper, purpur, folia or vanilla.',
+        description: 'paper, purpur, folia, fabric, velocity or vanilla.',
         envVariable: 'PROJECT',
         defaultValue: 'paper',
         userViewable: true,
         userEditable: true,
-        rules: 'required|string|in:paper,purpur,folia,velocity,vanilla',
+        // `fabric` belongs here because the description above the template has
+        // promised it since the first version, while this rule rejected it —
+        // a customer who read the description and typed it got "Must be one
+        // of:" and a list that did not contain the thing they were told to use.
+        rules: 'required|string|in:paper,purpur,folia,velocity,vanilla,fabric',
         sortOrder: 2,
       },
       {
