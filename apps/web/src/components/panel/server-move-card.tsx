@@ -91,8 +91,9 @@ export function ServerMoveCard() {
       <CardHeader>
         <CardTitle>Move to another node</CardTitle>
         <CardDescription>
-          Currently on <span className="font-medium">{server.node.name}</span>. The files travel
-          through backup storage, so a shared one (S3 or compatible) has to be configured.
+          Currently on <span className="font-medium">{server.node.name}</span>. The files travel in
+          an archive: straight between the nodes through shared storage if there is any, otherwise
+          streamed by the panel, which is slower.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">

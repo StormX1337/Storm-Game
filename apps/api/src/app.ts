@@ -30,6 +30,7 @@ import { UpdateService } from './services/update.service.js';
 import { ServerAccessService } from './services/server-access.service.js';
 import { PluginRegistryService } from './services/plugin-registry.service.js';
 import { ModpackRegistryService } from './services/modpack-registry.service.js';
+import { TransferArchiveService } from './services/transfer-archive.service.js';
 
 import healthRoutes from './routes/health.routes.js';
 import authRoutes from './routes/auth.routes.js';
@@ -144,6 +145,7 @@ export async function buildApp(options: BuildOptions = {}): Promise<FastifyInsta
   app.decorate('serverAccess', new ServerAccessService(app));
   app.decorate('plugins', new PluginRegistryService(app));
   app.decorate('modpacks', new ModpackRegistryService(app));
+  app.decorate('transferArchives', new TransferArchiveService(app));
 
   /* --------------------------------------------------------- swagger -- */
 

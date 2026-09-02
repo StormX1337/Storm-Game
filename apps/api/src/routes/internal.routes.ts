@@ -375,6 +375,50 @@ export default async function internalRoutes(app: FastifyInstance): Promise<void
       return ok(specs.filter((spec) => spec !== null));
     },
   );
+
+  /* ------------------------------------------------- moving without a bucket -- */
+
+  app.get(
+    '/transfer-archive/:ticket',
+    {
+      config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+      schema: {
+        tags: ['Internal'],
+        summary: 'Stream a move archive from the node that holds it',
+        hide: true,
+      },
+    },
+    async (request, reply) => {
+      // Not `authenticateNode`: the destination is a node, but the thing that
+      // authorises this read is the ticket, which grants one backup rather
+      // than everything that node may see. A node token here would mean any
+      // node could pull any other node's archive.
+      const { ticket: id } = z.object({ ticket: z.string().min(8).max(64) }).parse(request.params);
+
+      const header = request.headers.authorization;
+      const secret = header?.startsWith('Bearer ') ? header.slice(7).trim() : '';
+      const ticket = secret ? await app.transferArchives.redeem(id, secret) : null;
+      if (!ticket) throw unauthorized('That transfer ticket is not valid');
+
+      const source = await app.prisma.node.findUnique({ where: { id: ticket.sourceNodeId } });
+      if (!source) throw unauthorized('That transfer ticket is not valid');
+
+      // Streamed, never buffered: this is a server's whole directory, and the
+      // panel is only the pipe.
+      const response = await app.agents.rawRequest(
+        source,
+        `/api/v1/servers/${ticket.serverUuid}/backups/${ticket.backupUuid}/download`,
+        { raw: true, timeoutMs: 0 },
+      );
+      if (response.statusCode >= 400) {
+        await response.body.dump().catch(() => undefined);
+        throw unauthorized('That archive is no longer on the node that made it');
+      }
+
+      void reply.header('content-type', 'application/gzip');
+      return reply.send(response.body);
+    },
+  );
 }
 
 /**

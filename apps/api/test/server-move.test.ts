@@ -206,23 +206,60 @@ describe('moving a server between nodes', () => {
     );
   });
 
-  it('refuses when there is no shared storage to carry the archive', async () => {
-    // The one case an operator would otherwise discover an hour in: a LOCAL
-    // storage lives on the source node's own disk, and the destination has no
-    // way to read it.
+  it('accepts the move without shared storage, and refuses it with none at all', async () => {
+    // The first half used to be a refusal. Shared storage is the good route —
+    // the archive goes node to bucket to node and nothing large touches the
+    // panel — but demanding it meant running S3 to shift a server between two
+    // machines an operator already owns. Without a bucket the panel streams
+    // the archive itself, so all the move really needs is somewhere to record
+    // it against.
     await app.prisma.backupStorage.updateMany({
       where: { driver: { not: 'LOCAL' } },
       data: { isActive: false },
     });
+    const local = await app.prisma.backupStorage.create({
+      data: { name: `move-local-${uniqueSuffix()}`, driver: 'LOCAL', isActive: true },
+    });
 
-    const response = await move({ nodeId: destNodeId });
-    assert.equal(response.statusCode, 409, response.body);
+    const accepted = await move({ nodeId: destNodeId });
+    assert.equal(accepted.statusCode, 200, accepted.body);
+
+    // With nothing active at all there is nowhere to put the archive, and the
+    // refusal has to say so here rather than an hour into the move.
+    //
+    // "Nothing active" is global, and this database is shared with every other
+    // suite running beside it — so the window is one request wide and the
+    // restore is in a `finally`. Without that, an assertion failing here would
+    // leave the whole run with no storage and take a dozen unrelated suites
+    // down with it.
+    await app.prisma.server.update({
+      where: { id: serverId },
+      data: { status: 'OFFLINE', nodeId: sourceNodeId },
+    });
+    const wereActive = await app.prisma.backupStorage.findMany({
+      where: { isActive: true },
+      select: { id: true },
+    });
+
+    let refused;
+    try {
+      await app.prisma.backupStorage.updateMany({ data: { isActive: false } });
+      refused = await move({ nodeId: destNodeId });
+    } finally {
+      await app.prisma.backupStorage.updateMany({
+        where: { id: { in: wereActive.map((row) => row.id) } },
+        data: { isActive: true },
+      });
+    }
+
+    assert.equal(refused.statusCode, 409, refused.body);
     assert.match(
-      response.json<{ error: { message: string } }>().error.message,
-      /shared backup storage/i,
+      refused.json<{ error: { message: string } }>().error.message,
+      /backup storage/i,
       'the message has to name the actual obstacle',
     );
 
+    await app.prisma.backupStorage.delete({ where: { id: local.id } }).catch(() => undefined);
     await app.prisma.backupStorage.updateMany({
       where: { id: sharedStorageId },
       data: { isActive: true },

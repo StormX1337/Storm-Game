@@ -409,7 +409,7 @@ export default async function serverRoutes(app: FastifyInstance): Promise<void> 
         truncate: z.boolean().default(false),
         download: z
           .object({
-            driver: z.enum(['LOCAL', 'S3', 'R2', 'MINIO']),
+            driver: z.enum(['LOCAL', 'S3', 'R2', 'MINIO', 'PANEL']),
             url: z.string().url().optional(),
             headers: z.record(z.string()).optional(),
             key: z.string().max(1024),

@@ -31,18 +31,33 @@ export async function runTransfer(app: FastifyInstance, data: TransferJobData): 
   if (!destination) return;
 
   const previousStatus = server.status;
+
+  // Shared storage is the good route: the archive goes node -> bucket -> node
+  // and nothing large touches the panel. Without one the panel puts itself in
+  // the middle, which costs its bandwidth twice but means a deployment does
+  // not have to run object storage to shift a server between two machines it
+  // already owns.
   const storage = await app.prisma.backupStorage.findFirst({
     where: { isActive: true, driver: { not: 'LOCAL' } },
     orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }],
   });
-  if (!storage) {
-    await fail(app, server.id, previousStatus, 'No shared backup storage is configured any more.');
+  const local = storage
+    ? null
+    : await app.prisma.backupStorage.findFirst({
+        where: { isActive: true, driver: 'LOCAL' },
+        orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }],
+      });
+  const archiveStorage = storage ?? local;
+  if (!archiveStorage) {
+    await fail(app, server.id, previousStatus, 'No backup storage is configured any more.');
     return;
   }
 
   /** Ports claimed on the destination, released again if the move fails. */
   let claimedIds: string[] = [];
   let backupId: string | null = null;
+  /** Issued only on the panel route; dropped either way once the move ends. */
+  let ticket: { id: string; secret: string } | null = null;
 
   try {
     await app.servers.updateStatus(server.id, ServerStatus.TRANSFERRING);
@@ -62,7 +77,7 @@ export async function runTransfer(app: FastifyInstance, data: TransferJobData): 
     const backup = await app.prisma.backup.create({
       data: {
         serverId: server.id,
-        storageId: storage.id,
+        storageId: archiveStorage.id,
         name: `Move to ${destination.name}`,
         status: BackupStatus.RUNNING,
         isAutomatic: true,
@@ -71,7 +86,7 @@ export async function runTransfer(app: FastifyInstance, data: TransferJobData): 
     });
     backupId = backup.id;
 
-    const upload = await app.storage.uploadTarget(storage, server.uuid, backup.uuid);
+    const upload = await app.storage.uploadTarget(archiveStorage, server.uuid, backup.uuid);
     const result = await app.agents.request<AgentBackupResult>(
       source,
       `/api/v1/servers/${server.uuid}/backups`,
@@ -109,7 +124,26 @@ export async function runTransfer(app: FastifyInstance, data: TransferJobData): 
     );
     await app.agents.request(destination, '/api/v1/servers', { method: 'PUT', body: spec });
 
-    const download = await app.storage.downloadSource(storage, server.uuid, backup.uuid);
+    // With a bucket the destination reads from it directly. Without one it
+    // reads from the panel, which streams the archive off the old node's disk.
+    // The ticket grants that one archive and nothing else.
+    let download;
+    if (storage) {
+      download = await app.storage.downloadSource(storage, server.uuid, backup.uuid);
+    } else {
+      ticket = await app.transferArchives.issue({
+        backupId: backup.id,
+        sourceNodeId: source.id,
+        serverUuid: server.uuid,
+        backupUuid: backup.uuid,
+      });
+      download = {
+        driver: 'PANEL' as const,
+        url: `${app.env.APP_URL.replace(/\/+$/, '')}${app.env.API_PREFIX}/v1/internal/transfer-archive/${ticket.id}`,
+        headers: { authorization: `Bearer ${ticket.secret}` },
+        key: upload.key,
+      };
+    }
     await app.agents.request(
       destination,
       `/api/v1/servers/${server.uuid}/backups/${backup.uuid}/restore`,
@@ -153,7 +187,7 @@ export async function runTransfer(app: FastifyInstance, data: TransferJobData): 
       });
 
     if (!data.keepBackup && backupId) {
-      await app.storage.remove(storage, upload.key).catch(() => undefined);
+      await app.storage.remove(archiveStorage, upload.key).catch(() => undefined);
       await app.prisma.backup.delete({ where: { id: backupId } }).catch(() => undefined);
     }
 
@@ -193,6 +227,12 @@ export async function runTransfer(app: FastifyInstance, data: TransferJobData): 
     const message = error instanceof Error ? error.message : String(error);
     await fail(app, server.id, previousStatus, message);
     throw error;
+  } finally {
+    // The ticket outlives nothing. Whether the move landed or fell over, the
+    // URL handed to the destination stops working here rather than in six
+    // hours — a granted read of one server's whole directory should last
+    // exactly as long as the move that needed it.
+    if (ticket) await app.transferArchives.revoke(ticket.id);
   }
 }
 

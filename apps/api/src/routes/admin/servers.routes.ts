@@ -134,18 +134,20 @@ export default async function adminServerRoutes(app: FastifyInstance): Promise<v
       await app.servers.assertNodeHasCapacity(destination, server.memoryLimit, server.diskLimit);
 
       // Checked here rather than discovered by the worker an hour in: the
-      // archive travels between hosts through object storage, so a panel with
-      // only LOCAL storage has no route from one node's disk to the other's.
+      // archive has to get from one node's disk to the other's, and that needs
+      // somewhere to put it. Object storage is the good route. Without it the
+      // panel streams the archive itself, which works but spends its bandwidth
+      // twice — so it needs *a* storage row to record the archive against,
+      // even the local one.
       const storage = await app.prisma.backupStorage.findFirst({
-        where: { isActive: true, driver: { not: 'LOCAL' } },
+        where: { isActive: true },
       });
       if (!storage) {
         throw conflict(
-          'Moving a server needs a shared backup storage (S3 or compatible). ' +
-            "A local one lives on the node's own disk, which the destination cannot read. " +
-            // Where to go next, because the reason alone leaves an operator
-            // holding a correct explanation and no way to act on it.
-            'Add one under Administration → Backup storage.',
+          'Moving a server needs somewhere to put the archive it travels in, and no backup ' +
+            'storage is configured. Add one under Administration → Backup storage. Shared ' +
+            'storage (S3 or compatible) is the faster route; with only local storage the panel ' +
+            'streams the archive between the nodes itself.',
         );
       }
 

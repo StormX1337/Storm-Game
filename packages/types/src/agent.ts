@@ -178,8 +178,17 @@ export interface AgentRestoreRequest {
   download?: AgentDownloadSource;
 }
 
+/**
+ * Where a node fetches an archive from during a restore.
+ *
+ * `LOCAL` means "already on this node's own disk"; every other value means
+ * "download it from `url`". `PANEL` is that second case with the panel as the
+ * source: it is how a server moves between two nodes on a deployment with no
+ * object storage, with the panel streaming the archive from the old node to
+ * the new one.
+ */
 export interface AgentDownloadSource {
-  driver: 'LOCAL' | 'S3' | 'R2' | 'MINIO';
+  driver: 'LOCAL' | 'S3' | 'R2' | 'MINIO' | 'PANEL';
   url?: string;
   headers?: Record<string, string>;
   key: string;
