@@ -2,7 +2,13 @@ import assert from 'node:assert/strict';
 import { after, before, beforeEach, describe, it } from 'node:test';
 import type { FastifyInstance } from 'fastify';
 import { hashPassword } from '@storm/security';
-import { createTestApp, deleteUser, registerUser, uniqueSuffix } from './helpers.js';
+import {
+  claimPanelStorage,
+  createTestApp,
+  deleteUser,
+  registerUser,
+  uniqueSuffix,
+} from './helpers.js';
 import type { RegisteredUser } from './helpers.js';
 
 /**
@@ -15,6 +21,8 @@ import type { RegisteredUser } from './helpers.js';
 describe('moving a server between nodes', () => {
   let app: FastifyInstance;
   let cleanup: () => Promise<void>;
+  /** Given back in `after`; see claimPanelStorage. */
+  let releaseStorage: () => Promise<void>;
   let customer: RegisteredUser;
   let adminToken: string;
   let sourceNodeId: string;
@@ -37,6 +45,9 @@ describe('moving a server between nodes', () => {
     const context = await createTestApp();
     app = context.app;
     cleanup = context.cleanup;
+    // The panel has one storage configuration and this suite depends on
+    // what it says, so it waits for its turn at it.
+    releaseStorage = await claimPanelStorage(app);
 
     customer = await registerUser(app);
     createdUsers.push(customer.id);
@@ -154,6 +165,7 @@ describe('moving a server between nodes', () => {
       .delete({ where: { id: sharedStorageId } })
       .catch(() => undefined);
     for (const id of createdUsers) await deleteUser(app, id);
+    await releaseStorage();
     await cleanup();
   });
 

@@ -3,7 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { Permission, createScheduleSchema, updateScheduleSchema } from '@storm/types';
 import { body, params } from '../lib/validation.js';
 import { ok } from '../lib/response.js';
-import { badRequest, notFound } from '../lib/errors.js';
+import { badRequest, conflict, notFound } from '../lib/errors.js';
 import { ServerAccessService } from '../services/server-access.service.js';
 import { toScheduleSummary } from '../lib/transformers.js';
 import { describeCron, isValidCron, nextRunAt } from '../lib/cron.js';
@@ -130,7 +130,6 @@ export default async function scheduleRoutes(app: FastifyInstance): Promise<void
           ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
           ...(input.onlyWhenOnline !== undefined ? { onlyWhenOnline: input.onlyWhenOnline } : {}),
           nextRunAt: nextRunAt(cron),
-          isProcessing: false,
         },
         include: { tasks: { orderBy: { sequence: 'asc' } } },
       });
@@ -157,6 +156,19 @@ export default async function scheduleRoutes(app: FastifyInstance): Promise<void
         where: { id: scheduleId, serverId: access.server.id },
       });
       if (!schedule) throw notFound('Schedule was not found');
+      // The worker drops a paused schedule on the floor, so queueing one was a
+      // green toast followed by nothing happening.
+      if (!schedule.isActive) {
+        throw badRequest('This schedule is paused. Resume it before running it.');
+      }
+
+      // Take the same claim a due run takes, so pressing this during a run
+      // cannot start the schedule a second time on top of itself.
+      const claimed = await app.prisma.schedule.updateMany({
+        where: { id: schedule.id, isProcessing: false },
+        data: { isProcessing: true, claimedAt: new Date() },
+      });
+      if (claimed.count === 0) throw conflict('This schedule is already running');
 
       await app.queues.enqueueSchedule(scheduleId);
       await app.audit.activity(request, {

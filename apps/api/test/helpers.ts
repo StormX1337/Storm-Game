@@ -153,6 +153,42 @@ export async function cloneTemplate(
   return { id: copy.id, slug: copy.slug };
 }
 
+const PANEL_STORAGE_LOCK = 'storm:test:panel-storage';
+
+/**
+ * Takes a turn at the panel's one backup-storage configuration.
+ *
+ * `node --test` runs the files in parallel against one database, and a panel
+ * has exactly one storage setup: the move worker asks "is there an active
+ * bucket?" and gets a panel-wide answer. So a suite that keeps an active
+ * bucket alive and one that asserts there is none cannot both be true at the
+ * same moment — and they were not, about one full run in three, in whichever
+ * suite happened to read the other's row.
+ *
+ * They take turns instead. The lock expires on its own, so a suite that dies
+ * mid-setup does not wedge the next run.
+ */
+export async function claimPanelStorage(app: FastifyInstance): Promise<() => Promise<void>> {
+  const token = uniqueSuffix();
+  const deadline = Date.now() + 180_000;
+
+  for (;;) {
+    const won = await app.redis.set(PANEL_STORAGE_LOCK, token, 'PX', 300_000, 'NX');
+    if (won) break;
+    if (Date.now() > deadline) {
+      throw new Error('timed out waiting for a turn at the panel backup storage');
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+
+  return async () => {
+    // Only give back a turn that is still ours; an expired one has moved on.
+    if ((await app.redis.get(PANEL_STORAGE_LOCK)) === token) {
+      await app.redis.del(PANEL_STORAGE_LOCK);
+    }
+  };
+}
+
 export function collectCookies(header: string | string[] | undefined): string {
   if (!header) return '';
   const values = Array.isArray(header) ? header : [header];

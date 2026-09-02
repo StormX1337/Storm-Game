@@ -6,7 +6,13 @@ import type { Node } from '@prisma/client';
 import { hashPassword } from '@storm/security';
 import { ServerStatus } from '@storm/types';
 import { runTransfer } from '../src/workers/transfer.worker.js';
-import { createTestApp, deleteUser, registerUser, uniqueSuffix } from './helpers.js';
+import {
+  claimPanelStorage,
+  createTestApp,
+  deleteUser,
+  registerUser,
+  uniqueSuffix,
+} from './helpers.js';
 
 /**
  * Moving a server on a deployment with no object storage.
@@ -24,6 +30,8 @@ import { createTestApp, deleteUser, registerUser, uniqueSuffix } from './helpers
 describe('moving a server without a bucket', () => {
   let app: FastifyInstance;
   let cleanup: () => Promise<void>;
+  /** Given back in `after`; see claimPanelStorage. */
+  let releaseStorage: () => Promise<void>;
   let sourceNodeId: string;
   let destNodeId: string;
   let serverId: string;
@@ -61,6 +69,9 @@ describe('moving a server without a bucket', () => {
     const context = await createTestApp();
     app = context.app;
     cleanup = context.cleanup;
+    // The panel has one storage configuration and this suite depends on
+    // what it says, so it waits for its turn at it.
+    releaseStorage = await claimPanelStorage(app);
     realRequest = app.agents.request;
     realRaw = app.agents.rawRequest;
 
@@ -215,6 +226,7 @@ describe('moving a server without a bucket', () => {
       .deleteMany({ where: { id: { in: [localStorageId, sharedStorageId] } } })
       .catch(() => undefined);
     for (const id of createdUsers) await deleteUser(app, id);
+    await releaseStorage();
     await cleanup();
   });
 

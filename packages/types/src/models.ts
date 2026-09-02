@@ -271,6 +271,8 @@ export interface ScheduleSummary {
   timezone: string;
   isActive: boolean;
   onlyWhenOnline: boolean;
+  /** A run is in flight right now, so "run now" would be a second one. */
+  isRunning: boolean;
   lastRunAt: string | null;
   nextRunAt: string | null;
   tasks: ScheduleTaskView[];

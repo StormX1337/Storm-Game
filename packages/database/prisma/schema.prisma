@@ -621,6 +621,7 @@ model Schedule {
   isActive       Boolean  @default(true)
   onlyWhenOnline Boolean  @default(false)
   isProcessing   Boolean  @default(false)
+  claimedAt      DateTime?
   lastRunAt      DateTime?
   nextRunAt      DateTime?
   lastError      String?

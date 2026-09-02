@@ -73,7 +73,11 @@ describe('permissions and tenancy', () => {
     });
     nodeId = node.id;
 
-    const template = await app.prisma.gameTemplate.findFirstOrThrow({ where: { isActive: true } });
+    // By slug: "any active template" can be another suite's temporary clone,
+    // which is deleted when that suite ends and takes this server with it.
+    const template = await app.prisma.gameTemplate.findFirstOrThrow({
+      where: { slug: 'minecraft-java' },
+    });
     templateId = template.id;
   });
 

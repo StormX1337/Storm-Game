@@ -4,7 +4,13 @@ import type { FastifyInstance } from 'fastify';
 import type { Node } from '@storm/database';
 import { hashPassword } from '@storm/security';
 import { runTransfer } from '../src/workers/transfer.worker.js';
-import { createTestApp, deleteUser, registerUser, uniqueSuffix } from './helpers.js';
+import {
+  claimPanelStorage,
+  createTestApp,
+  deleteUser,
+  registerUser,
+  uniqueSuffix,
+} from './helpers.js';
 
 /**
  * The move itself, with the node agents replaced by a stub.
@@ -16,6 +22,8 @@ import { createTestApp, deleteUser, registerUser, uniqueSuffix } from './helpers
 describe('the move, step by step', () => {
   let app: FastifyInstance;
   let cleanup: () => Promise<void>;
+  /** Given back in `after`; see claimPanelStorage. */
+  let releaseStorage: () => Promise<void>;
   let adminToken: string;
   let sourceNodeId: string;
   let destNodeId: string;
@@ -55,6 +63,9 @@ describe('the move, step by step', () => {
     const context = await createTestApp();
     app = context.app;
     cleanup = context.cleanup;
+    // The panel has one storage configuration and this suite depends on
+    // what it says, so it waits for its turn at it.
+    releaseStorage = await claimPanelStorage(app);
     realRequest = app.agents.request;
 
     const customer = await registerUser(app);
@@ -180,6 +191,7 @@ describe('the move, step by step', () => {
     }
     await app.prisma.backupStorage.delete({ where: { id: storageId } }).catch(() => undefined);
     for (const id of createdUsers) await deleteUser(app, id);
+    await releaseStorage();
     await cleanup();
   });
 

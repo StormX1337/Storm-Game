@@ -59,7 +59,16 @@ export async function scheduleMaintenanceJobs(queue: Queue): Promise<void> {
   );
 }
 
-async function dispatchDueSchedules(app: FastifyInstance): Promise<void> {
+/**
+ * How long a claim may outlive the run it belongs to before that run is taken
+ * to be gone. Added to the schedule's own worst case, not used on its own.
+ */
+const CLAIM_GRACE_MS = 10 * 60_000;
+
+/** Exported so a test can drive a tick directly; the worker is its only caller. */
+export async function dispatchDueSchedules(app: FastifyInstance): Promise<void> {
+  await releaseLostClaims(app);
+
   const now = new Date();
   const due = await app.prisma.schedule.findMany({
     where: { isActive: true, isProcessing: false, nextRunAt: { lte: now } },
@@ -71,7 +80,7 @@ async function dispatchDueSchedules(app: FastifyInstance): Promise<void> {
     // same tick cannot dispatch it twice.
     const claimed = await app.prisma.schedule.updateMany({
       where: { id: schedule.id, isProcessing: false },
-      data: { isProcessing: true },
+      data: { isProcessing: true, claimedAt: new Date() },
     });
     if (claimed.count === 0) continue;
     await app.queues.enqueueSchedule(schedule.id);
@@ -87,6 +96,47 @@ async function dispatchDueSchedules(app: FastifyInstance): Promise<void> {
       where: { id: schedule.id },
       data: { nextRunAt: nextRunAt(schedule) },
     });
+  }
+}
+
+/**
+ * Hands back claims whose run is never coming.
+ *
+ * A run gives its own claim back now, whichever way it ends — but it has to be
+ * running to do that. The panel's update button restarts the API on purpose,
+ * and a schedule claimed in that second has nothing left to release it. Before
+ * this, that schedule was finished: every later tick filtered it out, while it
+ * still read "active" with a next run in the past.
+ */
+async function releaseLostClaims(app: FastifyInstance): Promise<void> {
+  const claimed = await app.prisma.schedule.findMany({
+    where: { isProcessing: true },
+    include: { tasks: { select: { timeOffsetSec: true } } },
+    take: 200,
+  });
+
+  for (const schedule of claimed) {
+    // A run may legitimately take as long as its own offsets add up to —
+    // "stop, wait half an hour, start" is an ordinary maintenance window — so
+    // the schedule's own tasks set the deadline. A flat timeout would reclaim
+    // a run still in progress and then start a second one on top of it.
+    const budget =
+      schedule.tasks.reduce((total, task) => total + Math.max(0, task.timeOffsetSec), 0) * 1000 +
+      CLAIM_GRACE_MS;
+    if (Date.now() - (schedule.claimedAt?.getTime() ?? 0) < budget) continue;
+
+    // Compare-and-swap on the timestamp: if the run claimed it again between
+    // the read above and here, it is alive and keeps what it holds.
+    const released = await app.prisma.schedule.updateMany({
+      where: { id: schedule.id, isProcessing: true, claimedAt: schedule.claimedAt },
+      data: { isProcessing: false, claimedAt: null },
+    });
+    if (released.count > 0) {
+      app.log.warn(
+        { scheduleId: schedule.id, since: schedule.claimedAt?.toISOString() ?? null },
+        'released a schedule claim with no run behind it',
+      );
+    }
   }
 }
 

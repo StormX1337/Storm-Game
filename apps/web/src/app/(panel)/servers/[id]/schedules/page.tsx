@@ -115,7 +115,10 @@ export default function SchedulesPage() {
 
   const runNow = useMutation({
     mutationFn: (id: string) => api.post(`/servers/${server.id}/schedules/${id}/run`, {}),
-    onSuccess: () => toast.success('Schedule queued', 'It will run in the background.'),
+    onSuccess: () => {
+      toast.success('Schedule queued', 'It will run in the background.');
+      invalidate();
+    },
     onError: (error) => toast.error('Could not run schedule', errorMessage(error)),
   });
 
@@ -170,6 +173,7 @@ export default function SchedulesPage() {
                     {schedule.onlyWhenOnline ? (
                       <Badge variant="secondary">Only when online</Badge>
                     ) : null}
+                    {schedule.isRunning ? <Badge variant="warning">Running</Badge> : null}
                   </div>
                   <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
                     <Clock className="h-3.5 w-3.5" />
@@ -200,9 +204,12 @@ export default function SchedulesPage() {
                     <DropdownMenuContent align="end">
                       {manage ? (
                         <>
-                          <DropdownMenuItem onSelect={() => runNow.mutate(schedule.id)}>
+                          <DropdownMenuItem
+                            disabled={!schedule.isActive || schedule.isRunning}
+                            onSelect={() => runNow.mutate(schedule.id)}
+                          >
                             <Play />
-                            Run now
+                            {schedule.isRunning ? 'Already running' : 'Run now'}
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             onSelect={() => {

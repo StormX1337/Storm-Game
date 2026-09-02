@@ -442,9 +442,18 @@ per-server database limit.
    plain English — read them.
 3. Is the timezone right? Schedules store one; the panel displays local time.
 4. Are the workers running? `docker compose logs api | grep -i schedule`.
+5. Is it marked **Running**? A schedule runs one at a time, so a run still in
+   flight holds the next one. A run that ends any way at all gives that back,
+   and a claim left behind by a restart is released on a later tick — after as
+   long as the schedule's own task offsets could take, plus ten minutes.
 
-Repeatable jobs live in Redis. If Redis was flushed, toggle the schedule off
-and on to re-register it.
+Individual schedules are not Redis repeatables: one repeatable job ticks every
+minute and dispatches whatever is due from the database. Flushing Redis loses
+that tick until the API restarts, but no schedule is lost with it.
+
+A schedule marked **Only when online** does nothing on a run where the server
+is stopped — that is what it is for. It counts as a run: the panel books the
+next one and waits for it.
 
 ---
 

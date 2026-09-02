@@ -277,6 +277,7 @@ export function toScheduleSummary(schedule: Row): ScheduleSummary {
     timezone: schedule.timezone,
     isActive: schedule.isActive,
     onlyWhenOnline: schedule.onlyWhenOnline,
+    isRunning: Boolean(schedule.isProcessing),
     lastRunAt: iso(schedule.lastRunAt),
     nextRunAt: iso(schedule.nextRunAt),
     tasks: (schedule.tasks ?? []).map((task: Row) => ({

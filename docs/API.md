@@ -341,6 +341,10 @@ See [BACKUPS.md](BACKUPS.md).
 | `POST /servers/:id/schedules/:scheduleId/run` | Run now         |
 | `DELETE /servers/:id/schedules/:scheduleId`   | Delete          |
 
+`Run now` answers `400` for a paused schedule and `409` for one already
+running — a schedule runs one at a time. The listing carries `isRunning` so the
+panel can say which that is.
+
 ```json
 {
   "name": "Nightly restart",

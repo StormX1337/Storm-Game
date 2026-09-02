@@ -69,7 +69,10 @@ describe('reporting a crash to the owner', () => {
     });
     credentials = `${tokenId}.${token}`;
 
-    const template = await app.prisma.gameTemplate.findFirstOrThrow();
+    // By slug: another suite's temporary clone disappears with that suite.
+    const template = await app.prisma.gameTemplate.findFirstOrThrow({
+      where: { slug: 'minecraft-java' },
+    });
     const server = await app.prisma.server.create({
       data: {
         name: 'Storm',
@@ -234,7 +237,10 @@ describe('restarting a server after it crashes', () => {
     });
     credentials = `${tokenId}.${token}`;
 
-    const template = await app.prisma.gameTemplate.findFirstOrThrow();
+    // By slug: another suite's temporary clone disappears with that suite.
+    const template = await app.prisma.gameTemplate.findFirstOrThrow({
+      where: { slug: 'minecraft-java' },
+    });
     const server = await app.prisma.server.create({
       data: {
         name: 'Restarts',

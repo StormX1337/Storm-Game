@@ -71,7 +71,12 @@ describe('claiming ports', () => {
 
   async function makeServer(ownerId: string, nodeId: string) {
     const suffix = uniqueSuffix();
-    const template = await app.prisma.gameTemplate.findFirstOrThrow();
+    // By slug, not whichever row comes back first: the suites that need a
+    // template of their own clone one, and a clone is gone the moment its
+    // suite finishes — taking the foreign key of any server built on it.
+    const template = await app.prisma.gameTemplate.findFirstOrThrow({
+      where: { slug: 'minecraft-java' },
+    });
     const server = await app.prisma.server.create({
       data: {
         name: `Server ${suffix}`,
