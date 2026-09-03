@@ -369,19 +369,12 @@ export async function applyBackupRetention(app: FastifyInstance): Promise<void> 
     for (const backup of expired) {
       try {
         if (backup.storageKey) {
-          if (app.storage.isLocal(storage)) {
-            await app.agents
-              .request(
-                backup.server.node,
-                `/api/v1/servers/${backup.server.uuid}/backups/${backup.uuid}`,
-                {
-                  method: 'DELETE',
-                },
-              )
-              .catch(() => undefined);
-          } else {
-            await app.storage.remove(storage, backup.storageKey);
-          }
+          await app.storage.removeArchive(storage, {
+            node: backup.server.node,
+            serverUuid: backup.server.uuid,
+            backupUuid: backup.uuid,
+            key: backup.storageKey,
+          });
         }
         await app.prisma.backup.delete({ where: { id: backup.id } });
         app.log.info({ backupId: backup.id }, 'pruned expired backup');

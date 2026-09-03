@@ -49,6 +49,12 @@ Archives land in the agent's `BACKUP_DIRECTORY` on the node. Fast, free, and gon
 when the node's disk dies. Fine for "I am about to try something", useless as
 disaster recovery.
 
+The panel keeps no copy. A download is proxied from the agent, and a deletion
+is asked of the agent — so a node that is unreachable is a backup that cannot
+be pruned yet, and the panel keeps the record until it can. That is on purpose:
+forgetting a record while the file is still on a node is how a disk fills with
+archives nothing is pointing at any more.
+
 ### S3-compatible
 
 Anything speaking the S3 API: AWS S3, Cloudflare R2, Backblaze B2, MinIO,
@@ -219,6 +225,12 @@ away history on its own.
 
 A **locked** backup is exempt from age-based pruning entirely, and cannot be
 deleted until it is unlocked. Deleting a server deletes its backups with it.
+
+Pruning removes the archive first and the record second. If the archive cannot
+be removed — a node that is down, a bucket that refuses — the record stays and
+the next hourly run tries again. Deleting a backup **by hand** is the other way
+round: somebody is waiting on the button, so an unreachable node is logged and
+the record goes anyway.
 
 ---
 

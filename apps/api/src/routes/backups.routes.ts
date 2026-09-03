@@ -271,15 +271,12 @@ export default async function backupRoutes(app: FastifyInstance): Promise<void> 
 
     try {
       if (backup.storageKey) {
-        if (app.storage.isLocal(backup.storage)) {
-          await app.agents.request(
-            access.server.node,
-            `/api/v1/servers/${access.server.uuid}/backups/${backup.uuid}`,
-            { method: 'DELETE' },
-          );
-        } else {
-          await app.storage.remove(backup.storage, backup.storageKey);
-        }
+        await app.storage.removeArchive(backup.storage, {
+          node: access.server.node,
+          serverUuid: access.server.uuid,
+          backupUuid: backup.uuid,
+          key: backup.storageKey,
+        });
       }
     } catch (error) {
       app.log.warn(

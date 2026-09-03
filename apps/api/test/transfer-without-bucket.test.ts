@@ -33,6 +33,7 @@ describe('moving a server without a bucket', () => {
   /** Given back in `after`; see claimPanelStorage. */
   let releaseStorage: () => Promise<void>;
   let sourceNodeId: string;
+  let sourceNodeName: string;
   let destNodeId: string;
   let serverId: string;
   let localStorageId: string;
@@ -132,6 +133,8 @@ describe('moving a server without a bucket', () => {
         })
       ).id;
     sourceNodeId = await makeNode('source', '10.9.0.1');
+    sourceNodeName = (await app.prisma.node.findUniqueOrThrow({ where: { id: sourceNodeId } }))
+      .name;
     destNodeId = await makeNode('dest', '10.9.0.2');
 
     await app.prisma.serverAllocation.create({
@@ -230,12 +233,12 @@ describe('moving a server without a bucket', () => {
     await cleanup();
   });
 
-  const move = () =>
+  const move = (keepBackup = false) =>
     runTransfer(app, {
       serverId,
       destinationNodeId: destNodeId,
       allocationId: null,
-      keepBackup: false,
+      keepBackup,
       userId: null,
     });
 
@@ -255,6 +258,33 @@ describe('moving a server without a bucket', () => {
     assert.equal(download?.driver, 'PANEL');
     assert.match(download?.url ?? '', /\/internal\/transfer-archive\//);
     assert.match(download?.headers?.authorization ?? '', /^Bearer .+/);
+  });
+
+  it('clears the archive off the old node once the move is done', async () => {
+    // The archive is a full copy of the server, and with no bucket it is
+    // sitting on the source node's disk. Deleting only from object storage —
+    // which is what this did — left it there after every move, and deleted the
+    // row that knew where it was in the same breath. Nothing would have found
+    // it again; the node just fills up.
+    await move();
+
+    const deletions = calls.filter(
+      (call) => call.method === 'DELETE' && /\/backups\/[^/]+$/.test(call.path),
+    );
+    assert.equal(deletions.length, 1, JSON.stringify(calls.map((c) => `${c.method} ${c.path}`)));
+    assert.equal(deletions[0]?.node, sourceNodeName, 'asked the wrong node to delete it');
+  });
+
+  it('leaves the archive alone when it was asked to keep it', async () => {
+    await move(true);
+
+    const deletions = calls.filter(
+      (call) => call.method === 'DELETE' && /\/backups\/[^/]+$/.test(call.path),
+    );
+    assert.deepEqual(deletions, [], 'deleted a backup the operator asked to keep');
+
+    const kept = await app.prisma.backup.findFirst({ where: { serverId } });
+    assert.ok(kept, 'the record was deleted too');
   });
 
   it('still goes straight between the nodes when there is a bucket', async () => {

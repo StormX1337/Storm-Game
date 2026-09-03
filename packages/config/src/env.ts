@@ -76,7 +76,6 @@ export const apiEnvSchema = z.object({
   SMTP_SECURE: booleanish.default(false),
   MAIL_FROM: z.string().default('Storm Panel <no-reply@localhost>'),
 
-  BACKUP_LOCAL_PATH: z.string().default('/var/lib/storm/backups'),
   UPLOAD_MAX_BYTES: z.coerce
     .number()
     .int()

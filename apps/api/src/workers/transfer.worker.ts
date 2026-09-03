@@ -187,7 +187,23 @@ export async function runTransfer(app: FastifyInstance, data: TransferJobData): 
       });
 
     if (!data.keepBackup && backupId) {
-      await app.storage.remove(archiveStorage, upload.key).catch(() => undefined);
+      // On the source node for a LOCAL archive, in the bucket otherwise. This
+      // used to delete only from the bucket, so every move without one left a
+      // full-size archive on the old node — and then deleted the row that knew
+      // it was there.
+      await app.storage
+        .removeArchive(archiveStorage, {
+          node: source,
+          serverUuid: server.uuid,
+          backupUuid: backup.uuid,
+          key: upload.key,
+        })
+        .catch((error: unknown) => {
+          app.log.warn(
+            { err: error, serverId: server.id, node: source.name },
+            'the move archive could not be removed from the old node',
+          );
+        });
       await app.prisma.backup.delete({ where: { id: backupId } }).catch(() => undefined);
     }
 

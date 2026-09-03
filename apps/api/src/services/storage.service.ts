@@ -1,20 +1,14 @@
 import fp from 'fastify-plugin';
-import path from 'node:path';
-import fs from 'node:fs/promises';
-import { createReadStream } from 'node:fs';
-import type { Readable } from 'node:stream';
 import type { FastifyInstance } from 'fastify';
 import {
   S3Client,
   DeleteObjectCommand,
-  HeadObjectCommand,
   GetObjectCommand,
   PutObjectCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import type { BackupStorage } from '@storm/database';
+import type { BackupStorage, Node as NodeRow } from '@storm/database';
 import { ErrorCode, type AgentDownloadSource, type AgentUploadTarget } from '@storm/types';
-import { resolveSafePath } from '@storm/security';
 import { AppError } from '../lib/errors.js';
 
 declare module 'fastify' {
@@ -27,9 +21,15 @@ declare module 'fastify' {
  * Backup storage abstraction.
  *
  * For object storage the panel hands the agent a pre-signed URL so archive
- * bytes travel node -> bucket directly and never transit the panel. For the
- * LOCAL driver the agent keeps the archive on its own disk and the panel
- * streams it back on demand.
+ * bytes travel node -> bucket directly and never transit the panel.
+ *
+ * For the LOCAL driver the archive never leaves the node it was made on. The
+ * panel holds no copy — a download is proxied from the agent, and a deletion
+ * has to be asked of the agent too. That last part is why `removeArchive`
+ * takes the node: `remove` used to be the whole story and every caller had to
+ * remember the branch itself. Two of the three did. The third left a
+ * full-size archive on a node after every server move, with the row that knew
+ * about it deleted in the same breath.
  */
 export class StorageService {
   constructor(private readonly app: FastifyInstance) {}
@@ -118,45 +118,29 @@ export class StorageService {
     );
   }
 
-  async remove(storage: BackupStorage, key: string): Promise<void> {
+  /**
+   * Deletes one archive, wherever it actually lives.
+   *
+   * A LOCAL archive is on the node that made it, so the only way to remove it
+   * is to ask that node. Every caller used to carry that branch, which is one
+   * place too many: the move worker did not, and quietly left the archive
+   * behind on the source node after deleting the record that knew where it
+   * was. Nothing would ever have found it again.
+   */
+  async removeArchive(
+    storage: BackupStorage,
+    archive: { node: NodeRow; serverUuid: string; backupUuid: string; key: string },
+  ): Promise<void> {
     if (this.isLocal(storage)) {
-      const root = this.app.env.BACKUP_LOCAL_PATH;
-      const target = resolveSafePath(root, key);
-      await fs.rm(target, { force: true });
+      await this.app.agents.request(
+        archive.node,
+        `/api/v1/servers/${archive.serverUuid}/backups/${archive.backupUuid}`,
+        { method: 'DELETE' },
+      );
       return;
     }
     const client = this.clientFor(storage);
-    await client.send(new DeleteObjectCommand({ Bucket: storage.bucket!, Key: key }));
-  }
-
-  async size(storage: BackupStorage, key: string): Promise<number> {
-    if (this.isLocal(storage)) {
-      const target = resolveSafePath(this.app.env.BACKUP_LOCAL_PATH, key);
-      const stat = await fs.stat(target).catch(() => null);
-      return stat?.size ?? 0;
-    }
-    const client = this.clientFor(storage);
-    const head = await client.send(new HeadObjectCommand({ Bucket: storage.bucket!, Key: key }));
-    return head.ContentLength ?? 0;
-  }
-
-  /** Opens a local archive for streaming back to the browser. */
-  async openLocal(key: string): Promise<Readable> {
-    const target = resolveSafePath(this.app.env.BACKUP_LOCAL_PATH, key);
-    await fs.access(target).catch(() => {
-      throw new AppError(
-        404,
-        ErrorCode.BACKUP_NOT_FOUND,
-        'That backup archive is no longer on disk',
-      );
-    });
-    return createReadStream(target);
-  }
-
-  async ensureLocalDirectory(key: string): Promise<string> {
-    const target = resolveSafePath(this.app.env.BACKUP_LOCAL_PATH, key);
-    await fs.mkdir(path.dirname(target), { recursive: true });
-    return target;
+    await client.send(new DeleteObjectCommand({ Bucket: storage.bucket!, Key: archive.key }));
   }
 }
 

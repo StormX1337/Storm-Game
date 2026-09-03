@@ -104,7 +104,6 @@ services:
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       SMTP_SECURE: ${SMTP_SECURE:-false}
       MAIL_FROM: ${MAIL_FROM:-Storm Panel <no-reply@localhost>}
-      BACKUP_LOCAL_PATH: /var/lib/storm/backups
       AGENT_ALLOW_SELF_SIGNED: ${AGENT_ALLOW_SELF_SIGNED:-false}
       ENABLE_SWAGGER: ${ENABLE_SWAGGER:-true}
       ENABLE_WORKERS: ${ENABLE_WORKERS:-true}
