@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import type { FastifyInstance } from 'fastify';
+import { NodeStatus } from '@storm/types';
 import { hashPassword } from '@storm/security';
 import {
   buildConfigFiles,
@@ -63,6 +64,11 @@ describe('server lifecycle', () => {
         scheme: 'http',
         memoryTotal: 4096,
         diskTotal: 20480,
+        // A node a customer is allowed to deploy to. The panel refuses to
+        // place a server on one that is not answering, so a node left at the
+        // column default of OFFLINE would fail every creation here for a
+        // reason that has nothing to do with what is being tested.
+        status: NodeStatus.ONLINE,
       },
     });
     nodeId = node.id;

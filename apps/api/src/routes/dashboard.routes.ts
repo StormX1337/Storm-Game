@@ -3,7 +3,6 @@ import type { FastifyInstance } from 'fastify';
 import {
   ErrorCode,
   NodeStatus,
-  Permission,
   ServerStatus,
   type DashboardOverview,
   type NodeLiveStats,
@@ -12,6 +11,7 @@ import {
 import { query } from '../lib/validation.js';
 import { ok } from '../lib/response.js';
 import { notFound } from '../lib/errors.js';
+import { canSeeEveryNode } from '../plugins/auth.js';
 import {
   toActivityLog,
   toNodeSummary,
@@ -129,10 +129,8 @@ export default async function dashboardRoutes(app: FastifyInstance): Promise<voi
     { schema: { tags: ['Nodes'], summary: 'Nodes available for deployment' } },
     async (request) => {
       const user = request.currentUser();
-      const canSeeAll = user.role === 'OWNER' || user.permissions.has(Permission.NODES_MANAGE);
-
       const nodes = await app.prisma.node.findMany({
-        where: canSeeAll
+        where: canSeeEveryNode(user)
           ? {}
           : { isPublic: true, maintenanceMode: false, status: NodeStatus.ONLINE },
         include: {
@@ -178,8 +176,7 @@ export default async function dashboardRoutes(app: FastifyInstance): Promise<voi
       const node = await app.prisma.node.findUnique({ where: { id } });
       if (!node) throw notFound('Node was not found', ErrorCode.NODE_NOT_FOUND);
 
-      const canSeeAll = user.role === 'OWNER' || user.permissions.has(Permission.NODES_MANAGE);
-      if (!canSeeAll) {
+      if (!canSeeEveryNode(user)) {
         // A customer may only inspect a node they actually have a server on.
         const owns = await app.prisma.server.count({ where: { nodeId: id, ownerId: user.id } });
         if (owns === 0) throw notFound('Node was not found', ErrorCode.NODE_NOT_FOUND);

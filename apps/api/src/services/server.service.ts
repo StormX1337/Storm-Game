@@ -3,6 +3,7 @@ import type { Node, Prisma, Server, ServerAllocation } from '@storm/database';
 import { generatePassword, generateReadableId } from '@storm/security';
 import {
   ErrorCode,
+  NodeStatus,
   ServerStatus,
   WebhookEvent,
   type AgentConfigFile,
@@ -66,6 +67,7 @@ export class ServerService {
     input: CreateServerInput,
     ownerId: string,
     actorId: string,
+    options: { unrestrictedNodes?: boolean } = {},
   ): Promise<ServerWithRelations> {
     const [owner, node, template] = await Promise.all([
       this.prisma.user.findUnique({ where: { id: ownerId } }),
@@ -83,6 +85,18 @@ export class ServerService {
     }
     if (node.maintenanceMode) {
       throw conflict('That node is in maintenance mode and cannot accept new servers');
+    }
+    // The deployment list already hides a node that is private or not
+    // answering. That list is a convenience and this is the boundary: without
+    // the same rule here, posting a nodeId nobody was ever offered put a
+    // customer's server on the operator's reserved capacity, or queued an
+    // install against a machine that was down — spending their quota on a
+    // server that would never finish installing.
+    //
+    // Not found rather than forbidden: which nodes exist is exactly what a
+    // private node is keeping to itself.
+    if (!options.unrestrictedNodes && (!node.isPublic || node.status !== NodeStatus.ONLINE)) {
+      throw notFound('Node was not found', ErrorCode.NODE_NOT_FOUND);
     }
 
     await this.assertOwnerWithinLimits(ownerId, input);

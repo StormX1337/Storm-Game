@@ -19,6 +19,7 @@ import { generatePassword } from '@storm/security';
 import { body, params, query } from '../lib/validation.js';
 import { ok, paginated, pageArgs } from '../lib/response.js';
 import { AppError, badRequest, conflict, forbidden, notFound } from '../lib/errors.js';
+import { canSeeEveryNode } from '../plugins/auth.js';
 import { ServerAccessService, SERVER_INCLUDE } from '../services/server-access.service.js';
 import {
   toActivityLog,
@@ -103,7 +104,9 @@ export default async function serverRoutes(app: FastifyInstance): Promise<void> 
       }
       const ownerId = input.ownerId ?? user.id;
 
-      const server = await app.servers.create(input, ownerId, user.id);
+      const server = await app.servers.create(input, ownerId, user.id, {
+        unrestrictedNodes: canSeeEveryNode(user),
+      });
       await app.audit.log(request, {
         action: 'server.created',
         targetType: 'server',

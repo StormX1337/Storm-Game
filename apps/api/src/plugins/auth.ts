@@ -190,6 +190,19 @@ export function isPanelAdmin(user: AuthenticatedUser): boolean {
   return user.role === 'OWNER' || user.permissions.has(Permission.ADMIN_SERVERS);
 }
 
+/**
+ * True when the user is shown, and may use, every node the panel has.
+ *
+ * A node can be marked not public, put in maintenance, or simply be offline,
+ * and the deployment list hides all three from a customer. That list is a
+ * convenience; this is the rule behind it, so the two cannot drift apart —
+ * hiding a node from a dropdown is not the same as refusing to place a server
+ * on it, and only the second one is a boundary.
+ */
+export function canSeeEveryNode(user: AuthenticatedUser): boolean {
+  return user.role === 'OWNER' || user.permissions.has(Permission.NODES_MANAGE);
+}
+
 /** Guards role escalation: you may never act on someone at or above your level. */
 export function assertOutranks(actor: AuthenticatedUser, targetRole: RoleName): void {
   if (actor.role === 'OWNER') return;

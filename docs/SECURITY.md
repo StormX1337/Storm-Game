@@ -100,9 +100,14 @@ Sessions are listed in the account area with device, IP and last-seen time, and
 can be revoked individually or all at once. Changing a password revokes every
 other session.
 
-**API keys** are for automation: shown once, stored as a digest, scoped by the
-same permission set as a user, revocable, and never accepted for privileged
-account operations such as changing a password or disabling 2FA.
+**API keys** are for automation: shown once, stored as a digest, revocable, and
+never accepted for privileged account operations such as changing a password or
+disabling 2FA. A key is intersected with its owner's live permissions on every
+request, so it narrows when they do and can never be a promotion — and it can
+be narrowed further when it is made, to a list picked from what that account
+holds, with an expiry after which it simply stops authenticating. Prefer both
+for anything running unattended: a full-access key on a deployment box is the
+password you did not want to put there.
 
 ---
 
@@ -231,6 +236,22 @@ the operator has defined.
 
 Deleting a server frees its allocations. A primary allocation cannot be removed
 while the server exists.
+
+---
+
+## Node placement
+
+A node can be marked not public — capacity an operator keeps for themselves —
+put into maintenance, or be offline because its agent stopped answering. An
+account without `nodes.manage` is shown none of the three in the deployment
+list, and creating a server refuses all three by the same rule: the list and
+the boundary read the same predicate, so hiding a node and refusing it cannot
+drift apart. A private node answers "not found" rather than "forbidden",
+because which nodes exist is what it is keeping to itself.
+
+Someone holding `nodes.manage` sees and may use every node. Maintenance is the
+exception that stops them too: it means "no new servers here", not "not for
+you".
 
 ---
 
