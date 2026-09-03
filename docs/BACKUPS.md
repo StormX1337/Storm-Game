@@ -173,6 +173,11 @@ this is destructive:
 A partially-extracted restore leaves the server stopped rather than half-
 restored, and the failure says so.
 
+A restore that fails puts the backup back to the state it was in — a record
+left saying `RESTORING` could never be restored again, since the route only
+accepts a `COMPLETED` one, and one bad attempt would have taken away the only
+copy there was.
+
 Requires `servers.backups.restore`.
 
 > Take a fresh backup before restoring an old one. The state you are about to

@@ -29,7 +29,8 @@ export function createBackupWorker(
   );
 }
 
-async function runBackup(app: FastifyInstance, data: BackupJobData): Promise<void> {
+/** Exported so a test can drive one; the worker is its only caller. */
+export async function runBackup(app: FastifyInstance, data: BackupJobData): Promise<void> {
   const backup = await app.prisma.backup.findUnique({
     where: { id: data.backupId },
     include: { server: { include: { node: true } }, storage: true },
@@ -112,7 +113,8 @@ async function runBackup(app: FastifyInstance, data: BackupJobData): Promise<voi
   }
 }
 
-async function runRestore(app: FastifyInstance, data: RestoreJobData): Promise<void> {
+/** Exported so a test can drive one; the worker is its only caller. */
+export async function runRestore(app: FastifyInstance, data: RestoreJobData): Promise<void> {
   const backup = await app.prisma.backup.findUnique({
     where: { id: data.backupId },
     include: { server: { include: { node: true } }, storage: true },
