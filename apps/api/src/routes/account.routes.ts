@@ -5,7 +5,9 @@ import {
   enableTwoFactorSchema,
   emailSchema,
   paginationQuerySchema,
+  permissionEnum,
   NotificationType,
+  PERMISSION_DEFINITIONS,
 } from '@storm/types';
 import {
   buildTotpUri,
@@ -28,7 +30,16 @@ const updateProfileSchema = z.object({
 
 const createApiKeySchema = z.object({
   name: z.string().trim().min(1).max(100),
-  permissions: z.array(z.string().max(64)).max(100).default([]),
+  /**
+   * What the key may do. Empty means everything its owner may do, which is
+   * why the panel makes that a choice rather than the shape of an untouched
+   * form: a key with no boxes ticked is the most powerful one there is.
+   *
+   * Validated against the real catalogue rather than accepted as free text —
+   * a typo used to be dropped silently, leaving a key narrower than the person
+   * who made it believed, which is the failure you find out about at 3am.
+   */
+  permissions: z.array(permissionEnum).max(200).default([]),
   expiresInDays: z.number().int().min(1).max(3650).optional(),
 });
 
@@ -231,6 +242,20 @@ export default async function accountRoutes(app: FastifyInstance): Promise<void>
 
   /* -------------------------------------------------------- api keys -- */
 
+  app.get(
+    '/permissions',
+    { schema: { tags: ['Account'], summary: 'What this account may do' } },
+    async (request) => {
+      const current = request.currentUser();
+      // Only what the caller holds. A key can never exceed its owner, so
+      // offering them the whole catalogue would be offering them a list of
+      // things that get silently dropped.
+      return ok(
+        PERMISSION_DEFINITIONS.filter((definition) => current.permissions.has(definition.key)),
+      );
+    },
+  );
+
   app.get('/api-keys', { schema: { tags: ['Account'] } }, async (request) => {
     const current = request.currentUser();
     const keys = await app.prisma.apiKey.findMany({
@@ -267,6 +292,9 @@ export default async function accountRoutes(app: FastifyInstance): Promise<void>
 
       const keyId = generateToken(8).slice(0, 12);
       const secret = generateToken(32);
+      const expiresAt = input.expiresInDays
+        ? new Date(Date.now() + input.expiresInDays * 86400_000)
+        : null;
 
       await app.prisma.apiKey.create({
         data: {
@@ -275,9 +303,7 @@ export default async function accountRoutes(app: FastifyInstance): Promise<void>
           keyId,
           keyHash: hashToken(secret),
           permissions,
-          expiresAt: input.expiresInDays
-            ? new Date(Date.now() + input.expiresInDays * 86400_000)
-            : null,
+          expiresAt,
         },
       });
 
@@ -287,7 +313,13 @@ export default async function accountRoutes(app: FastifyInstance): Promise<void>
         targetLabel: input.name,
       });
       // The full token is returned once and never stored in plaintext.
-      return ok({ token: `storm_${keyId}.${secret}`, keyId, name: input.name, permissions });
+      return ok({
+        token: `storm_${keyId}.${secret}`,
+        keyId,
+        name: input.name,
+        permissions,
+        expiresAt: expiresAt?.toISOString() ?? null,
+      });
     },
   );
 

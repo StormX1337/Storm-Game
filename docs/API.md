@@ -65,8 +65,28 @@ curl -H "Authorization: Bearer storm_ak_…" \
      https://panel.example.com/api/v1/servers
 ```
 
-An API key carries the permissions of the user who created it. It cannot change
-that user's password, cannot manage their 2FA, and cannot create other keys.
+A key can never do more than the account that made it: its permissions are
+intersected with that account's on every request, so demoting someone narrows
+their keys with them. It cannot change that user's password, cannot manage
+their 2FA, and cannot create other keys.
+
+It can do **less**, and for anything running unattended it should. The create
+dialog offers either everything the account can do, or a list you pick from,
+plus an expiry:
+
+```json
+POST /account/api-keys
+{ "name": "Deploy script", "permissions": ["servers.view", "servers.command"], "expiresInDays": 90 }
+```
+
+An empty (or absent) `permissions` is the full-access key — the panel labels
+those in the listing, because a key with nothing ticked is the most powerful
+one there is. `GET /account/permissions` returns the catalogue this account may
+choose from, which is its own effective permissions and no more. A permission
+that does not exist is a `400`: dropping it silently would leave a key narrower
+than whoever made it believes.
+
+An expired key stops authenticating on its own — no revocation needed.
 
 ### Sign in
 
@@ -207,6 +227,13 @@ response carries `x-ratelimit-limit`, `x-ratelimit-remaining` and
 | `GET /templates`                 | Game templates available to the caller                     |
 | `GET /templates/:id`             | One template with its variables                            |
 | `GET /templates/meta/categories` | Category list for filtering                                |
+
+`GET /nodes` shows an account without `nodes.manage` only the nodes that are
+public, online and not in maintenance — and `POST /servers` accepts exactly
+those. Hiding a node from a dropdown is not a boundary; the pair is. Someone
+holding `nodes.manage` sees every node and may place a server on any of them,
+which is what a private node is for. Maintenance is the one setting that stops
+everybody, since it means "no new servers here" rather than "not for you".
 
 ### Servers
 
@@ -379,16 +406,17 @@ panel can say which that is.
 
 ### Account
 
-|                                                             |                         |
-| ----------------------------------------------------------- | ----------------------- |
-| `GET /account` · `PATCH /account`                           | Profile                 |
-| `GET /account/sessions`                                     | Devices                 |
-| `DELETE /account/sessions/:id` · `DELETE /account/sessions` | Revoke                  |
-| `POST /account/2fa/setup` · `/enable` · `/disable`          | Two-factor              |
-| `POST /account/2fa/backup-codes`                            | Regenerate backup codes |
-| `GET /account/api-keys` · `POST` · `DELETE /:id`            | API keys                |
-| `GET /account/notifications` · `POST /notifications/read`   | Notifications           |
-| `GET /account/activity`                                     | Your own audit trail    |
+|                                                             |                          |
+| ----------------------------------------------------------- | ------------------------ |
+| `GET /account` · `PATCH /account`                           | Profile                  |
+| `GET /account/sessions`                                     | Devices                  |
+| `DELETE /account/sessions/:id` · `DELETE /account/sessions` | Revoke                   |
+| `POST /account/2fa/setup` · `/enable` · `/disable`          | Two-factor               |
+| `POST /account/2fa/backup-codes`                            | Regenerate backup codes  |
+| `GET /account/permissions`                                  | What this account may do |
+| `GET /account/api-keys` · `POST` · `DELETE /:id`            | API keys                 |
+| `GET /account/notifications` · `POST /notifications/read`   | Notifications            |
+| `GET /account/activity`                                     | Your own audit trail     |
 
 ### Administration
 

@@ -3,7 +3,8 @@ import { cuidLikeId, emailSchema, passwordSchema, usernameSchema } from './commo
 import { ALL_PERMISSIONS } from '../permissions.js';
 import { TEMPLATE_FEATURES } from '../models.js';
 
-const permissionEnum = z.enum(ALL_PERMISSIONS as [string, ...string[]]);
+/** A permission the panel really enforces, rather than any string at all. */
+export const permissionEnum = z.enum(ALL_PERMISSIONS as [string, ...string[]]);
 
 /* ------------------------------------------------------------------ users -- */
 

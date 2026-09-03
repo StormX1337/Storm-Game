@@ -11,6 +11,7 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
+  Checkbox,
   Dialog,
   DialogContent,
   DialogDescription,
@@ -19,6 +20,12 @@ import {
   DialogTitle,
   Field,
   Input,
+  ScrollArea,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
   useConfirm,
   useToast,
 } from '@storm/ui';
@@ -26,6 +33,29 @@ import type { SessionSummary } from '@storm/types';
 import { ApiError, api, errorMessage } from '@/lib/api';
 import { formatDate, formatRelative } from '@/lib/format';
 import { useAuth } from '@/lib/auth-context';
+
+interface PermissionRow {
+  key: string;
+  category: string;
+  description: string;
+}
+
+/** Section headings for the key scope picker, in the panel's own words. */
+const PERMISSION_CATEGORIES: Record<string, string> = {
+  server: 'Servers',
+  power: 'Power',
+  console: 'Console',
+  file: 'Files',
+  backup: 'Backups',
+  database: 'Databases',
+  schedule: 'Schedules',
+  network: 'Network',
+  startup: 'Startup',
+  subuser: 'Team',
+  activity: 'Activity',
+  admin: 'Administration',
+  other: 'Other',
+};
 
 interface ApiKeySummary {
   id: string;
@@ -35,6 +65,11 @@ interface ApiKeySummary {
   lastUsedAt: string | null;
   expiresAt: string | null;
   createdAt: string;
+}
+
+/** A key past its date still shows in the list; it just stops working. */
+function expired(iso: string): boolean {
+  return new Date(iso).getTime() < Date.now();
 }
 
 export default function SecurityPage() {
@@ -316,6 +351,25 @@ export default function SecurityPage() {
                     ? ` · last used ${formatRelative(key.lastUsedAt)}`
                     : ' · never used'}
                 </p>
+                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                  {/* What the key can do is the thing worth seeing at a glance:
+                      a key that can do everything should not look like one
+                      that can read a server list. */}
+                  <Badge variant={key.permissions.length === 0 ? 'warning' : 'secondary'}>
+                    {key.permissions.length === 0
+                      ? 'Full access'
+                      : `${key.permissions.length} permission${key.permissions.length === 1 ? '' : 's'}`}
+                  </Badge>
+                  {key.expiresAt ? (
+                    <Badge variant={expired(key.expiresAt) ? 'destructive' : 'muted'}>
+                      {expired(key.expiresAt)
+                        ? `Expired ${formatRelative(key.expiresAt)}`
+                        : `Expires ${formatDate(key.expiresAt)}`}
+                    </Badge>
+                  ) : (
+                    <Badge variant="muted">Never expires</Badge>
+                  )}
+                </div>
               </div>
               <Button
                 variant="ghost"
@@ -545,6 +599,19 @@ function BackupCodesDialog({ codes, onClose }: { codes: string[]; onClose: () =>
   );
 }
 
+/**
+ * Making a key that can do less than you can, and that stops working.
+ *
+ * The API has taken a permission list and an expiry since the beginning — the
+ * auth layer narrows a key to its list on every request — and this dialog only
+ * ever asked for a name. So every key the panel could produce carried its
+ * owner's entire authority, for an administrator that is the whole panel, and
+ * never expired. The deployment script, the Discord bot and the uptime check
+ * all held the same key you sign in with.
+ *
+ * Full access stays possible, because it is what most keys honestly need. It
+ * is a choice you make rather than the shape of a form you did not fill in.
+ */
 function CreateKeyDialog({
   onClose,
   onCreated,
@@ -554,40 +621,143 @@ function CreateKeyDialog({
 }) {
   const toast = useToast();
   const [name, setName] = React.useState('');
+  const [scoped, setScoped] = React.useState(false);
+  const [chosen, setChosen] = React.useState<Set<string>>(new Set());
+  const [expiresInDays, setExpiresInDays] = React.useState('never');
+
+  // Only what this account holds: a key can never exceed its owner, so
+  // offering the whole catalogue would be offering things silently dropped.
+  const available = useQuery({
+    queryKey: ['account', 'permissions'],
+    queryFn: () => api.get<PermissionRow[]>('/account/permissions'),
+  });
+
+  const categories = [...new Set((available.data ?? []).map((row) => row.category))];
 
   const create = useMutation({
-    mutationFn: () => api.post<{ token: string }>('/account/api-keys', { name: name.trim() }),
+    mutationFn: () =>
+      api.post<{ token: string }>('/account/api-keys', {
+        name: name.trim(),
+        permissions: scoped ? [...chosen] : [],
+        ...(expiresInDays === 'never' ? {} : { expiresInDays: Number(expiresInDays) }),
+      }),
     onSuccess: (result) => onCreated(result.token),
     onError: (error) => toast.error('Could not create key', errorMessage(error)),
   });
 
+  const toggle = (key: string): void =>
+    setChosen((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+
+  // An empty list means full access on the wire, so "limited to nothing" would
+  // quietly be the most powerful key of all.
+  const incomplete = !name.trim() || (scoped && chosen.size === 0);
+
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Create an API key</DialogTitle>
           <DialogDescription>
-            The key inherits your current permissions and is shown once.
+            A key can never do more than you can. It is shown once.
           </DialogDescription>
         </DialogHeader>
-        <Field label="Name" required>
-          <Input
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            placeholder="Deployment script"
-            autoFocus
-          />
-        </Field>
+
+        <div className="space-y-4">
+          <Field label="Name" required>
+            <Input
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="Deployment script"
+              autoFocus
+            />
+          </Field>
+
+          <Field label="Expires">
+            <Select value={expiresInDays} onValueChange={setExpiresInDays}>
+              <SelectTrigger aria-label="Expires">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="30">In 30 days</SelectItem>
+                <SelectItem value="90">In 90 days</SelectItem>
+                <SelectItem value="365">In a year</SelectItem>
+                <SelectItem value="never">Never</SelectItem>
+              </SelectContent>
+            </Select>
+          </Field>
+
+          <div className="storm-segment-track flex" role="group" aria-label="Key access">
+            {(
+              [
+                [false, 'Everything you can do'],
+                [true, 'Only what I pick'],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                key={label}
+                type="button"
+                aria-pressed={scoped === value}
+                onClick={() => setScoped(value)}
+                className="storm-segment flex-1 px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {scoped ? (
+            <ScrollArea className="h-64 rounded-lg border border-border">
+              <div className="divide-y divide-border">
+                {categories.map((category) => (
+                  <div key={category}>
+                    <p className="bg-secondary/30 px-3 py-1.5 text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                      {PERMISSION_CATEGORIES[category] ?? category}
+                    </p>
+                    {(available.data ?? [])
+                      .filter((row) => row.category === category)
+                      .map((row) => (
+                        <label
+                          key={row.key}
+                          className="flex cursor-pointer items-start gap-3 px-3 py-2 hover:bg-secondary/30"
+                        >
+                          <Checkbox
+                            checked={chosen.has(row.key)}
+                            onCheckedChange={() => toggle(row.key)}
+                            aria-label={row.key}
+                            className="mt-0.5"
+                          />
+                          <span className="min-w-0">
+                            <span className="block font-mono text-xs">{row.key}</span>
+                            <span className="block text-xs text-muted-foreground">
+                              {row.description}
+                            </span>
+                          </span>
+                        </label>
+                      ))}
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Anything you can do in the panel, this key can do through the API. Pick the second
+              option if it is going into a script, a bot, or anywhere you would not paste your
+              password.
+            </p>
+          )}
+        </div>
+
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button
-            onClick={() => create.mutate()}
-            disabled={!name.trim()}
-            loading={create.isPending}
-          >
-            Create key
+          <Button onClick={() => create.mutate()} disabled={incomplete} loading={create.isPending}>
+            {scoped ? `Create key (${chosen.size})` : 'Create key'}
           </Button>
         </DialogFooter>
       </DialogContent>
