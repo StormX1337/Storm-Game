@@ -321,6 +321,16 @@ POST /servers/:id/power
 `start` on a server that is already running is a no-op, not an error — safe to
 retry.
 
+While a job owns the server's data directory — status `INSTALLING`,
+`REINSTALLING`, `INSTALL_FAILED` or `TRANSFERRING` — every power action is
+answered `409 SERVER_NOT_INSTALLED`, and so is taking a backup. The install
+script runs in its own container against that directory and a move copies it
+to another machine; neither survives the game server writing underneath it.
+`INSTALL_FAILED` is in the list because a reinstall with `wipe` empties the
+directory before the script runs, so a run that fell over may have left
+nothing behind. The way out is `POST /servers/:id/reinstall`, which stays
+open in exactly that state.
+
 ### Allocations
 
 |                                                       |                                        |
@@ -846,9 +856,10 @@ const ok = crypto.timingSafeEqual(
 );
 ```
 
-Events are `server.created`, `server.installed`, `server.started`,
-`server.stopped`, `server.crashed`, `server.resource_warning`,
-`server.deleted`, `server.suspended`, `server.unsuspended`, `backup.created`,
+Events are `server.created`, `server.installed`, `server.install_failed`,
+`server.started`, `server.stopped`, `server.crashed`,
+`server.resource_warning`, `server.deleted`, `server.suspended`,
+`server.unsuspended`, `backup.created`,
 `backup.completed`, `backup.failed`, `backup.restored`, `node.online`,
 `node.offline`, `user.created` and `user.deleted`. `GET
 /admin/webhooks/events` returns the current list, which is the one the panel
@@ -858,6 +869,11 @@ actually dispatches.
 has died: its payload carries `resource` (`memory` or `disk`), the bytes in
 use and the limit in MiB. It is sent at most once per server per resource
 every six hours, so it is a signal rather than a stream.
+
+`server.install_failed` fires once per install, not once per attempt: an
+install the queue is going to retry is not reported until the retries are
+used up. Its payload carries `error` — the message the node came back with —
+alongside the usual `serverId`, `uuid` and `name`.
 
 Non-2xx responses are retried with exponential backoff. Deliveries and their
 outcomes are visible at `GET /admin/webhooks/:id/deliveries`.

@@ -311,6 +311,18 @@ docker compose logs api | grep -i worker
 docker compose exec redis redis-cli LLEN bull:storm-installs:wait
 ```
 
+**Stuck at "Installing" with nothing happening.** The panel retries a failed
+install once and only reports it after the second attempt, so a server that
+says "installing" for a few minutes after an error is normal — it is having
+another go. A server still saying it four hours later is one whose worker went
+away mid-run: the housekeeping job — which runs at 17 minutes past every
+hour — marks it `INSTALL_FAILED` and notifies the owner, and the Reinstall
+button works again from then on.
+
+**"This server is being reinstalled" when pressing Start.** Expected: power
+actions and backups are refused while an install, a reinstall or a move has
+the data directory. Wait for it to finish, or reinstall if it failed.
+
 ---
 
 ## A server will not start

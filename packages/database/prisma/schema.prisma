@@ -449,6 +449,9 @@ model Server {
   crashedAt   DateTime?
   lastStartAt DateTime?
 
+  /** When the current install attempt began, so a lost one can be found. */
+  installStartedAt DateTime?
+
   /**
    * Bring the server back up on its own after a crash.
    *

@@ -143,6 +143,7 @@ export type VerificationTokenType =
 export const WebhookEvent = {
   SERVER_CREATED: 'server.created',
   SERVER_INSTALLED: 'server.installed',
+  SERVER_INSTALL_FAILED: 'server.install_failed',
   SERVER_STARTED: 'server.started',
   SERVER_STOPPED: 'server.stopped',
   SERVER_CRASHED: 'server.crashed',

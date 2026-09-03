@@ -18,6 +18,7 @@ import { concurrency } from './concurrency.js';
  *   - dispatch schedules that are due
  *   - mark nodes offline when their heartbeat lapses
  *   - warn an owner whose server is running into its own limits
+ *   - hand back servers left mid-install by a run that never came back
  *   - apply backup retention policies
  *   - prune the stats time-series so the tables stay small
  */
@@ -32,6 +33,7 @@ export function createMaintenanceWorker(app: FastifyInstance): Worker {
           await warnAboutCeilings(app);
           break;
         case 'housekeeping':
+          await failStalledInstalls(app);
           await applyBackupRetention(app);
           await pruneStats(app);
           await pruneExpiredSessions(app);
@@ -146,6 +148,75 @@ async function releaseLostClaims(app: FastifyInstance): Promise<void> {
         'released a schedule claim with no run behind it',
       );
     }
+  }
+}
+
+/**
+ * How long one install attempt may run before the panel stops waiting for it.
+ *
+ * The agent gives an install three hours — a Steam download over a slow link
+ * genuinely takes that — so anything past four is not slow, it is gone.
+ */
+const STALLED_INSTALL_MS = 4 * 3600_000;
+
+/**
+ * Frees servers left mid-install by a run that never came back.
+ *
+ * An install worker that is killed between attempts takes the job with it, and
+ * the row keeps saying INSTALLING for ever: the reinstall button refuses to
+ * touch a server that is already installing, so the one action that would fix
+ * it is the one action the customer cannot take. Marking it failed is not a
+ * cosmetic tidy-up — it is what hands the server back.
+ *
+ * Exported so a test can drive it directly; the worker is its only caller.
+ */
+export async function failStalledInstalls(app: FastifyInstance): Promise<void> {
+  const cutoff = new Date(Date.now() - STALLED_INSTALL_MS);
+  const stalled = await app.prisma.server.findMany({
+    where: {
+      status: { in: [ServerStatus.INSTALLING, ServerStatus.REINSTALLING] },
+      installStartedAt: { lt: cutoff },
+    },
+    select: { id: true, name: true, shortId: true, ownerId: true, installStartedAt: true },
+    take: 100,
+  });
+
+  for (const server of stalled) {
+    // Compare-and-swap on the stamp: an attempt that started again between the
+    // read and here is alive, and gets left alone.
+    const claimed = await app.prisma.server.updateMany({
+      where: {
+        id: server.id,
+        installStartedAt: server.installStartedAt,
+        status: { in: [ServerStatus.INSTALLING, ServerStatus.REINSTALLING] },
+      },
+      data: { status: ServerStatus.INSTALL_FAILED },
+    });
+    if (claimed.count === 0) continue;
+
+    app.log.warn(
+      { serverId: server.id, since: server.installStartedAt?.toISOString() ?? null },
+      'install abandoned; marking it failed so it can be retried',
+    );
+    await app.notifications.broadcastServerStatus(
+      server.id,
+      server.ownerId,
+      ServerStatus.INSTALL_FAILED,
+    );
+    await app.audit.system({
+      action: 'server.install_failed',
+      targetType: 'server',
+      targetId: server.id,
+      targetLabel: server.name,
+      metadata: { error: 'The install did not report back and was given up on.' },
+    });
+    await app.notifications.push(server.ownerId, {
+      type: NotificationType.SERVER_CRASHED,
+      title: 'Installation failed',
+      message: `${server.name} stopped installing without finishing. Reinstall it to try again.`,
+      level: 'ERROR',
+      link: `/servers/${server.shortId}`,
+    });
   }
 }
 

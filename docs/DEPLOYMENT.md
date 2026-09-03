@@ -490,3 +490,12 @@ ones; test the full disaster recovery path on a scratch host; re-check that
 **Maintenance mode** — `Admin → Settings → Maintenance` shows customers a
 notice and blocks non-staff sign-in. Game servers keep running; only the panel
 is closed.
+
+**Abandoned installs** — the hourly housekeeping job marks any server that has
+been `INSTALLING` or `REINSTALLING` for more than four hours as
+`INSTALL_FAILED` and tells its owner. This matters because a server stuck
+mid-install cannot be reinstalled — the reinstall route refuses a server that
+is already installing — so a worker killed between attempts would otherwise
+leave it wedged until an administrator edited the row by hand. Four hours is
+past the agent's own three-hour install timeout, so an install that is merely
+slow is never touched.
