@@ -340,13 +340,32 @@ export default async function internalRoutes(app: FastifyInstance): Promise<void
       if (server.suspendedAt) throw unauthorized('This server is suspended');
       if (server.owner.suspendedAt) throw unauthorized('This account is suspended');
 
+      // The other door into the same files. The panel refuses an upload from a
+      // server that is over its disk limit; SFTP said `writable: true` to
+      // everyone, so the customer who could not upload a modpack through the
+      // file manager dragged it in over SFTP instead and filled the node.
+      //
+      // Read-only, not closed: deleting and renaming still work over SFTP, or
+      // being over would be a state nobody could get out of.
+      const { overLimit, usedMb } = await app.servers.diskUsage(server);
+
       await app.audit.activity(
         null,
-        { serverId: server.id, event: 'sftp:login', metadata: { username: input.username } },
+        {
+          serverId: server.id,
+          event: 'sftp:login',
+          metadata: { username: input.username, writable: !overLimit },
+        },
         server.ownerId,
       );
+      if (overLimit) {
+        app.log.info(
+          { serverId: server.id, usedMb, diskLimit: server.diskLimit },
+          'sftp session opened read-only: server is over its disk limit',
+        );
+      }
 
-      return ok({ uuid: server.uuid, serverId: server.id, writable: true });
+      return ok({ uuid: server.uuid, serverId: server.id, writable: !overLimit });
     },
   );
 

@@ -331,8 +331,9 @@ export class ServerService {
    * xfs or btrfs backing filesystem with project quotas turned on, so it
    * cannot be set unconditionally, and the agent has no other ceiling. So the
    * panel enforces the paths it controls — uploads, writes, copies, archive
-   * extraction, restores and starting the server — and a customer who was
-   * sold 10 GiB can no longer quietly fill the node through the file manager.
+   * extraction, restores and starting the server, and the SFTP session, which
+   * is the door people actually push a modpack through — so a customer who was
+   * sold 10 GiB can no longer quietly fill the node.
    *
    * What this does not do: stop the game itself writing inside the container.
    * That needs a filesystem quota on the host, which is a deployment
@@ -342,9 +343,16 @@ export class ServerService {
    * walking a multi-gigabyte directory on every upload would cost more than
    * the overshoot it prevents. So this stops sustained overuse, not the
    * instant of crossing the line.
+   *
+   * Asked as a question here and as an assertion below, because only one of
+   * the two doors is an HTTP request that can be refused: SFTP is asked once,
+   * at login, whether this session may write, so it needs the answer.
    */
-  async assertDiskWithinLimit(server: { id: string; diskLimit: number }): Promise<void> {
-    if (server.diskLimit <= 0) return; // 0 means unlimited, as everywhere else.
+  async diskUsage(server: {
+    id: string;
+    diskLimit: number;
+  }): Promise<{ overLimit: boolean; usedMb: number }> {
+    if (server.diskLimit <= 0) return { overLimit: false, usedMb: 0 }; // 0 is unlimited.
 
     const latest = await this.prisma.serverStat.findFirst({
       where: { serverId: server.id },
@@ -353,10 +361,15 @@ export class ServerService {
     });
     // No sample yet — a server that has never reported cannot be shown to be
     // over, and refusing here would block the first upload to a new server.
-    if (!latest) return;
+    if (!latest) return { overLimit: false, usedMb: 0 };
 
     const usedMb = Math.floor(Number(latest.diskBytes) / (1024 * 1024));
-    if (usedMb < server.diskLimit) return;
+    return { overLimit: usedMb >= server.diskLimit, usedMb };
+  }
+
+  async assertDiskWithinLimit(server: { id: string; diskLimit: number }): Promise<void> {
+    const { overLimit, usedMb } = await this.diskUsage(server);
+    if (!overLimit) return;
 
     throw new AppError(
       409,

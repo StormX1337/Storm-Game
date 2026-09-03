@@ -8,6 +8,28 @@ import type { PanelClient } from './panel-client.js';
 
 const { Server: SshServer, utils } = ssh2;
 
+/**
+ * The file mode an OPEN asks for, or null when this session may not have it.
+ *
+ * A session is told at login whether it may add bytes: the panel answers no
+ * once the server is over the disk it was sold. Refusing here rather than at
+ * the first WRITE means the client reports it against the file it was opening,
+ * instead of failing halfway through a transfer with nothing to point at.
+ *
+ * Reading is always allowed. So are deleting and renaming, elsewhere — being
+ * over a limit has to be a state somebody can get themselves out of.
+ */
+export function openModeFor(flags: number, writable: boolean): string | null {
+  const { OPEN_MODE } = utils.sftp;
+
+  let mode = 'r';
+  if (flags & OPEN_MODE.WRITE) mode = flags & OPEN_MODE.APPEND ? 'a' : 'w';
+  if (flags & OPEN_MODE.READ && flags & OPEN_MODE.WRITE) mode = 'r+';
+
+  if (mode !== 'r' && !writable) return null;
+  return mode;
+}
+
 export interface SftpServiceOptions {
   port: number;
   hostKeyPath: string;
@@ -57,6 +79,7 @@ export class SftpService {
       },
       (client) => {
         let serverUuid: string | null = null;
+        let writable = false;
 
         client
           .on('authentication', (ctx) => {
@@ -78,6 +101,11 @@ export class SftpService {
               }
 
               serverUuid = result.uuid;
+              // The panel decides this per login, from the server's disk
+              // usage. A session that may not write can still list, read,
+              // delete and rename — being over a limit has to be a state the
+              // customer can get out of.
+              writable = result.writable;
               ctx.accept();
             })();
           })
@@ -89,7 +117,7 @@ export class SftpService {
                   client.end();
                   return;
                 }
-                this.attachSftp(acceptSftp(), serverUuid);
+                this.attachSftp(acceptSftp(), serverUuid, writable);
               });
             });
           })
@@ -108,8 +136,8 @@ export class SftpService {
     });
   }
 
-  private attachSftp(sftp: ssh2.SFTPWrapper, uuid: string): void {
-    const { STATUS_CODE, OPEN_MODE } = utils.sftp;
+  private attachSftp(sftp: ssh2.SFTPWrapper, uuid: string, writable: boolean): void {
+    const { STATUS_CODE } = utils.sftp;
     const handles = new Map<number, { fd: number; path: string }>();
     const readdirs = new Map<number, { entries: ssh2.FileEntry[]; done: boolean }>();
     let nextHandle = 0;
@@ -170,9 +198,11 @@ export class SftpService {
           return;
         }
 
-        let mode = 'r';
-        if (flags & OPEN_MODE.WRITE) mode = flags & OPEN_MODE.APPEND ? 'a' : 'w';
-        if (flags & OPEN_MODE.READ && flags & OPEN_MODE.WRITE) mode = 'r+';
+        const mode = openModeFor(flags, writable);
+        if (mode === null) {
+          sftp.status(reqid, STATUS_CODE.PERMISSION_DENIED);
+          return;
+        }
 
         await fsp.mkdir(path.dirname(target), { recursive: true }).catch(() => undefined);
 
@@ -314,6 +344,9 @@ export class SftpService {
       })();
     });
 
+    // MKDIR, REMOVE, RMDIR and RENAME stay open even read-only, matching the
+    // file manager: an empty directory is not what filled the disk, and
+    // deleting is how somebody gets back under their limit.
     sftp.on('MKDIR', (reqid, givenPath) => {
       void (async () => {
         const target = await resolve(givenPath);

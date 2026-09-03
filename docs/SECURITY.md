@@ -197,6 +197,19 @@ and refuses entries that are symlinks or absolute.
 Uploads stream to disk with a size cap and a per-server disk quota. Downloads
 stream too — the panel never buffers a file in memory.
 
+**SFTP is the same files through a different door**, and the quota follows it
+there. The agent asks the panel to check the credentials on every login, and
+that answer now carries whether the session may add bytes: a server over its
+disk limit gets a read-only session, and any open for writing is refused with
+permission denied. Otherwise the customer who could not upload a modpack
+through the file manager simply uploaded it over SFTP.
+
+Read-only, not closed. Listing, reading, deleting and renaming keep working,
+because being over a limit has to be a state somebody can get themselves out
+of — the same operations the file manager leaves open for the same reason. The
+credential is per server and checked against the node that asked, so one node's
+token cannot open another node's servers.
+
 The file manager runs entirely on the agent. The panel has no filesystem access
 to server data at all, which means a bug in the panel's path handling cannot
 reach a file: there is nothing there to reach.

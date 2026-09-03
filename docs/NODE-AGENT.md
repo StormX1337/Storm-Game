@@ -332,6 +332,13 @@ Each session is confined to its server's directory. The same path resolution
 and symlink checks apply as everywhere else, so `cd /` in an SFTP client lands
 at the server's root, not the host's.
 
+The panel's answer also says whether the session may write. A server over its
+disk limit gets a read-only one: opening a file for writing, appending or
+read-write is refused with permission denied, so the quota the file manager
+enforces cannot be walked around by using SFTP instead. Listing, downloading,
+deleting and renaming keep working — being over a limit has to be recoverable
+without asking support.
+
 Creating links is refused: `ln -s` over SFTP answers "operation unsupported"
 rather than making one. A symlink is the one file a customer could leave behind
 that points somewhere every later read has to be checked against, and no game
