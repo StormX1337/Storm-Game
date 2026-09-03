@@ -718,6 +718,10 @@ export default async function adminSystemRoutes(app: FastifyInstance): Promise<v
           failureCount: hook.failureCount,
           lastStatus: hook.lastStatus,
           lastDeliveryAt: hook.lastDeliveryAt?.toISOString() ?? null,
+          // Set only when the panel switched it off itself, so the page can
+          // tell that apart from a switch somebody flipped on purpose.
+          disabledAt: hook.disabledAt?.toISOString() ?? null,
+          disabledReason: hook.disabledReason,
           createdAt: hook.createdAt.toISOString(),
         })),
       );
@@ -777,7 +781,11 @@ export default async function adminSystemRoutes(app: FastifyInstance): Promise<v
           ...(input.name ? { name: input.name } : {}),
           ...(input.url ? { url: input.url } : {}),
           ...(input.events ? { events: input.events } : {}),
-          ...(input.isActive !== undefined ? { isActive: input.isActive, failureCount: 0 } : {}),
+          // Turning it back on is a fresh start: the count that switched it
+          // off, and the reason, both go with it.
+          ...(input.isActive !== undefined
+            ? { isActive: input.isActive, failureCount: 0, disabledAt: null, disabledReason: null }
+            : {}),
         },
       });
 

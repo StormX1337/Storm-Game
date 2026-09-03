@@ -52,6 +52,9 @@ interface WebhookSummary {
   failureCount: number;
   lastStatus: number | null;
   lastDeliveryAt: string | null;
+  /** Set only when the panel switched it off itself. */
+  disabledAt: string | null;
+  disabledReason: string | null;
   createdAt: string;
 }
 
@@ -231,6 +234,26 @@ export default function WebhooksPage() {
                     </Badge>
                   ))}
                 </div>
+
+                {hook.disabledAt ? (
+                  /* Switched off by the panel, not by a person. Without this
+                     the page shows an inactive switch and no way to tell
+                     "we gave up" from "somebody turned it off". */
+                  <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs">
+                    <p className="font-medium text-destructive">
+                      Switched off {formatRelative(hook.disabledAt)} after {hook.failureCount}{' '}
+                      failed deliveries
+                    </p>
+                    {hook.disabledReason ? (
+                      <p className="mt-1 break-words text-muted-foreground">
+                        {hook.disabledReason}
+                      </p>
+                    ) : null}
+                    <p className="mt-1 text-muted-foreground">
+                      Fix the endpoint, then switch it back on — that clears the count.
+                    </p>
+                  </div>
+                ) : null}
 
                 <p className="text-xs text-muted-foreground">
                   {hook.lastDeliveryAt ? (

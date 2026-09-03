@@ -862,6 +862,15 @@ every six hours, so it is a signal rather than a stream.
 Non-2xx responses are retried with exponential backoff. Deliveries and their
 outcomes are visible at `GET /admin/webhooks/:id/deliveries`.
 
+After 25 consecutive failures the panel switches the endpoint off, so the queue
+does not fill with deliveries to a host that will never answer. It says so
+rather than going quiet: `disabledAt` and `disabledReason` come back with the
+listing, every owner and administrator gets a notification naming the endpoint
+and the error, and the audit log records `webhook.disabled`. Switching it back
+on through `PATCH /admin/webhooks/:id` is a fresh start — the failure count and
+the reason both clear, so one more bad delivery does not switch it straight off
+again. A delivery that succeeds clears them too.
+
 ### Testing an endpoint
 
 `POST /admin/webhooks/:id/test` sends one real, signed delivery with the event

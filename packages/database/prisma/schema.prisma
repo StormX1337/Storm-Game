@@ -768,6 +768,9 @@ model Webhook {
   failureCount  Int      @default(0)
   lastStatus    Int?
   lastDeliveryAt DateTime?
+  /// Set when the panel switched this off itself, with what it was failing on.
+  disabledAt     DateTime?
+  disabledReason String?
 
   deliveries WebhookDelivery[]
 
