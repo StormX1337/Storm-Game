@@ -36,6 +36,7 @@ interface PanelSettings {
   registrationEnabled: boolean;
   requireEmailVerification: boolean;
   defaultServerLimit: number;
+  defaultCpuLimit: number;
   defaultMemoryLimit: number;
   defaultDiskLimit: number;
   defaultBackupLimit: number;
@@ -281,7 +282,8 @@ export default function AdminSettingsPage() {
         <CardHeader>
           <CardTitle>Default account limits</CardTitle>
           <CardDescription>
-            Applied to newly registered accounts. Zero means unlimited.
+            Applied to every new customer account — signed up, created here, or created on the
+            command line. Zero means unlimited.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-3">
@@ -290,6 +292,13 @@ export default function AdminSettingsPage() {
               type="number"
               value={form.defaultServerLimit}
               onChange={number('defaultServerLimit')}
+            />
+          </Field>
+          <Field label="CPU (% of one core)">
+            <Input
+              type="number"
+              value={form.defaultCpuLimit}
+              onChange={number('defaultCpuLimit')}
             />
           </Field>
           <Field label="Memory (MiB)">

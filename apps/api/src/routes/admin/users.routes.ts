@@ -11,6 +11,7 @@ import {
   type RoleName,
 } from '@storm/types';
 import { generatePassword, hashPassword } from '@storm/security';
+import { UNLIMITED_ACCOUNT_LIMITS, defaultAccountLimits } from '@storm/database';
 import { body, params, query } from '../../lib/validation.js';
 import { ok, paginated, pageArgs } from '../../lib/response.js';
 import { AppError, badRequest, conflict, forbidden, notFound } from '../../lib/errors.js';
@@ -104,6 +105,14 @@ export default async function adminUserRoutes(app: FastifyInstance): Promise<voi
           emailVerifiedAt: input.emailVerified ? new Date() : null,
           extraPermissions: input.extraPermissions,
           deniedPermissions: input.deniedPermissions,
+          // What Admin -> Settings -> Defaults says a new account gets, unless
+          // this request said otherwise field by field. Without the first half,
+          // an account made here fell through to the column defaults — no
+          // memory ceiling and no disk ceiling — while one that signed up
+          // itself got the numbers the operator had configured.
+          ...(input.role === 'CUSTOMER'
+            ? defaultAccountLimits(await app.settings.read())
+            : UNLIMITED_ACCOUNT_LIMITS),
           ...(input.limits ?? {}),
         },
         include: { role: { include: { permissions: true } }, twoFactor: true },

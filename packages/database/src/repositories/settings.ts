@@ -14,6 +14,7 @@ export interface PanelSettings {
   registrationEnabled: boolean;
   requireEmailVerification: boolean;
   defaultServerLimit: number;
+  defaultCpuLimit: number;
   defaultMemoryLimit: number;
   defaultDiskLimit: number;
   defaultBackupLimit: number;
@@ -36,6 +37,9 @@ export const DEFAULT_SETTINGS: PanelSettings = {
   registrationEnabled: true,
   requireEmailVerification: false,
   defaultServerLimit: 2,
+  // Percent of one core, matching the per-server field. Zero is no ceiling,
+  // which is what every account had before this setting existed.
+  defaultCpuLimit: 0,
   defaultMemoryLimit: 4096,
   defaultDiskLimit: 20480,
   defaultBackupLimit: 5,
@@ -72,6 +76,53 @@ export type PublicSettingKey = (typeof PUBLIC_KEYS)[number];
 
 /** The shape `GET /settings` returns. */
 export type PublicPanelSettings = Pick<PanelSettings, PublicSettingKey>;
+
+/** What a new account is given, when nobody says otherwise. */
+export interface AccountLimits {
+  serverLimit: number;
+  cpuLimit: number;
+  memoryLimit: number;
+  diskLimit: number;
+  backupLimit: number;
+  databaseLimit: number;
+  allocationLimit: number;
+}
+
+/**
+ * The limits Admin -> Settings -> Defaults promises a new account.
+ *
+ * There are three ways an account comes into existence — somebody signs up,
+ * an administrator creates one, the CLI creates one — and only the first read
+ * these. The other two fell through to the column defaults, which say
+ * `memoryLimit 0` and `diskLimit 0`, and zero means no ceiling. So the
+ * accounts an operator made by hand were the ones with no quota at all, which
+ * is the opposite of what the page they had just filled in said.
+ */
+export function defaultAccountLimits(settings: PanelSettings): AccountLimits {
+  return {
+    serverLimit: settings.defaultServerLimit,
+    cpuLimit: settings.defaultCpuLimit,
+    memoryLimit: settings.defaultMemoryLimit,
+    diskLimit: settings.defaultDiskLimit,
+    backupLimit: settings.defaultBackupLimit,
+    databaseLimit: settings.defaultDatabaseLimit,
+    allocationLimit: settings.defaultAllocationLimit,
+  };
+}
+
+/**
+ * No ceiling anywhere, for the accounts that run the panel rather than buy
+ * from it. Staff hit a quota as a bug, not as a policy.
+ */
+export const UNLIMITED_ACCOUNT_LIMITS: AccountLimits = {
+  serverLimit: 0,
+  cpuLimit: 0,
+  memoryLimit: 0,
+  diskLimit: 0,
+  backupLimit: 0,
+  databaseLimit: 0,
+  allocationLimit: 0,
+};
 
 export async function readSettings(prisma: PrismaClient): Promise<PanelSettings> {
   const rows = await prisma.setting.findMany();

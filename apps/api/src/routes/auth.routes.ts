@@ -10,6 +10,7 @@ import {
   NotificationType,
 } from '@storm/types';
 import { generateToken, hashPassword, hashToken } from '@storm/security';
+import { defaultAccountLimits } from '@storm/database';
 import { COOKIE_NAMES } from '@storm/config';
 import { body } from '../lib/validation.js';
 import { ok } from '../lib/response.js';
@@ -86,12 +87,7 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
           passwordHash: await hashPassword(input.password),
           roleId: role.id,
           emailVerifiedAt: settings.requireEmailVerification ? null : new Date(),
-          serverLimit: settings.defaultServerLimit,
-          memoryLimit: settings.defaultMemoryLimit,
-          diskLimit: settings.defaultDiskLimit,
-          backupLimit: settings.defaultBackupLimit,
-          databaseLimit: settings.defaultDatabaseLimit,
-          allocationLimit: settings.defaultAllocationLimit,
+          ...defaultAccountLimits(settings),
         },
         include: { role: { include: { permissions: true } } },
       });

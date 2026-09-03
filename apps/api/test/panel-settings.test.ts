@@ -25,6 +25,7 @@ describe('panel settings', () => {
 
   const PRIVATE_KEYS = [
     'defaultServerLimit',
+    'defaultCpuLimit',
     'defaultMemoryLimit',
     'defaultDiskLimit',
     'defaultBackupLimit',

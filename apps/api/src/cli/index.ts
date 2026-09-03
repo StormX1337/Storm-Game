@@ -16,7 +16,13 @@ import { promisify } from 'node:util';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadApiEnv, STORM_VERSION } from '@storm/config';
-import { createPrismaClient, type PrismaClient } from '@storm/database';
+import {
+  UNLIMITED_ACCOUNT_LIMITS,
+  createPrismaClient,
+  defaultAccountLimits,
+  readSettings,
+  type PrismaClient,
+} from '@storm/database';
 import {
   Encrypter,
   generatePassword,
@@ -252,10 +258,12 @@ async function createUser(options: CreateUserOptions): Promise<void> {
         passwordHash: await hashPassword(finalPassword),
         roleId: roleRow.id,
         emailVerifiedAt: new Date(),
-        serverLimit: role === 'CUSTOMER' ? 2 : 1000,
-        backupLimit: role === 'CUSTOMER' ? 5 : 1000,
-        databaseLimit: role === 'CUSTOMER' ? 2 : 1000,
-        allocationLimit: role === 'CUSTOMER' ? 5 : 1000,
+        // The same numbers the panel promises, rather than a second set
+        // hardcoded here: a customer made on the command line is a customer.
+        // Staff run the panel instead of buying from it, so no ceiling.
+        ...(role === 'CUSTOMER'
+          ? defaultAccountLimits(await readSettings(prisma))
+          : UNLIMITED_ACCOUNT_LIMITS),
       },
     });
 

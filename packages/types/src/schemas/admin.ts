@@ -282,6 +282,7 @@ export const updateSettingsSchema = z.object({
   registrationEnabled: z.boolean().optional(),
   requireEmailVerification: z.boolean().optional(),
   defaultServerLimit: z.number().int().min(0).max(10000).optional(),
+  defaultCpuLimit: z.number().int().min(0).max(100000).optional(),
   defaultMemoryLimit: z
     .number()
     .int()
