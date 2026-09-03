@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #
 # Proves `update.sh --check` survives an upstream whose history was rewritten,
-# and still refuses when the deployment has commits of its own.
+# still refuses when the deployment has commits of its own, and offers a way
+# out when the checkout has been edited in place.
 #
 # Rewriting authorship rewrites every commit at once, so a deployment that has
 # already pulled ends up holding commits the remote no longer has. Git calls
@@ -43,6 +44,7 @@ check() {
 
 g() { git -c user.email=t@t -c user.name=T -c commit.gpgsign=false "$@"; }
 run_check() { ( cd "$WORK/deploy" && bash scripts/update.sh --check 2>&1 ) || true; }
+run_update() { ( cd "$WORK/deploy" && bash scripts/update.sh "$@" 2>&1 ) || true; }
 
 g init --quiet --bare --initial-branch=main "$WORK/remote.git"
 g clone --quiet "$WORK/remote.git" "$WORK/deploy" 2>/dev/null
@@ -85,6 +87,36 @@ g add -A && g commit -qm 'operator changed something here'
 out="$(run_check)"
 check "it refuses rather than discarding the operator's work" "commits of its own" "$out"
 check "and names the commit it would have thrown away" "operator changed something here" "$out"
+
+printf '\nThe checkout has been edited in place\n'
+# What actually happens: somebody runs `pnpm install` on the host, it rewrites
+# the lockfile, and every update from then on stops on a wall of diffstat with
+# no way through — including the update button, which has no shell behind it.
+cd "$WORK/deploy"
+g reset -q --hard HEAD~1   # drop the operator's commit from the case above
+printf 'rewritten by a stray pnpm install\n' > a.txt
+
+out="$(run_update)"
+check "an edited checkout is refused rather than overwritten" "would be overwritten" "$out"
+check "and the way out is named in the same breath" "stash-local" "$out"
+check "with what it usually is" "pnpm install" "$out"
+check "the panel reads the first marked line, so the flag is on it" \
+  "Local changes would be overwritten. Re-run with --stash-local" "$out"
+
+out="$(run_check)"
+check "--check says so without touching anything" "stash-local" "$out"
+[[ "$(cd "$WORK/deploy" && git diff --name-only)" == "a.txt" ]] &&
+  { printf '  ok   %s\n' "--check left the edit alone"; pass=$((pass + 1)); } ||
+  { printf '  FAIL %s\n' "--check discarded the edit"; fail=$((fail + 1)); }
+
+out="$(run_update --stash-local)"
+check "with the flag it sets them aside and says how to get them back" "git stash pop" "$out"
+[[ -z "$(cd "$WORK/deploy" && git diff --name-only)" ]] &&
+  { printf '  ok   %s\n' "the checkout is clean afterwards"; pass=$((pass + 1)); } ||
+  { printf '  FAIL %s\n' "the checkout is still dirty"; fail=$((fail + 1)); }
+[[ -n "$(cd "$WORK/deploy" && git stash list)" ]] &&
+  { printf '  ok   %s\n' "and the edit is recoverable, not gone"; pass=$((pass + 1)); } ||
+  { printf '  FAIL %s\n' "the edit was thrown away"; fail=$((fail + 1)); }
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [[ "$fail" -eq 0 ]]

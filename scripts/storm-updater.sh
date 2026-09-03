@@ -30,6 +30,14 @@ json_field() {
   sed -n "s/.*\"$1\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p" "$2" | head -1
 }
 
+json_true() {
+  # A separate reader because a boolean is unquoted, and the one above only
+  # ever sees values in quotes — it would answer "false" for every flag the
+  # panel ever sets, which is the sort of bug that looks like the feature was
+  # never wired up at all.
+  grep -q "\"$1\"[[:space:]]*:[[:space:]]*true" "$2" 2>/dev/null
+}
+
 # Read out of the request once, by read_request, and held here — the request
 # file is deleted before the update runs, so re-reading it for the final status
 # would report an empty commit and an unknown job to the panel.
@@ -37,12 +45,16 @@ JOB_ID="unknown"
 JOB_COMMIT=""
 JOB_BY=""
 JOB_AT=""
+JOB_STASH="false"
 
 read_request() {
   JOB_ID="$(json_field id "$REQUEST" 2>/dev/null || echo 'unknown')"
   JOB_COMMIT="$(json_field requestedCommit "$REQUEST" 2>/dev/null || echo '')"
   JOB_BY="$(json_field requestedBy "$REQUEST" 2>/dev/null || echo '')"
   JOB_AT="$(json_field requestedAt "$REQUEST" 2>/dev/null || echo '')"
+  # Written only when somebody ticked it in the panel, after an update had
+  # already stopped on a checkout that was edited in place.
+  if json_true stashLocal "$REQUEST"; then JOB_STASH="true"; else JOB_STASH="false"; fi
 }
 
 write_status() {
@@ -86,7 +98,10 @@ process_request() {
   cd "$REPO_DIR"
 
   local output
-  if output=$(STORM_COMMIT="$commit" bash scripts/update.sh 2>&1); then
+  local args=()
+  [ "$JOB_STASH" = "true" ] && args+=(--stash-local)
+
+  if output=$(STORM_COMMIT="$commit" bash scripts/update.sh "${args[@]+"${args[@]}"}" 2>&1); then
     log "update finished"
     write_status succeeded "Updated to ${commit:0:7}."
   else

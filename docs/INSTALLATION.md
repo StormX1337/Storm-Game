@@ -463,6 +463,25 @@ start if the deployment has local edits that a pull would overwrite, rather
 than stashing someone's port change without saying so. If the panel does not
 come back it prints the API log and the exact command to roll back.
 
+### "Local changes would be overwritten"
+
+The update stopped because the checkout has been edited in place. In practice
+that is almost always a lockfile: somebody ran `pnpm install` in
+`/opt/storm-panel` at some point, and it rewrote `pnpm-lock.yaml`,
+`pnpm-workspace.yaml` and the `package.json` files. Nothing in the panel does
+that on its own — every build here uses `--frozen-lockfile`.
+
+```bash
+git -C /opt/storm-panel diff        # look at what it is first
+./scripts/update.sh --stash-local   # set it aside, then update
+git -C /opt/storm-panel stash pop   # if you did want it back
+```
+
+Set aside, not deleted. The same thing is one click in **Administration →
+Updates** once an update has failed for this reason — the panel offers it
+there rather than in general, because a checkout somebody edited stops an
+update on purpose.
+
 Dumps land in `~/storm-backups`, ten kept (`STORM_BACKUP_DIR`,
 `STORM_KEEP_BACKUPS` to change that). The `.env` copy matters as much as the
 dump: it holds `ENCRYPTION_KEY`, and a database without it cannot decrypt a

@@ -83,7 +83,8 @@ export default function UpdatesPage() {
   });
 
   const apply = useMutation({
-    mutationFn: (commit: string) => api.post<UpdateJob>('/admin/updates/apply', { commit }),
+    mutationFn: ({ commit, stashLocal }: { commit: string; stashLocal?: boolean }) =>
+      api.post<UpdateJob>('/admin/updates/apply', { commit, stashLocal: stashLocal ?? false }),
     onSuccess: () => {
       toast.info('Update requested', 'The host is applying it. The panel will restart shortly.');
       void queryClient.invalidateQueries({ queryKey: ['admin', 'updates'] });
@@ -106,7 +107,31 @@ export default function UpdatesPage() {
       confirmLabel: 'Update now',
     });
 
-    if (confirmed) apply.mutate(data.available.commit);
+    if (confirmed) apply.mutate({ commit: data.available.commit });
+  }
+
+  /**
+   * Somebody ran `pnpm install` on the host, git will not move over the
+   * result, and the person holding this button has no shell to look at it in.
+   * Offered only after an update has actually stopped for that reason, and
+   * only ever as its own deliberate click.
+   */
+  const blockedByLocalEdits =
+    data?.job?.state === 'failed' && (data.job.message ?? '').includes('--stash-local');
+
+  async function onApplyStashing(): Promise<void> {
+    if (!data?.available.commit) return;
+
+    const confirmed = await confirm({
+      title: 'Set the local changes aside and update?',
+      description:
+        'This deployment has edits that were made on the host — usually a lockfile a stray ' +
+        '`pnpm install` rewrote. They are stashed, not deleted: `git stash pop` in the panel ' +
+        'directory brings them back. The update then runs as normal.',
+      confirmLabel: 'Set aside and update',
+    });
+
+    if (confirmed) apply.mutate({ commit: data.available.commit, stashLocal: true });
   }
 
   return (
@@ -224,6 +249,17 @@ export default function UpdatesPage() {
                       <code className="font-mono text-xs">journalctl -u storm-updater</code> on the
                       host.
                     </p>
+                    {blockedByLocalEdits ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mt-3"
+                        loading={apply.isPending}
+                        onClick={() => void onApplyStashing()}
+                      >
+                        Set the local changes aside and update
+                      </Button>
+                    ) : null}
                   </div>
                 </div>
               ) : data.job?.state === 'succeeded' && data.available.upToDate ? (

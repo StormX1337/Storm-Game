@@ -60,6 +60,14 @@ export interface UpdateJob {
   requestedCommit: string;
   requestedBy: string;
   requestedAt: string;
+  /**
+   * Set local edits aside before updating.
+   *
+   * Off unless somebody ticked it: a checkout edited in place stops an update
+   * for a reason, and stashing it on a schedule would be deciding for the
+   * operator that whatever they changed did not matter.
+   */
+  stashLocal?: boolean;
   startedAt?: string;
   finishedAt?: string;
   message?: string;
@@ -322,7 +330,11 @@ export class UpdateService {
 
   /* --------------------------------------------------------- applying -- */
 
-  async request(targetCommit: string, requestedBy: string): Promise<UpdateJob> {
+  async request(
+    targetCommit: string,
+    requestedBy: string,
+    options: { stashLocal?: boolean } = {},
+  ): Promise<UpdateJob> {
     const dir = this.controlDir;
     if (!dir) {
       throw badRequest(
@@ -345,6 +357,7 @@ export class UpdateService {
       requestedCommit: targetCommit,
       requestedBy,
       requestedAt: new Date().toISOString(),
+      ...(options.stashLocal ? { stashLocal: true } : {}),
     };
 
     try {

@@ -3,9 +3,10 @@
 # Updates a Compose deployment in place: back up, pull, rebuild, restart,
 # and prove the result answers before walking away.
 #
-#   ./scripts/update.sh              # update to the latest commit
-#   ./scripts/update.sh --check      # say what would change, touch nothing
-#   ./scripts/update.sh --no-backup  # skip the database dump
+#   ./scripts/update.sh                # update to the latest commit
+#   ./scripts/update.sh --check        # say what would change, touch nothing
+#   ./scripts/update.sh --no-backup    # skip the database dump
+#   ./scripts/update.sh --stash-local  # set local edits aside, then update
 #
 # Game servers keep running throughout: they are containers on nodes, and
 # nothing here stops them.
@@ -23,6 +24,7 @@ fail() { printf '  %s✖%s %s\n' "$RED" "$RESET" "$1" >&2; exit 1; }
 
 CHECK_ONLY=0
 BACKUP=1
+STASH_LOCAL=0
 # systemd gives a service no HOME at all, and `set -u` turns that into a crash
 # before the first useful line — which is how the panel's update button failed
 # while running it by hand worked fine. /root is where the unit points, and the
@@ -32,8 +34,9 @@ KEEP_BACKUPS="${STORM_KEEP_BACKUPS:-10}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --check)     CHECK_ONLY=1; shift ;;
-    --no-backup) BACKUP=0; shift ;;
+    --check)       CHECK_ONLY=1; shift ;;
+    --no-backup)   BACKUP=0; shift ;;
+    --stash-local) STASH_LOCAL=1; shift ;;
     --help|-h)
       sed -n '2,12p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
       exit 0 ;;
@@ -140,10 +143,36 @@ fi
 
 # A deployment that has been edited in place cannot be fast-forwarded, and
 # stashing someone's port change without telling them is worse than stopping.
+#
+# It is almost never a port change. It is a lockfile that a `pnpm install` run
+# by hand on the host rewrote — the panel's own builds all use
+# --frozen-lockfile, so nothing here does that on its own. Which is why the
+# way out is offered by name rather than left as an exercise: an operator who
+# only has the update button in a browser has no shell to work it out in.
 if ! git diff --quiet || ! git diff --cached --quiet; then
   printf '\n'
   git --no-pager diff --stat HEAD | sed 's/^/  /'
-  fail "Local changes would be overwritten. Commit or revert them, then run again."
+
+  if [[ "$CHECK_ONLY" == "1" ]]; then
+    warn "These would block an update. Run with --stash-local to set them aside."
+  elif [[ "$STASH_LOCAL" == "1" ]]; then
+    # Set aside rather than thrown away: whatever it was, it is one
+    # `git stash pop` from coming back, and this script is not the place to
+    # decide that somebody's edit did not matter.
+    STASH_LABEL="storm-update $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    git stash push --quiet --message "$STASH_LABEL" ||
+      fail "Could not set the local changes aside."
+    ok "Local changes stashed as \"$STASH_LABEL\" — restore them with: git stash pop"
+  else
+    fail "Local changes would be overwritten. Re-run with --stash-local to set them aside, or commit them.
+
+  Usually a lockfile rewritten by a \`pnpm install\` run on the host. Nothing
+  in this panel does that: every build here uses --frozen-lockfile.
+
+  To look at them first:  git -C \"\$PWD\" diff
+  To set them aside:      ./scripts/update.sh --stash-local
+  They come back with:    git stash pop"
+  fi
 fi
 
 if [[ "$CHECK_ONLY" == "1" ]]; then

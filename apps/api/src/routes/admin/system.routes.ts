@@ -206,7 +206,17 @@ export default async function adminSystemRoutes(app: FastifyInstance): Promise<v
       schema: { tags: ['Admin'], summary: 'Ask the host-side updater to apply an update' },
     },
     async (request) => {
-      const input = body(request, z.object({ commit: z.string().min(7).max(40) }));
+      const input = body(
+        request,
+        z.object({
+          commit: z.string().min(7).max(40),
+          // Only ever because somebody ticked it. A checkout edited in place
+          // stops an update on purpose, and the operator holding the button
+          // usually has no shell to look at it in — so the panel offers this
+          // by name once the update has already failed for that reason.
+          stashLocal: z.boolean().default(false),
+        }),
+      );
       const current = await app.updates.status();
 
       // Only ever the version the panel just offered. Without this the endpoint
@@ -219,7 +229,9 @@ export default async function adminSystemRoutes(app: FastifyInstance): Promise<v
       }
 
       const user = request.currentUser();
-      const job = await app.updates.request(input.commit, user.username);
+      const job = await app.updates.request(input.commit, user.username, {
+        stashLocal: input.stashLocal,
+      });
 
       await app.audit.log(request, {
         action: 'admin.panel_update_requested',
@@ -229,6 +241,7 @@ export default async function adminSystemRoutes(app: FastifyInstance): Promise<v
         metadata: {
           from: current.current.commit,
           to: input.commit,
+          stashLocal: input.stashLocal,
           behindBy: current.available.behindBy,
         },
       });
