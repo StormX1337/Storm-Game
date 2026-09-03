@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { ServerStatus } from '@storm/types';
 import {
+  CEILING_RATIO,
   LOCALE,
   SERVER_STATUS_META,
+  atCeiling,
   formatBytes,
   formatDate,
   formatDateShort,
@@ -10,6 +12,7 @@ import {
   formatNumber,
   formatRelative,
   formatUptime,
+  limitHint,
   humaniseEvent,
   initials,
   usagePercent,
@@ -190,5 +193,41 @@ describe('language of dates and numbers', () => {
     expect(formatRelative(null)).toBe('never');
     expect(formatDate(null)).toBe('—');
     expect(formatDate('not a date')).toBe('—');
+  });
+});
+
+/**
+ * What "nearly full" means, in the one place the panel decides it.
+ *
+ * The API warns an owner at the same share of the same limit. Two thresholds a
+ * percent apart is a support ticket: the mail says the server is running out
+ * and the page it links to is showing a calm grey card.
+ */
+describe('limits on a stat card', () => {
+  const MIB = 1024 * 1024;
+
+  it('agrees with the number the API warns on', () => {
+    expect(CEILING_RATIO).toBe(0.9);
+  });
+
+  it('colours a card at the threshold, not a percent past it', () => {
+    // Exactly 90% of 2048 MiB. A card that waits for 91 disagrees with the
+    // notification the owner is holding.
+    expect(atCeiling(2048 * MIB * 0.9, 2048)).toBe(true);
+    expect(atCeiling(2048 * MIB * 0.89, 2048)).toBe(false);
+    expect(atCeiling(2048 * MIB, 2048)).toBe(true);
+  });
+
+  it('never calls an unmetered server full', () => {
+    // Zero means unlimited everywhere in the panel, so there is no share of it
+    // to be at — and a naive percentage would be a division by nought.
+    expect(atCeiling(64 * 1024 * MIB, 0)).toBe(false);
+  });
+
+  it('says what the limit is, including when there is not one', () => {
+    expect(limitHint(2048)).toBe('of 2 GiB');
+    expect(limitHint(0)).toBe('Unlimited');
+    expect(limitHint(0, 'Limit')).toBe('Unlimited');
+    expect(limitHint(512, 'Limit')).toBe('Limit 512 MiB');
   });
 });

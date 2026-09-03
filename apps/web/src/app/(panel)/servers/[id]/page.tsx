@@ -18,12 +18,13 @@ import { Button, Card, CardContent, CardHeader, CardTitle } from '@storm/ui';
 import type { ServerLiveStats } from '@storm/types';
 import { api } from '@/lib/api';
 import {
+  CEILING_RATIO,
+  atCeiling,
   formatBytes,
   formatDate,
-  formatMib,
   formatPercent,
   formatUptime,
-  usagePercent,
+  limitHint,
 } from '@/lib/format';
 import { StatCard, UsageMeter } from '@/components/panel/stats';
 import { ResourceChart, useLiveSeries } from '@/components/panel/resource-chart';
@@ -102,7 +103,9 @@ export default function ServerOverviewPage() {
           }
           icon={Cpu}
           tone={
-            stats && server.limits.cpuLimit > 0 && stats.cpuPercent > server.limits.cpuLimit * 0.9
+            stats &&
+            server.limits.cpuLimit > 0 &&
+            stats.cpuPercent >= server.limits.cpuLimit * CEILING_RATIO
               ? 'warning'
               : 'default'
           }
@@ -110,18 +113,20 @@ export default function ServerOverviewPage() {
         <StatCard
           label="Memory"
           value={stats ? formatBytes(stats.memoryBytes) : '—'}
-          hint={`of ${formatMib(server.limits.memoryLimit)}`}
+          hint={limitHint(server.limits.memoryLimit)}
           icon={MemoryStick}
           tone={
-            stats && usagePercent(stats.memoryBytes, memoryLimitBytes) > 90 ? 'warning' : 'default'
+            stats && atCeiling(stats.memoryBytes, server.limits.memoryLimit) ? 'warning' : 'default'
           }
         />
         <StatCard
           label="Disk"
           value={stats ? formatBytes(stats.diskBytes) : '—'}
-          hint={`of ${formatMib(server.limits.diskLimit)}`}
+          hint={limitHint(server.limits.diskLimit)}
           icon={HardDrive}
-          tone={stats && usagePercent(stats.diskBytes, diskLimitBytes) > 90 ? 'warning' : 'default'}
+          tone={
+            stats && atCeiling(stats.diskBytes, server.limits.diskLimit) ? 'warning' : 'default'
+          }
         />
         <StatCard
           label="Uptime"

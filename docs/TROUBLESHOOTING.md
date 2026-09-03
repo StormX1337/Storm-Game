@@ -19,6 +19,7 @@ second thing you try, after you have stopped guessing.
 - [Backup problems](#backup-problems)
 - [Database problems](#database-problems)
 - [Schedules do not run](#schedules-do-not-run)
+- ["Server is running out of memory"](#server-is-running-out-of-memory)
 - [Slow panel](#slow-panel)
 - [Emails never arrive](#emails-never-arrive)
 - [Collecting diagnostics](#collecting-diagnostics)
@@ -454,6 +455,32 @@ that tick until the API restarts, but no schedule is lost with it.
 A schedule marked **Only when online** does nothing on a run where the server
 is stopped — that is what it is for. It counts as a run: the panel books the
 next one and waits for it.
+
+---
+
+## "Server is running out of memory"
+
+The panel sends this while the server is still up, so there is time to act. It
+means every reading over the last five minutes had the container using 90% or
+more of its memory limit. A server that stays there is killed by the kernel,
+and the crash notification that follows says exactly that.
+
+```bash
+# What it is actually using, from the node
+docker stats --no-stream <container>
+```
+
+Either the server needs more memory, or it is being asked to hold more than it
+was sold: view distance, a modpack, too many chunks loaded, a plugin leaking.
+For Java, remember the heap is not the whole container — the JVM's own
+overhead sits on top, so a 2 GiB limit does not mean `-Xmx2G`.
+
+The disk version of the same warning fires on the high-water mark rather than
+an average, because disk does not fall on its own and the write that fails is
+the one at the peak. Backups and world saves are the first things to break.
+
+Each warning is sent at most once per server per resource every six hours, so
+one arriving does not mean it has just started.
 
 ---
 

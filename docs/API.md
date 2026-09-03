@@ -481,6 +481,13 @@ those keys are returned:
 How the panel is _run_ — the default limits, backup retention — stays behind
 `GET /admin/settings` and `settings.manage`.
 
+The default limits apply to every new **customer** account, whichever way it
+was made: signed up, created through `POST /admin/users`, or created with
+`storm admin create`. A request that names limits of its own wins field by
+field. Accounts in the other roles start with no ceiling anywhere, because
+staff run the panel rather than buy from it, and none of this touches an
+account that already exists — editing somebody does not re-provision them.
+
 `brandColor` must be a six-digit hex. It becomes a CSS custom property in every
 visitor's browser, so anything looser would let whoever holds `settings.manage`
 inject declarations into pages other people are looking at. `announcement` is
@@ -796,10 +803,18 @@ const ok = crypto.timingSafeEqual(
 );
 ```
 
-Events include `server.created`, `server.installed`, `server.status.changed`,
-`server.deleted`, `backup.completed`, `backup.failed`, `node.online`,
-`node.offline`, `user.registered` and `user.suspended`. `GET
-/admin/webhooks/events` returns the current list.
+Events are `server.created`, `server.installed`, `server.started`,
+`server.stopped`, `server.crashed`, `server.resource_warning`,
+`server.deleted`, `server.suspended`, `server.unsuspended`, `backup.created`,
+`backup.completed`, `backup.failed`, `backup.restored`, `node.online`,
+`node.offline`, `user.created` and `user.deleted`. `GET
+/admin/webhooks/events` returns the current list, which is the one the panel
+actually dispatches.
+
+`server.resource_warning` fires while a server is still running, not after it
+has died: its payload carries `resource` (`memory` or `disk`), the bytes in
+use and the limit in MiB. It is sent at most once per server per resource
+every six hours, so it is a signal rather than a stream.
 
 Non-2xx responses are retried with exponential backoff. Deliveries and their
 outcomes are visible at `GET /admin/webhooks/:id/deliveries`.

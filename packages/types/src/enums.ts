@@ -123,6 +123,7 @@ export const WebhookEvent = {
   SERVER_STARTED: 'server.started',
   SERVER_STOPPED: 'server.stopped',
   SERVER_CRASHED: 'server.crashed',
+  SERVER_RESOURCE_WARNING: 'server.resource_warning',
   SERVER_DELETED: 'server.deleted',
   SERVER_SUSPENDED: 'server.suspended',
   SERVER_UNSUSPENDED: 'server.unsuspended',
@@ -139,9 +140,20 @@ export type WebhookEvent = (typeof WebhookEvent)[keyof typeof WebhookEvent];
 
 export const WEBHOOK_EVENTS: WebhookEvent[] = Object.values(WebhookEvent);
 
+/**
+ * The share of its own limit at which a server is close enough to say so.
+ *
+ * Shared because two places act on it: the API warns the owner, and the panel
+ * colours the card the notification links to. A percent of drift between them
+ * is a support ticket — the mail says the server is running out and the page
+ * it points at looks perfectly calm.
+ */
+export const RESOURCE_CEILING_RATIO = 0.9;
+
 export const NotificationType = {
   SERVER_OFFLINE: 'SERVER_OFFLINE',
   SERVER_CRASHED: 'SERVER_CRASHED',
+  SERVER_RESOURCE_WARNING: 'SERVER_RESOURCE_WARNING',
   SERVER_INSTALLED: 'SERVER_INSTALLED',
   SERVER_MOVED: 'SERVER_MOVED',
   BACKUP_COMPLETED: 'BACKUP_COMPLETED',

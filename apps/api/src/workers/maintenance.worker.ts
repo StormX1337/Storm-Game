@@ -1,7 +1,14 @@
 import { Worker, Queue } from 'bullmq';
 import type { FastifyInstance } from 'fastify';
 import { QUEUE_NAMES } from '@storm/config';
-import { BackupStatus, NodeStatus, NotificationType, WebhookEvent } from '@storm/types';
+import {
+  BackupStatus,
+  NodeStatus,
+  NotificationType,
+  RESOURCE_CEILING_RATIO,
+  ServerStatus,
+  WebhookEvent,
+} from '@storm/types';
 import { nextRunAt } from '../lib/cron.js';
 import { concurrency } from './concurrency.js';
 
@@ -10,6 +17,7 @@ import { concurrency } from './concurrency.js';
  *
  *   - dispatch schedules that are due
  *   - mark nodes offline when their heartbeat lapses
+ *   - warn an owner whose server is running into its own limits
  *   - apply backup retention policies
  *   - prune the stats time-series so the tables stay small
  */
@@ -21,6 +29,7 @@ export function createMaintenanceWorker(app: FastifyInstance): Worker {
         case 'tick':
           await dispatchDueSchedules(app);
           await reconcileNodeHealth(app);
+          await warnAboutCeilings(app);
           break;
         case 'housekeeping':
           await applyBackupRetention(app);
@@ -176,6 +185,157 @@ async function reconcileNodeHealth(app: FastifyInstance): Promise<void> {
       });
     }
   }
+}
+
+/** How far back the memory reading looks, so one spike is not a warning. */
+const CEILING_WINDOW_MS = 5 * 60_000;
+
+/** Below this many readings in the window there is not enough to judge. */
+const MIN_CEILING_SAMPLES = 3;
+
+/** How long the same warning stays quiet after it has been given once. */
+const CEILING_COOLDOWN_SECONDS = 6 * 3600;
+
+const MIB = 1024 * 1024;
+
+/**
+ * Tells an owner their server is running into its own limits, before it dies
+ * of them.
+ *
+ * The panel already says what happened afterwards — a crash notification that
+ * names an out-of-memory kill, and a file manager that refuses a write past
+ * the disk limit. Both arrive after the fact, and the minute-by-minute stats
+ * that would have seen either coming were written, charted and pruned without
+ * anything ever reading them.
+ *
+ * Memory is judged over a window, because a Java server touching its ceiling
+ * for one minute during world generation is not news; sitting there is. Disk
+ * is judged on the high-water mark, because it does not come back down on its
+ * own and the write that fails is the one that matters.
+ *
+ * Exported so a test can drive it directly; the worker is its only caller.
+ */
+export async function warnAboutCeilings(app: FastifyInstance): Promise<void> {
+  const servers = await app.prisma.server.findMany({
+    where: {
+      suspendedAt: null,
+      status: ServerStatus.ONLINE,
+      // A narrowing, not the guard: each resource is checked for a ceiling of
+      // its own below, because a server can be sold unmetered memory on a
+      // metered disk.
+      OR: [{ memoryLimit: { gt: 0 } }, { diskLimit: { gt: 0 } }],
+    },
+    select: {
+      id: true,
+      name: true,
+      shortId: true,
+      ownerId: true,
+      memoryLimit: true,
+      diskLimit: true,
+    },
+    take: 500,
+  });
+  if (servers.length === 0) return;
+
+  const samples = await app.prisma.serverStat.findMany({
+    where: {
+      serverId: { in: servers.map((server) => server.id) },
+      createdAt: { gte: new Date(Date.now() - CEILING_WINDOW_MS) },
+    },
+    select: { serverId: true, memoryBytes: true, diskBytes: true },
+  });
+
+  const byServer = new Map<string, { memoryBytes: bigint; diskBytes: bigint }[]>();
+  for (const sample of samples) {
+    const list = byServer.get(sample.serverId);
+    if (list) list.push(sample);
+    else byServer.set(sample.serverId, [sample]);
+  }
+
+  for (const server of servers) {
+    const readings = byServer.get(server.id) ?? [];
+    if (readings.length < MIN_CEILING_SAMPLES) continue;
+
+    if (server.memoryLimit > 0) {
+      const ceiling = server.memoryLimit * MIB * RESOURCE_CEILING_RATIO;
+      // Every reading, not the average: a server that dips is coping.
+      if (readings.every((reading) => Number(reading.memoryBytes) >= ceiling)) {
+        const peak = readings.reduce(
+          (most, reading) => (reading.memoryBytes > most ? reading.memoryBytes : most),
+          0n,
+        );
+        await warnOnce(app, server, 'memory', {
+          title: 'Server is running out of memory',
+          message:
+            `${server.name} has been using ${percentOf(peak, server.memoryLimit)}% of its ` +
+            `${server.memoryLimit} MiB for several minutes. Servers that stay here get killed ` +
+            'by the kernel — give it more memory, or lower what it loads.',
+          usedBytes: peak,
+          limitMib: server.memoryLimit,
+        });
+      }
+    }
+
+    if (server.diskLimit > 0) {
+      const ceiling = server.diskLimit * MIB * RESOURCE_CEILING_RATIO;
+      // The high-water mark: disk does not fall on its own, and the write that
+      // fails is the one at the peak.
+      const peak = readings.reduce(
+        (most, reading) => (reading.diskBytes > most ? reading.diskBytes : most),
+        0n,
+      );
+      if (Number(peak) >= ceiling) {
+        await warnOnce(app, server, 'disk', {
+          title: 'Server is running out of disk',
+          message:
+            `${server.name} is using ${percentOf(peak, server.diskLimit)}% of its ` +
+            `${server.diskLimit} MiB. Uploads and world saves start failing at the limit — ` +
+            'delete what it no longer needs, or give it more disk.',
+          usedBytes: peak,
+          limitMib: server.diskLimit,
+        });
+      }
+    }
+  }
+}
+
+function percentOf(usedBytes: bigint, limitMib: number): number {
+  return Math.min(100, Math.round((Number(usedBytes) / (limitMib * MIB)) * 100));
+}
+
+/**
+ * One warning per server per resource, then quiet for a while.
+ *
+ * A tick runs every minute and a server at its ceiling is still at its ceiling
+ * the minute after. Without this the first thing an owner would learn is that
+ * the panel sends three hundred notifications a night.
+ */
+async function warnOnce(
+  app: FastifyInstance,
+  server: { id: string; name: string; shortId: string; ownerId: string },
+  resource: 'memory' | 'disk',
+  detail: { title: string; message: string; usedBytes: bigint; limitMib: number },
+): Promise<void> {
+  const key = `storm:ceiling-warned:${server.id}:${resource}`;
+  const first = await app.redis.set(key, '1', 'EX', CEILING_COOLDOWN_SECONDS, 'NX');
+  if (!first) return;
+
+  await app.notifications.push(server.ownerId, {
+    type: NotificationType.SERVER_RESOURCE_WARNING,
+    title: detail.title,
+    message: detail.message,
+    level: 'WARNING',
+    link: `/servers/${server.shortId}`,
+    metadata: { serverId: server.id, resource },
+  });
+  await app.webhooks.dispatch(WebhookEvent.SERVER_RESOURCE_WARNING, {
+    serverId: server.id,
+    name: server.name,
+    resource,
+    usedBytes: Number(detail.usedBytes),
+    limitMib: detail.limitMib,
+  });
+  app.log.info({ serverId: server.id, resource }, 'warned an owner about a resource ceiling');
 }
 
 /** Exported so a test can drive it directly; the worker is its only caller. */

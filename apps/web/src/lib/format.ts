@@ -1,4 +1,4 @@
-import type { NodeStatus, ServerStatus } from '@storm/types';
+import { RESOURCE_CEILING_RATIO, type NodeStatus, type ServerStatus } from '@storm/types';
 
 /**
  * The panel is written in English, so its dates are too. Passing `undefined`
@@ -163,4 +163,28 @@ export function initials(name: string): string {
 export function usagePercent(used: number, limit: number): number {
   if (!limit || limit <= 0) return 0;
   return Math.min(100, Math.max(0, (used / limit) * 100));
+}
+
+/**
+ * The share of a limit at which the panel starts calling it a problem.
+ *
+ * Re-exported from the shared package rather than written again here, so the
+ * amber card and the notification the API sends cannot drift apart.
+ */
+export const CEILING_RATIO = RESOURCE_CEILING_RATIO;
+
+/** Whether a reading is close enough to its limit to be worth a colour. */
+export function atCeiling(usedBytes: number, limitMib: number): boolean {
+  if (limitMib <= 0) return false;
+  return usedBytes >= limitMib * 1024 * 1024 * CEILING_RATIO;
+}
+
+/**
+ * What a stat card says the limit is, including when there is not one.
+ *
+ * Zero means unlimited everywhere in the panel, and `formatMib(0)` is "0 B" —
+ * so an unmetered server read "of 0 B" while happily using sixteen gibibytes.
+ */
+export function limitHint(limitMib: number, prefix = 'of'): string {
+  return limitMib > 0 ? `${prefix} ${formatMib(limitMib)}` : 'Unlimited';
 }
