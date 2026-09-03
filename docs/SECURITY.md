@@ -142,6 +142,14 @@ A server you cannot see returns **404, not 403**, so ids are not enumerable.
 Sub-user grants are a subset of the granter's own permissions — you cannot
 delegate what you do not hold.
 
+A share is a **ceiling, not a source**: whatever set a route ends up with, it
+is intersected with what the caller actually holds on this request. So an
+account-level denial keeps applying on somebody else's server, and an API key
+scoped to reading cannot power a server off because that server happens to
+have been shared with its owner. This holds for the account that runs the
+panel too — the `OWNER` role no longer takes the whole customer set unnarrowed,
+which is what let a scoped key belonging to an owner act unscoped.
+
 ---
 
 ## Container isolation

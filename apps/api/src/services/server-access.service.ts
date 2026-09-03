@@ -27,7 +27,8 @@ export interface ServerAccess {
  * Resolution order:
  *   1. panel admins (`admin.servers`) get the full customer permission set
  *   2. the owner gets the full customer permission set
- *   3. a sub-user gets exactly the permissions granted on the share
+ *   3. a sub-user gets the permissions granted on the share, bounded by what
+ *      their own account is allowed
  *   4. everyone else gets a 404 — never a 403, so server ids are not
  *      enumerable by unauthorised callers
  */
@@ -47,12 +48,17 @@ export class ServerAccessService {
     const isOwner = server.ownerId === user.id;
 
     if (isAdmin || isOwner) {
-      // Admins and owners are still bounded by what their role grants globally,
-      // except OWNER which holds everything.
-      const permissions =
-        user.role === 'OWNER'
-          ? new Set<string>(CUSTOMER_PERMISSIONS)
-          : new Set<string>(CUSTOMER_PERMISSIONS.filter((p) => user.permissions.has(p)));
+      // Bounded by what this caller actually holds right now: their role, plus
+      // what was granted to the account, minus what was denied it — and
+      // narrowed again when they are acting through a scoped API key.
+      //
+      // The OWNER role used to skip that and take the whole customer set. It
+      // holds every permission anyway, so for a signed-in owner nothing
+      // changes; what it did skip was the narrowing, which is how an API key
+      // scoped to "view servers" could still delete one.
+      const permissions = new Set<string>(
+        CUSTOMER_PERMISSIONS.filter((permission) => user.permissions.has(permission)),
+      );
       return { server, permissions, isAdmin, isOwner };
     }
 
@@ -61,12 +67,17 @@ export class ServerAccessService {
     });
     if (!subuser) throw notFound('Server was not found', ErrorCode.SERVER_NOT_FOUND);
 
-    return {
-      server,
-      permissions: new Set<string>(subuser.permissions),
-      isAdmin: false,
-      isOwner: false,
-    };
+    // A share is a ceiling, not a source: the most this person can do here is
+    // what the owner granted, and they still have to be allowed to do it at
+    // all. This branch used to take the share on its own, so a denial an
+    // administrator had set on the account — "this person may not send console
+    // commands" — stopped applying the moment somebody shared a server with
+    // them, and a scoped API key was ignored here entirely.
+    const permissions = new Set<string>(
+      subuser.permissions.filter((permission) => user.permissions.has(permission)),
+    );
+
+    return { server, permissions, isAdmin: false, isOwner: false };
   }
 
   /** Resolve and require one or more permissions on the server. */
