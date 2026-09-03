@@ -9,13 +9,7 @@ import {
   NotificationType,
   PERMISSION_DEFINITIONS,
 } from '@storm/types';
-import {
-  buildTotpUri,
-  generateToken,
-  generateTotpSecret,
-  hashToken,
-  verifyTotp,
-} from '@storm/security';
+import { buildTotpUri, generateToken, generateTotpSecret, hashToken } from '@storm/security';
 import { body, params, query } from '../lib/validation.js';
 import { ok, paginated, pageArgs } from '../lib/response.js';
 import { badRequest, forbidden, notFound } from '../lib/errors.js';
@@ -177,7 +171,13 @@ export default async function accountRoutes(app: FastifyInstance): Promise<void>
       if (record.enabled) throw badRequest('Two-factor authentication is already enabled');
 
       const secret = app.encrypter.tryDecrypt(record.secretEnc);
-      if (!secret || !verifyTotp(secret, input.code)) {
+      const enrolment = secret
+        ? await app.auth.acceptEnrolmentCode(current.id, secret, input.code)
+        : 'rejected';
+      if (enrolment === 'reused') {
+        throw badRequest('That code has already been used. Wait for the next one.');
+      }
+      if (enrolment !== 'accepted') {
         throw badRequest('That code is not valid. Check your device clock and try again.');
       }
 
@@ -205,7 +205,10 @@ export default async function accountRoutes(app: FastifyInstance): Promise<void>
 
     await app.auth.assertPassword(current.id, input.password);
     const accepted = await app.auth.verifySecondFactor(current.id, input.code);
-    if (!accepted) throw badRequest('That two-factor code is not valid');
+    if (accepted === 'reused') {
+      throw badRequest('That code has already been used. Wait for the next one.');
+    }
+    if (accepted !== 'accepted') throw badRequest('That two-factor code is not valid');
 
     await app.auth.disableTwoFactor(current.id);
     await app.notifications.push(current.id, {

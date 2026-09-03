@@ -63,6 +63,16 @@ nobody locks themselves out by mis-scanning. Ten single-use backup codes are iss
 hashes, and burned atomically on use. Seeds are encrypted at rest with
 AES-256-GCM; the panel never displays a seed after setup.
 
+A code is spent when it is accepted (RFC 6238 §5.2). The ±1-step window makes
+each six digits valid for ninety seconds, and being read off the screen — over
+a shoulder, on a shared call, through a phishing page — is most of what a
+second factor defends against, so the same digits are not accepted twice.
+Every use counts: signing in, turning two-factor off, and the code that
+switched it on. Spent codes are held as digests for as long as they could
+still have worked and no longer, keyed per account so one person signing in
+never locks out the next. "Already used" is answered separately from "not
+valid", because to the person holding the phone those mean different things.
+
 **Enumeration** is avoided by giving one answer to every failed login — "Those
 credentials do not match our records" — whether the account exists, the
 password is wrong, or the account is suspended. Password reset always reports

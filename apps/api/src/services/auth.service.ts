@@ -27,6 +27,23 @@ export interface LoginContext {
 
 const JWT_ISSUER = 'storm-panel';
 
+/**
+ * What a second factor said about a code.
+ *
+ * `reused` is separate from `rejected` on purpose: one means the code is not
+ * theirs, the other means it was theirs a minute ago.
+ */
+export type SecondFactorResult = 'accepted' | 'rejected' | 'reused';
+
+/**
+ * How long a spent TOTP code is remembered.
+ *
+ * A code is accepted for its own thirty-second step and the one either side,
+ * so ninety seconds is the whole of its life; the extra thirty is margin for a
+ * clock that is not quite ours.
+ */
+const TOTP_REPLAY_TTL_SECONDS = 120;
+
 export class AuthService {
   constructor(private readonly app: FastifyInstance) {}
 
@@ -117,9 +134,15 @@ export class AuthService {
         throw new AppError(401, ErrorCode.TWO_FACTOR_REQUIRED, 'A two-factor code is required');
       }
       const accepted = await this.verifySecondFactor(user.id, totp);
-      if (!accepted) {
+      if (accepted !== 'accepted') {
         await this.recordFailedLogin(identifier, context.ip);
-        throw new AppError(401, ErrorCode.TWO_FACTOR_INVALID, 'That two-factor code is not valid');
+        throw new AppError(
+          401,
+          ErrorCode.TWO_FACTOR_INVALID,
+          accepted === 'reused'
+            ? 'That code has already been used. Wait for your authenticator to show the next one.'
+            : 'That two-factor code is not valid',
+        );
       }
     }
 
@@ -135,13 +158,23 @@ export class AuthService {
     return user;
   }
 
-  /** Accepts either a live TOTP code or an unused backup code. */
-  async verifySecondFactor(userId: string, code: string): Promise<boolean> {
+  /**
+   * Accepts either a live TOTP code or an unused backup code.
+   *
+   * `reused` is its own answer rather than a rejection, because the two mean
+   * different things to the person holding the phone: one is "that is not your
+   * code", the other is "that was your code, a minute ago". Telling them apart
+   * is the difference between a useful message and a support ticket that says
+   * two-factor is broken.
+   */
+  async verifySecondFactor(userId: string, code: string): Promise<SecondFactorResult> {
     const record = await this.prisma.twoFactorAuth.findUnique({ where: { userId } });
-    if (!record || !record.enabled) return false;
+    if (!record || !record.enabled) return 'rejected';
 
     const secret = this.app.encrypter.tryDecrypt(record.secretEnc);
-    if (secret && verifyTotp(secret, code)) return true;
+    if (secret && verifyTotp(secret, code)) {
+      return (await this.claimTotp(userId, code)) ? 'accepted' : 'reused';
+    }
 
     const digest = hashToken(code.trim().toLowerCase());
     if (record.backupCodes.includes(digest)) {
@@ -155,9 +188,43 @@ export class AuthService {
         message: 'A two-factor backup code was used to sign in to your account.',
         level: 'WARNING',
       });
-      return true;
+      return 'accepted';
     }
-    return false;
+    return 'rejected';
+  }
+
+  /**
+   * Spends a TOTP code, so the same six digits open the account once.
+   *
+   * A code is valid for the step it belongs to and the ones either side of it,
+   * which is a minute and a half of a number that anybody standing behind you
+   * can read — and being read is most of what a second factor is defending
+   * against. RFC 6238 says a verifier must not accept a code it has already
+   * accepted; this is that.
+   *
+   * The digest rather than the code, because a store holding live one-time
+   * codes for ninety seconds is a store worth stealing.
+   */
+  private async claimTotp(userId: string, code: string): Promise<boolean> {
+    const key = `storm:totp-spent:${userId}:${hashToken(code.replace(/\s+/g, ''))}`;
+    const first = await this.app.redis.set(key, '1', 'EX', TOTP_REPLAY_TTL_SECONDS, 'NX');
+    return Boolean(first);
+  }
+
+  /**
+   * The same check for a code presented during enrolment, before there is
+   * anything to verify against.
+   *
+   * A code that switched two-factor on must not still open the account a
+   * moment later, so enrolment spends its code like every other use.
+   */
+  async acceptEnrolmentCode(
+    userId: string,
+    secret: string,
+    code: string,
+  ): Promise<SecondFactorResult> {
+    if (!verifyTotp(secret, code)) return 'rejected';
+    return (await this.claimTotp(userId, code)) ? 'accepted' : 'reused';
   }
 
   /* --------------------------------------------------------- sessions -- */
