@@ -91,6 +91,35 @@ else
   bad "the generated .env satisfies the API's own validation" "$(head -4 "$WORK/env-error" | tr '\n' ' ')"
 fi
 
+# ------------------------- what the container is actually handed at boot --
+
+# The check above reads the .env file. The container does not: compose picks
+# which variables to pass and hard-codes some of them, so a setting the API
+# requires can be present in .env and still never reach the process. Removing
+# one from the compose file is a one-line change that nothing else notices
+# until a fresh install refuses to boot.
+#
+# `docker compose config` resolves the substitutions exactly as `up` would, so
+# this is the environment the API will really see.
+if compose_env="$(cd "$WORK" && docker compose config --format json 2>"$WORK/compose-error")"; then
+  if printf '%s' "$compose_env" | node --input-type=module -e "
+    import { loadApiEnv } from '${REPO}/packages/config/dist/index.js';
+    let raw = '';
+    for await (const chunk of process.stdin) raw += chunk;
+    const environment = JSON.parse(raw).services?.api?.environment ?? {};
+    if (Object.keys(environment).length === 0) throw new Error('the api service has no environment');
+    loadApiEnv(environment);
+  " 2>"$WORK/compose-env-error"; then
+    ok "the environment compose hands the API satisfies its own validation"
+  else
+    bad "the environment compose hands the API satisfies its own validation" \
+      "$(head -4 "$WORK/compose-env-error" | tr '\n' ' ')"
+  fi
+else
+  bad "docker compose config can be read as json" \
+    "$(head -2 "$WORK/compose-error" | tr '\n' ' ')"
+fi
+
 # ------------------------------------------------ the compose file itself --
 
 if (cd "$WORK" && docker compose config --quiet 2>"$WORK/compose-error"); then

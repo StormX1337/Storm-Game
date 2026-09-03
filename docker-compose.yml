@@ -113,7 +113,6 @@ services:
       UPDATE_CHECK_ENABLED: ${UPDATE_CHECK_ENABLED:-true}
       UPDATE_CONTROL_DIR: /var/lib/storm/control
     volumes:
-      - backup-data:/var/lib/storm/backups
       # The panel's only channel to anything on the host: it writes an update
       # request here and the host-side updater picks it up. Mounted always, so
       # installing the updater does not mean editing this file — but mounting a
@@ -244,7 +243,6 @@ services:
 volumes:
   postgres-data:
   redis-data:
-  backup-data:
   minio-data:
   agent-config:
 
