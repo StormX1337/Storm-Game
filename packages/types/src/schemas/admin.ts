@@ -162,6 +162,8 @@ export const createTemplateSchema = z.object({
   isActive: z.boolean().default(true),
 });
 
+export type CreateTemplateInput = z.infer<typeof createTemplateSchema>;
+
 export const updateTemplateSchema = createTemplateSchema.partial();
 
 /* ---------------------------------------------------------------- backups -- */

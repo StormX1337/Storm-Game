@@ -319,6 +319,44 @@ Imports are validated against the same schema the API uses. A template from an
 untrusted source is code you are about to run as root during installation:
 **read the install script before you import it.**
 
+### Pterodactyl eggs
+
+The same endpoint takes an egg. Nothing to convert first — paste the JSON or
+pick the file, and the panel works out which format it is holding.
+
+Most of the crossing is renaming: both formats describe a container, a startup
+line, an install script and a set of variables. Four things are not renaming,
+and the import reports whatever it could not carry in the same answer rather
+than in a log nobody reads.
+
+| Egg                             | Here                         |
+| ------------------------------- | ---------------------------- |
+| `{{server.build.default.port}}` | `{{server.allocation.port}}` |
+| `{{server.build.default.ip}}`   | `{{server.allocation.ip}}`   |
+| `{{server.build.env.VAR}}`      | `{{env.VAR}}`                |
+| `regex:/^([\w.-]+)\.jar$/`      | `regex:^([\w.-]+)\.jar$`     |
+
+A regex is the one that would have bitten quietly: an egg wraps its pattern in
+PHP delimiters, and this panel hands the argument straight to `RegExp`, where a
+leading slash is a character to match. Left alone, every value for that
+variable would have been refused — an import that looks perfectly fine until
+somebody builds on it.
+
+A pattern containing `|` cannot be carried at all, because rules are separated
+by `|` and the parser tears it in half. Those are dropped, the variable keeps
+its other checks, and the import says which variable lost what.
+
+Parsers this panel cannot write — `xml`, and Pterodactyl's own `file` — mean
+that config file is not kept in step with the server. It is reported and left
+out rather than stored as something that will silently do nothing.
+
+An egg carries no slug, no game and no category, so those are asked for
+alongside it and derived from its name when left blank. A slug already in use
+gets a number appended, unless you typed it yourself — your own slug is yours,
+and a clash there is a real answer. And an egg's own `features` (`eula`,
+`java_version`) are **not** mapped onto this panel's optional panels: matching
+them by name would hand a plugin manager to a game with no plugins.
+
 ---
 
 ## Included templates

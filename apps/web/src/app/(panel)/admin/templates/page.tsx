@@ -11,6 +11,7 @@ import {
   Search,
   SlidersHorizontal,
   Trash2,
+  Upload,
 } from 'lucide-react';
 import {
   Badge,
@@ -31,6 +32,7 @@ import {
   Field,
   Input,
   Skeleton,
+  Textarea,
   Switch,
   useConfirm,
   useToast,
@@ -47,6 +49,7 @@ export default function AdminTemplatesPage() {
   const [search, setSearch] = React.useState('');
   const [cloning, setCloning] = React.useState<TemplateSummary | null>(null);
   const [editingPanels, setEditingPanels] = React.useState<TemplateSummary | null>(null);
+  const [importing, setImporting] = React.useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ['admin', 'templates', search],
@@ -104,14 +107,20 @@ export default function AdminTemplatesPage() {
         </p>
       </div>
 
-      <div className="relative max-w-md">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="Search templates…"
-          className="pl-9"
-        />
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative min-w-[220px] max-w-md flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search templates…"
+            className="pl-9"
+          />
+        </div>
+        <Button variant="outline" onClick={() => setImporting(true)}>
+          <Upload />
+          Import
+        </Button>
       </div>
 
       {isLoading ? (
@@ -238,7 +247,187 @@ export default function AdminTemplatesPage() {
           }}
         />
       ) : null}
+
+      {importing ? (
+        <ImportDialog
+          onClose={() => setImporting(false)}
+          onImported={() => {
+            setImporting(false);
+            invalidate();
+          }}
+        />
+      ) : null}
     </div>
+  );
+}
+
+/**
+ * Bringing a template in from a file.
+ *
+ * Two formats through one field, because an operator does not care which one
+ * they are holding: an export from this panel, or a Pterodactyl egg out of the
+ * folder they arrived with. Every game that has ever been hosted has an egg
+ * for it, written by somebody who already solved the install script.
+ *
+ * What could not be carried across comes back with the answer rather than in a
+ * log nobody reads — an egg that arrives subtly wrong fails later, on
+ * somebody's server.
+ */
+function ImportDialog({ onClose, onImported }: { onClose: () => void; onImported: () => void }) {
+  const toast = useToast();
+  const [text, setText] = React.useState('');
+  const [slug, setSlug] = React.useState('');
+  const [game, setGame] = React.useState('');
+  const [category, setCategory] = React.useState('');
+  const [warnings, setWarnings] = React.useState<string[] | null>(null);
+
+  const readFile = async (file: File): Promise<void> => {
+    setText(await file.text());
+    setWarnings(null);
+  };
+
+  const parsed = React.useMemo(() => {
+    if (!text.trim()) return null;
+    try {
+      return JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      return 'broken' as const;
+    }
+  }, [text]);
+
+  const isEgg =
+    parsed !== null &&
+    parsed !== 'broken' &&
+    (typeof parsed.meta === 'object' || typeof parsed.scripts === 'object');
+
+  const submit = useMutation({
+    mutationFn: () =>
+      api.post<{ name: string; slug: string; warnings?: string[] }>('/admin/templates/import', {
+        ...(parsed as Record<string, unknown>),
+        ...(slug.trim() ? { slug: slug.trim() } : {}),
+        ...(game.trim() ? { game: game.trim() } : {}),
+        ...(category.trim() ? { category: category.trim() } : {}),
+      }),
+    onSuccess: (result) => {
+      if (result.warnings && result.warnings.length > 0) {
+        // Imported, but not cleanly. Keeping the dialog open is the only way
+        // an operator reads this before it matters.
+        setWarnings(result.warnings);
+        toast.success(`Imported "${result.name}"`, 'With notes — read them before building on it.');
+        return;
+      }
+      toast.success(`Imported "${result.name}"`, `Saved as ${result.slug}.`);
+      onImported();
+    },
+    onError: (error) => toast.error('Could not import that', errorMessage(error)),
+  });
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Import a template</DialogTitle>
+          <DialogDescription>
+            A Storm export, or a Pterodactyl egg. Paste the JSON or pick the file.
+          </DialogDescription>
+        </DialogHeader>
+
+        {warnings ? (
+          <div className="space-y-3">
+            <p className="text-sm">
+              The template was created. These parts could not be carried across:
+            </p>
+            <ul className="space-y-2">
+              {warnings.map((warning) => (
+                <li
+                  key={warning}
+                  className="rounded-lg border border-warning/30 bg-warning/10 p-3 text-xs text-foreground"
+                >
+                  {warning}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <Field label="Template file">
+              <Input
+                type="file"
+                accept="application/json,.json"
+                aria-label="Template file"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) void readFile(file);
+                }}
+              />
+            </Field>
+
+            <Field
+              label="…or paste it"
+              hint={
+                parsed === 'broken'
+                  ? 'That is not valid JSON yet.'
+                  : isEgg
+                    ? 'Reads like a Pterodactyl egg.'
+                    : undefined
+              }
+            >
+              <Textarea
+                value={text}
+                onChange={(event) => setText(event.target.value)}
+                placeholder='{ "name": "Paper", … }'
+                rows={8}
+                className="font-mono text-xs"
+              />
+            </Field>
+
+            {isEgg ? (
+              <div className="grid gap-3 sm:grid-cols-3">
+                {/* An egg carries none of these, so they are asked for here
+                    rather than guessed at badly. Blank is fine: the name
+                    becomes the slug and the game, and the category is Other. */}
+                <Field label="Slug">
+                  <Input
+                    value={slug}
+                    onChange={(event) => setSlug(event.target.value)}
+                    placeholder="from the name"
+                  />
+                </Field>
+                <Field label="Game">
+                  <Input
+                    value={game}
+                    onChange={(event) => setGame(event.target.value)}
+                    placeholder="from the name"
+                  />
+                </Field>
+                <Field label="Category">
+                  <Input
+                    value={category}
+                    onChange={(event) => setCategory(event.target.value)}
+                    placeholder="Other"
+                  />
+                </Field>
+              </div>
+            ) : null}
+          </div>
+        )}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={warnings ? onImported : onClose}>
+            {warnings ? 'Done' : 'Cancel'}
+          </Button>
+          {warnings ? null : (
+            <Button
+              onClick={() => submit.mutate()}
+              disabled={parsed === null || parsed === 'broken'}
+              loading={submit.isPending}
+            >
+              Import
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

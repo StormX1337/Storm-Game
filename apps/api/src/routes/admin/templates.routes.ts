@@ -6,13 +6,36 @@ import {
   createTemplateSchema,
   paginationQuerySchema,
   updateTemplateSchema,
+  type CreateTemplateInput,
 } from '@storm/types';
 import { body, params, query } from '../../lib/validation.js';
 import { ok, paginated, pageArgs } from '../../lib/response.js';
 import { badRequest, conflict, notFound } from '../../lib/errors.js';
 import { toTemplateDetail, toTemplateSummary } from '../../lib/transformers.js';
+import { convertEgg, isPterodactylEgg } from '../../services/egg.js';
 
 const idParam = z.object({ id: z.string().min(1).max(64) });
+
+/**
+ * What an egg cannot tell us.
+ *
+ * It has no slug, no notion of which game it is beyond its own name, and no
+ * category — so those may be supplied alongside it, and are derived when they
+ * are not.
+ */
+const eggOverridesSchema = z
+  .object({
+    slug: z
+      .string()
+      .trim()
+      .min(1)
+      .max(100)
+      .regex(/^[a-z0-9-]+$/, 'Lowercase letters, numbers and dashes only')
+      .optional(),
+    game: z.string().trim().min(1).max(100).optional(),
+    category: z.string().trim().min(1).max(100).optional(),
+  })
+  .passthrough();
 
 export default async function adminTemplateRoutes(app: FastifyInstance): Promise<void> {
   app.addHook('preHandler', app.authenticate);
@@ -299,12 +322,48 @@ export default async function adminTemplateRoutes(app: FastifyInstance): Promise
 
   app.post(
     '/import',
-    { schema: { tags: ['Admin: Templates'], summary: 'Import a template JSON' } },
+    {
+      schema: {
+        tags: ['Admin: Templates'],
+        summary: 'Import a template, from this panel or from a Pterodactyl egg',
+      },
+    },
     async (request, reply) => {
-      const input = body(request, createTemplateSchema);
+      // Two formats through one door, because the operator does not care which
+      // they have: an export from this panel, or an egg from the folder they
+      // arrived with. Every game that has ever been hosted has an egg for it,
+      // written by somebody who already solved the install script, and
+      // retyping that by hand is the reason people do not move.
+      const raw: unknown = request.body;
+      let input: CreateTemplateInput;
+      let warnings: string[] = [];
 
-      const existing = await app.prisma.gameTemplate.findUnique({ where: { slug: input.slug } });
-      if (existing) throw conflict('A template with that slug already exists');
+      if (isPterodactylEgg(raw)) {
+        const overrides = body(request, eggOverridesSchema);
+        try {
+          const converted = convertEgg(raw, overrides);
+          input = converted.template;
+          warnings = converted.warnings;
+        } catch (error) {
+          throw badRequest(error instanceof Error ? error.message : 'That egg could not be read');
+        }
+      } else {
+        input = body(request, createTemplateSchema);
+      }
+
+      // An egg carries no slug, so one is derived from its name — and the
+      // operator importing thirty of them should not be stopped by a
+      // collision they did not cause. A slug they typed themselves is theirs,
+      // and a clash there is a real answer.
+      const requestedSlug = input.slug;
+      input.slug = await freeSlug(app, input.slug);
+      if (input.slug !== requestedSlug) {
+        const asked = (raw as { slug?: unknown }).slug;
+        if (typeof asked === 'string' && asked.trim() === requestedSlug) {
+          throw conflict('A template with that slug already exists');
+        }
+        warnings.push(`"${requestedSlug}" was taken, so this was saved as "${input.slug}".`);
+      }
 
       const { variables, ...rest } = input;
       const template = await app.prisma.gameTemplate.create({
@@ -314,7 +373,10 @@ export default async function adminTemplateRoutes(app: FastifyInstance): Promise
           logConfig: rest.logConfig as object,
           variables: { create: variables },
         },
-        include: { variables: true, _count: { select: { servers: true } } },
+        include: {
+          variables: { orderBy: { sortOrder: 'asc' } },
+          _count: { select: { servers: true } },
+        },
       });
 
       await app.audit.log(request, {
@@ -322,9 +384,25 @@ export default async function adminTemplateRoutes(app: FastifyInstance): Promise
         targetType: 'template',
         targetId: template.id,
         targetLabel: template.name,
+        metadata: { format: isPterodactylEgg(raw) ? 'pterodactyl-egg' : 'storm', warnings },
       });
 
-      return reply.status(201).send(ok(toTemplateDetail(template)));
+      return reply.status(201).send(ok({ ...toTemplateDetail(template), warnings }));
     },
   );
+}
+
+/**
+ * The first slug not already taken.
+ *
+ * Bounded, and the bound is the answer rather than a silent give-up: thirty
+ * templates all called "paper" is a mess somebody made on purpose.
+ */
+async function freeSlug(app: FastifyInstance, slug: string): Promise<string> {
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    const candidate = attempt === 0 ? slug : `${slug}-${attempt + 1}`;
+    const taken = await app.prisma.gameTemplate.findUnique({ where: { slug: candidate } });
+    if (!taken) return candidate;
+  }
+  throw conflict(`There are already fifty templates called "${slug}". Give this one a slug.`);
 }
