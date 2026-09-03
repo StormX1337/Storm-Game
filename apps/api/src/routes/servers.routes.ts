@@ -5,6 +5,7 @@ import {
   Permission,
   ServerStatus,
   WebhookEvent,
+  cloneServerSchema,
   consoleCommandSchema,
   createServerSchema,
   paginationQuerySchema,
@@ -117,6 +118,95 @@ export default async function serverRoutes(app: FastifyInstance): Promise<void> 
       await app.audit.activity(request, { serverId: server.id, event: 'server:created' });
 
       return reply.status(201).send(ok(toServerSummary(server)));
+    },
+  );
+
+  /* ----------------------------------------------------------- clone -- */
+
+  app.post(
+    '/:id/clone',
+    {
+      preHandler: app.requirePermission(Permission.SERVERS_CREATE),
+      schema: { tags: ['Servers'], summary: 'Create another server like this one' },
+    },
+    async (request, reply) => {
+      const user = request.currentUser();
+      const { id } = params(request, idParam);
+      const input = body(request, cloneServerSchema);
+
+      // Read access to the original, then the ordinary right to make a server.
+      // Both, because a clone is a read of one thing and a write of another.
+      const access = await app.serverAccess.require(user, id, Permission.SERVERS_VIEW);
+      // A suspended server is usually an unpaid one. Copying it into a fresh
+      // server would be the cheapest way around the suspension.
+      ServerAccessService.assertNotSuspended(access);
+      const source = access.server;
+
+      const canAssignOwner = user.role === 'OWNER' || user.permissions.has(Permission.ADMIN_USERS);
+      if (input.ownerId && input.ownerId !== source.ownerId && !canAssignOwner) {
+        throw forbidden('You cannot create servers for other users');
+      }
+      const ownerId = input.ownerId ?? source.ownerId;
+      // A customer may copy their own server, not somebody else's onto
+      // themselves — serverAccess already decided they may read this one, and
+      // a subuser reading it is not its owner.
+      if (ownerId !== user.id && !canAssignOwner) {
+        throw forbidden('You cannot create servers for other users');
+      }
+
+      const created = await app.servers.create(
+        {
+          name: input.name,
+          description: input.description ?? source.description ?? undefined,
+          nodeId: input.nodeId ?? source.nodeId,
+          templateId: source.templateId,
+          allocationId: input.allocationId,
+          additionalAllocationIds: [],
+          // The image the original is actually running, unless its template
+          // has stopped offering that one — an admin editing the image list
+          // does not make the servers already on it uncopyable.
+          dockerImage: offeredByTemplate(source) ? source.dockerImage : undefined,
+          startupCommand: source.startupCommand,
+          // The variables as they stand on the original, not the template's
+          // defaults: the point of copying a server is that somebody already
+          // got these right.
+          environment: Object.fromEntries(
+            (source.variables as { key: string; value: string }[]).map((variable) => [
+              variable.key,
+              variable.value,
+            ]),
+          ),
+          limits: {
+            cpuLimit: source.cpuLimit,
+            memoryLimit: source.memoryLimit,
+            diskLimit: source.diskLimit,
+            swapLimit: source.swapLimit,
+            ioWeight: source.ioWeight,
+            pidsLimit: source.pidsLimit,
+            oomKill: source.oomKill,
+          },
+          skipInstall: false,
+          startOnCompletion: input.startOnCompletion,
+        },
+        ownerId,
+        user.id,
+        { unrestrictedNodes: canSeeEveryNode(user) },
+      );
+
+      await app.audit.log(request, {
+        action: 'server.cloned',
+        targetType: 'server',
+        targetId: created.id,
+        targetLabel: created.name,
+        metadata: { sourceServerId: source.id, nodeId: created.nodeId },
+      });
+      await app.audit.activity(request, {
+        serverId: created.id,
+        event: 'server:created',
+        metadata: { clonedFrom: source.shortId },
+      });
+
+      return reply.status(201).send(ok(toServerSummary(created)));
     },
   );
 
@@ -925,4 +1015,13 @@ export default async function serverRoutes(app: FastifyInstance): Promise<void> 
     });
     return ok({ removed: true });
   });
+}
+
+/** Whether a server is running an image its template still lists. */
+function offeredByTemplate(server: {
+  dockerImage: string;
+  template?: { dockerImages?: unknown } | null;
+}): boolean {
+  const images = (server.template?.dockerImages ?? {}) as Record<string, unknown>;
+  return Object.values(images).includes(server.dockerImage);
 }

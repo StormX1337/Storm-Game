@@ -41,6 +41,27 @@ export const createServerSchema = z.object({
 });
 export type CreateServerInput = z.infer<typeof createServerSchema>;
 
+/**
+ * Another server like this one.
+ *
+ * Everything that decides what the server *is* — its template, image, startup
+ * line, variables and limits — comes from the one being copied, so the only
+ * things asked for are the ones that cannot be shared: a name, and where it
+ * goes. A host setting up the fourth server for the same customer should not
+ * be filling in the same eleven fields a fourth time.
+ */
+export const cloneServerSchema = z.object({
+  name: z.string().trim().min(1).max(100),
+  description: z.string().trim().max(2000).optional(),
+  /** Defaults to the source's node. */
+  nodeId: cuidLikeId.optional(),
+  allocationId: cuidLikeId.optional(),
+  /** Admins only, as everywhere else. Defaults to the source's owner. */
+  ownerId: cuidLikeId.optional(),
+  startOnCompletion: z.boolean().default(false),
+});
+export type CloneServerInput = z.infer<typeof cloneServerSchema>;
+
 export const updateServerSchema = z.object({
   name: z.string().trim().min(1).max(100).optional(),
   description: z.string().trim().max(2000).nullable().optional(),

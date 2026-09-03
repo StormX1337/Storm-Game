@@ -20,6 +20,7 @@ import { api, errorMessage } from '@/lib/api';
 import { formatDate } from '@/lib/format';
 import { useServer } from '@/components/panel/server-context';
 import { ServerLimitsCard } from '@/components/panel/server-limits-card';
+import { ServerCloneCard } from '@/components/panel/server-clone-card';
 import { ServerMoveCard } from '@/components/panel/server-move-card';
 
 export default function ServerSettingsPage() {
@@ -141,6 +142,8 @@ export default function ServerSettingsPage() {
       </Card>
 
       <ServerLimitsCard />
+
+      <ServerCloneCard />
 
       <ServerMoveCard />
 

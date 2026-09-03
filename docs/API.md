@@ -228,6 +228,15 @@ response carries `x-ratelimit-limit`, `x-ratelimit-remaining` and
 | `GET /templates/:id`             | One template with its variables                            |
 | `GET /templates/meta/categories` | Category list for filtering                                |
 
+`POST /servers/:id/clone` makes another server from an existing one: the same
+template, image, startup command, variables and limits, with a new name and
+optionally a different node. It is a new server in every way that matters — its
+own identifier, port, SFTP account and install run — and it goes through
+everything `POST /servers` enforces, so a quota is still a quota and a node
+still has to be one the caller may use. A suspended server cannot be copied,
+and only somebody who may create servers for another account can make the copy
+land on one.
+
 `GET /nodes` shows an account without `nodes.manage` only the nodes that are
 public, online and not in maintenance — and `POST /servers` accepts exactly
 those. Hiding a node from a dropdown is not a boundary; the pair is. Someone
@@ -237,21 +246,22 @@ everybody, since it means "no new servers here" rather than "not for you".
 
 ### Servers
 
-|                                  | Permission                              |
-| -------------------------------- | --------------------------------------- |
-| `GET /servers`                   | `servers.view`                          |
-| `POST /servers`                  | `servers.create`                        |
-| `GET /servers/:id`               | `servers.view`                          |
-| `PATCH /servers/:id`             | `servers.update`, or the server's owner |
-| `DELETE /servers/:id`            | `servers.delete`                        |
-| `POST /servers/:id/power`        | `servers.power`                         |
-| `POST /servers/:id/command`      | `servers.console.send`                  |
-| `POST /servers/:id/reinstall`    | `servers.update`                        |
-| `GET /servers/:id/stats`         | `servers.view`                          |
-| `GET /servers/:id/stats/history` | `servers.view`                          |
-| `PATCH /servers/:id/startup`     | `servers.startup`                       |
-| `PUT /servers/:id/variables`     | `servers.startup`                       |
-| `GET /servers/:id/activity`      | `servers.view`                          |
+|                                  | Permission                               |
+| -------------------------------- | ---------------------------------------- |
+| `GET /servers`                   | `servers.view`                           |
+| `POST /servers`                  | `servers.create`                         |
+| `POST /servers/:id/clone`        | `servers.create`, and read on the source |
+| `GET /servers/:id`               | `servers.view`                           |
+| `PATCH /servers/:id`             | `servers.update`, or the server's owner  |
+| `DELETE /servers/:id`            | `servers.delete`                         |
+| `POST /servers/:id/power`        | `servers.power`                          |
+| `POST /servers/:id/command`      | `servers.console.send`                   |
+| `POST /servers/:id/reinstall`    | `servers.update`                         |
+| `GET /servers/:id/stats`         | `servers.view`                           |
+| `GET /servers/:id/stats/history` | `servers.view`                           |
+| `PATCH /servers/:id/startup`     | `servers.startup`                        |
+| `PUT /servers/:id/variables`     | `servers.startup`                        |
+| `GET /servers/:id/activity`      | `servers.view`                           |
 
 Creating a server takes its resource ceilings under `limits`, in MiB and
 percent — `cpuLimit` is percent of one core, so `200` means two cores:
@@ -422,34 +432,39 @@ panel can say which that is.
 
 Everything below needs a staff role.
 
-|                                                                              | Permission           |
-| ---------------------------------------------------------------------------- | -------------------- |
-| `GET/POST /admin/users`, `GET/PATCH/DELETE /admin/users/:id`                 | `users.*`            |
-| `POST /admin/users/:id/suspend` · `/unsuspend`                               | `users.suspend`      |
-| `POST /admin/users/:id/reset-password` · `/disable-2fa`                      | `users.update`       |
-| `GET /admin/users/meta/roles` · `/meta/permissions`                          | `users.view`         |
-| `GET/POST /admin/nodes`, `GET/PATCH/DELETE /admin/nodes/:id`                 | `nodes.*`            |
-| `GET/POST /admin/nodes/:id/tokens`, `DELETE …/:tokenId`                      | `nodes.manage`       |
-| `GET /admin/nodes/:id/configuration`                                         | `nodes.manage`       |
-| `POST /admin/nodes/:id/bootstrap`                                            | `nodes.manage`       |
-| `GET /admin/nodes/:id/health`                                                | `nodes.view`         |
-| `GET/POST /admin/nodes/:id/allocations`, `DELETE …/:allocationId`            | `nodes.manage`       |
-| `POST /admin/nodes/:id/allocations/prune`                                    | `nodes.manage`       |
-| `GET /admin/servers`                                                         | `servers.view.all`   |
-| `POST /admin/servers/:id/transfer` · `/sync`                                 | `servers.update.all` |
-| `GET/POST /admin/templates`, `GET/PATCH/DELETE /admin/templates/:id`         | `templates.*`        |
-| `POST /admin/templates/:id/clone`, `GET …/export`, `POST /import`            | `templates.manage`   |
-| `GET /admin/overview`                                                        | `admin.dashboard`    |
-| `GET /admin/audit`                                                           | `audit.view`         |
-| `GET/PATCH /admin/settings`                                                  | `settings.manage`    |
-| `GET/POST /admin/backup-storages`, `PATCH/DELETE /admin/backup-storages/:id` | `settings.manage`    |
-| `GET/POST /admin/database-hosts`, `PATCH/DELETE /admin/database-hosts/:id`   | `settings.manage`    |
-| `POST /admin/database-hosts/:id/test`                                        | `settings.manage`    |
-| `POST /admin/settings/mail/test`                                             | `settings.manage`    |
-| `GET/POST /admin/webhooks`, `PATCH/DELETE /admin/webhooks/:id`               | `webhooks.manage`    |
-| `GET /admin/webhooks/events` · `/admin/webhooks/:id/deliveries`              | `webhooks.manage`    |
-| `POST /admin/webhooks/:id/test`                                              | `webhooks.manage`    |
-| `GET /admin/updates` · `POST /admin/updates/apply`                           | `panel.update`       |
+|                                                                      | Permission           |
+| -------------------------------------------------------------------- | -------------------- |
+| `GET/POST /admin/users`, `GET/PATCH/DELETE /admin/users/:id`         | `users.*`            |
+| `POST /admin/users/:id/suspend` · `/unsuspend`                       | `users.suspend`      |
+| `POST /admin/users/:id/reset-password` · `/disable-2fa`              | `users.update`       |
+| `GET /admin/users/meta/roles` · `/meta/permissions`                  | `users.view`         |
+| `GET/POST /admin/nodes`, `GET/PATCH/DELETE /admin/nodes/:id`         | `nodes.*`            |
+| `GET/POST /admin/nodes/:id/tokens`, `DELETE …/:tokenId`              | `nodes.manage`       |
+| `GET /admin/nodes/:id/configuration`                                 | `nodes.manage`       |
+| `POST /admin/nodes/:id/bootstrap`                                    | `nodes.manage`       |
+| `GET /admin/nodes/:id/health`                                        | `nodes.view`         |
+| `GET/POST /admin/nodes/:id/allocations`, `DELETE …/:allocationId`    | `nodes.manage`       |
+| `POST /admin/nodes/:id/allocations/prune`                            | `nodes.manage`       |
+| `GET /admin/servers`                                                 | `servers.view.all`   |
+| `POST /admin/servers/:id/transfer` · `/sync`                         | `servers.update.all` |
+| `GET/POST /admin/templates`, `GET/PATCH/DELETE /admin/templates/:id` | `templates.*`        |
+| `POST /admin/templates/:id/clone`, `GET …/export`, `POST /import`    | `templates.manage`   |
+
+`POST /admin/templates/import` takes either this panel's own export or a
+Pterodactyl egg, works out which, and answers with the template it created
+plus a `warnings` list naming anything an egg could not carry across. See
+[GAME-TEMPLATES.md](GAME-TEMPLATES.md).
+| `GET /admin/overview` | `admin.dashboard` |
+| `GET /admin/audit` | `audit.view` |
+| `GET/PATCH /admin/settings` | `settings.manage` |
+| `GET/POST /admin/backup-storages`, `PATCH/DELETE /admin/backup-storages/:id` | `settings.manage` |
+| `GET/POST /admin/database-hosts`, `PATCH/DELETE /admin/database-hosts/:id` | `settings.manage` |
+| `POST /admin/database-hosts/:id/test` | `settings.manage` |
+| `POST /admin/settings/mail/test` | `settings.manage` |
+| `GET/POST /admin/webhooks`, `PATCH/DELETE /admin/webhooks/:id` | `webhooks.manage` |
+| `GET /admin/webhooks/events` · `/admin/webhooks/:id/deliveries` | `webhooks.manage` |
+| `POST /admin/webhooks/:id/test` | `webhooks.manage` |
+| `GET /admin/updates` · `POST /admin/updates/apply` | `panel.update` |
 
 ### Node installation
 
