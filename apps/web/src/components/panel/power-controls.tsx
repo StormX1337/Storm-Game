@@ -4,13 +4,22 @@ import * as React from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { Play, RotateCw, Skull, Square } from 'lucide-react';
 import { Button, useConfirm, useToast } from '@storm/ui';
-import type { ServerStatus } from '@storm/types';
+import { INSTALL_BUSY_STATUSES, type ServerStatus } from '@storm/types';
 import { api, errorMessage } from '@/lib/api';
 
 type PowerAction = 'start' | 'stop' | 'restart' | 'kill';
 
 const RUNNING: ServerStatus[] = ['ONLINE', 'STARTING', 'STOPPING'];
-const BUSY: ServerStatus[] = ['INSTALLING', 'REINSTALLING', 'SUSPENDED'];
+
+/**
+ * Offered here is exactly what the API will accept.
+ *
+ * The list used to be written out by hand and had drifted: a server being
+ * moved to another node, or one whose reinstall fell over, both showed a lit
+ * Start button that the API answers with a 409 — the customer presses it and
+ * gets an error toast for an action the panel should never have offered.
+ */
+const BUSY: ServerStatus[] = [...INSTALL_BUSY_STATUSES, 'SUSPENDED'];
 
 /**
  * Power buttons for a server. Availability is driven by the live status so a

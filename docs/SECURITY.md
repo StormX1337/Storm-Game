@@ -214,6 +214,17 @@ The file manager runs entirely on the agent. The panel has no filesystem access
 to server data at all, which means a bug in the panel's path handling cannot
 reach a file: there is nothing there to reach.
 
+**One writer at a time.** While an install, a reinstall or a move is running,
+the panel owns the server's data directory and the customer may not power the
+container up or take a backup of it — status `INSTALLING`, `REINSTALLING`,
+`INSTALL_FAILED` or `TRANSFERRING` refuses both with `409`. The guard used to
+read `installedAt` alone, which stays set through a reinstall and through a
+move: a customer could start the game server into a directory an install
+script was in the middle of rewriting, or into one a transfer was copying to
+another machine, and whichever copy won was the corrupt one. It is checked in
+the route and again in the power service itself, because schedules and the
+console websocket call the service directly.
+
 ---
 
 ## Panel ↔ agent

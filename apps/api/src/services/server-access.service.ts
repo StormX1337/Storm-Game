@@ -1,6 +1,12 @@
 import type { FastifyInstance } from 'fastify';
 import type { Prisma } from '@storm/database';
-import { CUSTOMER_PERMISSIONS, ErrorCode, Permission } from '@storm/types';
+import {
+  CUSTOMER_PERMISSIONS,
+  ErrorCode,
+  Permission,
+  ServerStatus,
+  isInstallBusy,
+} from '@storm/types';
 import type { AuthenticatedUser } from '../plugins/auth.js';
 import { AppError, forbidden, notFound } from '../lib/errors.js';
 
@@ -105,6 +111,14 @@ export class ServerAccessService {
     }
   }
 
+  /**
+   * Blocks anything that would touch the files while a job owns them.
+   *
+   * `installedAt` alone was never the whole answer: it stays set through a
+   * reinstall and through a move, so a server whose directory was being wiped,
+   * rebuilt or copied to another machine still read as installed and could be
+   * started underneath the job doing the work.
+   */
   static assertInstalled(access: ServerAccess): void {
     if (!access.server.installedAt) {
       throw new AppError(
@@ -113,6 +127,23 @@ export class ServerAccessService {
         'This server is still installing. Please wait for the installation to finish.',
       );
     }
+    if (isInstallBusy(access.server.status as ServerStatus)) {
+      throw new AppError(409, ErrorCode.SERVER_NOT_INSTALLED, busyMessage(access.server.status));
+    }
+  }
+}
+
+/** Says which job is holding the files, so the answer is not just "no". */
+export function busyMessage(status: ServerStatus): string {
+  switch (status) {
+    case ServerStatus.REINSTALLING:
+      return 'This server is being reinstalled. Wait for the reinstall to finish.';
+    case ServerStatus.INSTALL_FAILED:
+      return 'This server did not finish installing. Reinstall it before using it again.';
+    case ServerStatus.TRANSFERRING:
+      return 'This server is being moved to another node. Wait for the move to finish.';
+    default:
+      return 'This server is still installing. Please wait for the installation to finish.';
   }
 }
 

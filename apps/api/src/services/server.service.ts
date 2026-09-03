@@ -11,9 +11,10 @@ import {
   type ConfigFileParser,
   type CreateServerInput,
   type PowerAction,
+  isInstallBusy,
 } from '@storm/types';
 import { AppError, conflict, notFound, unprocessable } from '../lib/errors.js';
-import { SERVER_INCLUDE } from './server-access.service.js';
+import { SERVER_INCLUDE, busyMessage } from './server-access.service.js';
 
 /**
  * What this reads off a template variable — a structural subset, so both a
@@ -517,6 +518,11 @@ export class ServerService {
     }
     if (!server.installedAt) {
       throw new AppError(409, ErrorCode.SERVER_NOT_INSTALLED, 'This server is still installing');
+    }
+    // The route in front of this checks the same thing, but a schedule firing
+    // mid-reinstall and the websocket's power buttons both come straight here.
+    if (isInstallBusy(server.status)) {
+      throw new AppError(409, ErrorCode.SERVER_NOT_INSTALLED, busyMessage(server.status));
     }
 
     await this.app.agents.request(server.node, `/api/v1/servers/${server.uuid}/power`, {

@@ -44,6 +44,29 @@ export const ACTIVE_SERVER_STATUSES: ServerStatus[] = [
   ServerStatus.STOPPING,
 ];
 
+/**
+ * Statuses in which the panel, not the customer, owns the server's files.
+ *
+ * An install script runs in its own throwaway container against the same data
+ * directory, and a move copies that directory to another machine. Neither can
+ * survive the game server writing underneath it, so nothing may power the
+ * container up until the job is done. INSTALL_FAILED is in the list because a
+ * reinstall that fell over may have wiped the directory on its way past:
+ * `installedAt` still says the server was installed once, which was enough to
+ * let a customer start it into whatever the failed run left behind.
+ */
+export const INSTALL_BUSY_STATUSES: ServerStatus[] = [
+  ServerStatus.INSTALLING,
+  ServerStatus.REINSTALLING,
+  ServerStatus.INSTALL_FAILED,
+  ServerStatus.TRANSFERRING,
+];
+
+/** True while an install, reinstall or move owns the server's data directory. */
+export function isInstallBusy(status: ServerStatus): boolean {
+  return INSTALL_BUSY_STATUSES.includes(status);
+}
+
 export const NodeStatus = {
   ONLINE: 'ONLINE',
   OFFLINE: 'OFFLINE',
