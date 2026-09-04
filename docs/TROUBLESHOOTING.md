@@ -386,7 +386,18 @@ agent tails the file.
 
 **Commands do nothing.** The server is not running, the account lacks
 `servers.console.send`, or the game does not read stdin (some do not — use RCON
-instead).
+instead). A command answered with `FORBIDDEN` on a console that was working a
+minute ago means the permission was taken away since it opened, or the server
+was suspended — permissions are resolved on every command, not once when the
+tab was opened. A console that closes itself with `4403` means the access went
+entirely: the share was removed, the account was suspended, or its session was
+signed out somewhere else.
+
+**"Lost the connection to the node. Reconnecting…"** is the panel's own socket
+to the agent, not the browser's socket to the panel — the console reconnects
+behind the scenes with backoff. If it gives up and asks for a reload, the node
+has been unreachable for several minutes: check `systemctl status storm-agent`
+on it.
 
 ---
 

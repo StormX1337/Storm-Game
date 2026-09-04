@@ -13,6 +13,12 @@ import type { AuthenticatedUser } from '../plugins/auth.js';
 
 const PING_INTERVAL = 25_000;
 
+/** How many times the panel re-opens its own socket to the node before giving up. */
+const MAX_UPSTREAM_ATTEMPTS = 8;
+
+/** Ceiling on the wait between those attempts. */
+const MAX_UPSTREAM_BACKOFF = 30_000;
+
 /**
  * Per-server browser socket.
  *
@@ -99,6 +105,42 @@ export async function registerServerSocket(app: FastifyInstance): Promise<void> 
 
       let upstream: WsClient | null = null;
       let closed = false;
+      let attempts = 0;
+      let retry: NodeJS.Timeout | null = null;
+
+      /**
+       * Puts the upstream connection back after it drops.
+       *
+       * The socket already told the browser "Reconnecting…" when the agent
+       * went away, and then did nothing of the kind: an agent restart — a
+       * panel update, a node reboot, a dropped link — left the console open,
+       * silent and permanently empty, until somebody thought to reload a page
+       * that gave them no reason to. The browser's own reconnect never fired
+       * either, because from its side nothing had closed.
+       *
+       * Backoff is capped, and so is patience: a node that has not come back
+       * within a few minutes is not coming back inside this console, and the
+       * browser is told plainly rather than left watching a spinner.
+       */
+      const scheduleReconnect = (): void => {
+        if (closed || retry) return;
+        attempts += 1;
+        if (attempts > MAX_UPSTREAM_ATTEMPTS) {
+          send(socket, {
+            type: 'error',
+            code: 'NODE_UNREACHABLE',
+            message: 'The node is still not answering. Reload the page to try again.',
+          });
+          return;
+        }
+
+        const delay = Math.min(1000 * 2 ** (attempts - 1), MAX_UPSTREAM_BACKOFF);
+        retry = setTimeout(() => {
+          retry = null;
+          if (!closed) void connectUpstream();
+        }, delay);
+      };
+
       const connectUpstream = async (): Promise<void> => {
         try {
           const { authorization, secret } = await app.agents.credentials(server.nodeId);
@@ -117,6 +159,7 @@ export async function registerServerSocket(app: FastifyInstance): Promise<void> 
           });
 
           upstream.on('open', () => {
+            attempts = 0;
             upstream?.send(JSON.stringify({ type: 'logs' }));
           });
 
@@ -138,6 +181,7 @@ export async function registerServerSocket(app: FastifyInstance): Promise<void> 
               code: 'NODE_UNREACHABLE',
               message: 'Lost the connection to the node. Reconnecting…',
             });
+            scheduleReconnect();
           });
 
           upstream.on('error', (error: Error) => {
@@ -150,6 +194,7 @@ export async function registerServerSocket(app: FastifyInstance): Promise<void> 
             code: 'NODE_UNREACHABLE',
             message: 'The node hosting this server is not reachable right now',
           });
+          scheduleReconnect();
         }
       };
 
@@ -293,6 +338,7 @@ export async function registerServerSocket(app: FastifyInstance): Promise<void> 
       socket.on('close', () => {
         closed = true;
         clearInterval(heartbeat);
+        if (retry) clearTimeout(retry);
         upstream?.close();
         void subscriber.quit().catch(() => undefined);
       });

@@ -836,6 +836,11 @@ without waiting for anyone to reload it: the message is refused with
 `FORBIDDEN` when it is the permission that went, and the socket is closed with
 `4403` when the access did.
 
+If the panel's own connection to the node drops it reconnects behind the
+scenes, with backoff, and says so. After several failed attempts it stops and
+tells the client to reload rather than leaving a console that looks live and
+is not.
+
 ### Account socket
 
 ```

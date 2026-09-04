@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { after, before, beforeEach, describe, it } from 'node:test';
-import { WebSocket } from 'ws';
+import { WebSocket, WebSocketServer } from 'ws';
 import type { FastifyInstance } from 'fastify';
+import { hashToken } from '@storm/security';
 import { Permission, ServerStatus } from '@storm/types';
 import { createTestApp, deleteUser, registerUser, uniqueSuffix } from './helpers.js';
 import type { RegisteredUser } from './helpers.js';
@@ -31,6 +32,8 @@ describe('the console socket', () => {
   let serverId: string;
   let serverShortId: string;
   let nodeId: string;
+  let agentNodeId: string;
+  let agentServerShortId: string;
   const createdUsers: string[] = [];
 
   /** Opens a socket and collects everything it is sent. */
@@ -77,6 +80,53 @@ describe('the console socket', () => {
 
   const commandsLogged = () =>
     app.prisma.activityLog.count({ where: { serverId, event: 'server:console.command' } });
+
+  /**
+   * A websocket server standing in for a node agent, on its own node row.
+   *
+   * It accepts anything — the signature the panel sends is checked by the real
+   * agent, not here. What it is for is counting: how many times the panel
+   * opened a socket to it, and what happens to that count when it hangs up.
+   */
+  async function standInAgent(): Promise<{
+    waitForConnections: (count: number) => Promise<void>;
+    dropAll: () => void;
+    stop: () => Promise<void>;
+  }> {
+    let connections = 0;
+    const live = new Set<import('ws').WebSocket>();
+    const server = new WebSocketServer({ port: 0, host: '127.0.0.1' });
+
+    server.on('connection', (client) => {
+      connections += 1;
+      live.add(client);
+      client.on('close', () => live.delete(client));
+    });
+    await new Promise<void>((resolve) => server.on('listening', () => resolve()));
+
+    const port = (server.address() as { port: number }).port;
+    await app.prisma.node.update({ where: { id: agentNodeId }, data: { agentPort: port } });
+
+    return {
+      async waitForConnections(count) {
+        // The first reconnect waits a second, so this has to outlast that.
+        const deadline = Date.now() + 8000;
+        while (connections < count) {
+          if (Date.now() > deadline) {
+            throw new Error(`the panel opened ${connections} sockets, expected ${count}`);
+          }
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+      },
+      dropAll() {
+        for (const client of live) client.close();
+      },
+      async stop() {
+        for (const client of live) client.terminate();
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      },
+    };
+  }
 
   async function share(permissions: string[]): Promise<void> {
     await app.prisma.serverSubuser.upsert({
@@ -133,12 +183,57 @@ describe('the console socket', () => {
     serverId = server.id;
     serverShortId = server.shortId;
 
+    // A second node and server, for the tests that need a node that answers.
+    // The one above deliberately has nothing behind it.
+    const agentNode = await app.prisma.node.create({
+      data: {
+        name: `socket-agent-${suffix}`,
+        location: 'Test',
+        hostname: '127.0.0.1',
+        ip: '127.0.0.1',
+        scheme: 'http',
+        memoryTotal: 8192,
+        diskTotal: 51200,
+        status: 'ONLINE',
+      },
+    });
+    agentNodeId = agentNode.id;
+    await app.prisma.nodeToken.create({
+      data: {
+        nodeId: agentNodeId,
+        name: 'socket test',
+        tokenId: `tok_${suffix}`,
+        tokenHash: hashToken('a-shared-secret-for-the-test'),
+        secretEnc: app.encrypter.encrypt('a-shared-secret-for-the-test'),
+      },
+    });
+    agentServerShortId = (
+      await app.prisma.server.create({
+        data: {
+          name: 'Talkative',
+          shortId: uniqueSuffix().slice(0, 8),
+          ownerId: owner.id,
+          nodeId: agentNodeId,
+          templateId: template.id,
+          dockerImage: 'alpine',
+          startupCommand: 'true',
+          sftpUsername: `agent_${suffix}`,
+          sftpPasswordEnc: 'not-a-real-secret',
+          status: ServerStatus.OFFLINE,
+          installedAt: new Date(),
+        },
+      })
+    ).shortId;
   });
+
   after(async () => {
     await app.prisma.activityLog.deleteMany({ where: { serverId } });
     await app.prisma.serverSubuser.deleteMany({ where: { serverId } });
     await app.prisma.server.deleteMany({ where: { nodeId } });
+    await app.prisma.nodeToken.deleteMany({ where: { nodeId: agentNodeId } });
+    await app.prisma.server.deleteMany({ where: { nodeId: agentNodeId } });
     await app.prisma.node.delete({ where: { id: nodeId } }).catch(() => undefined);
+    await app.prisma.node.delete({ where: { id: agentNodeId } }).catch(() => undefined);
     for (const id of createdUsers) await deleteUser(app, id);
     await cleanup();
   });
@@ -356,6 +451,28 @@ describe('the console socket', () => {
     );
     socket.close();
     await app.prisma.apiKey.deleteMany({ where: { userId: owner.id } });
+  });
+
+  /* ------------------------------------ the half that faces the node -- */
+
+  it('opens its own socket to the node again after the agent goes away', async () => {
+    // The panel used to tell the browser "Reconnecting…" and then do nothing
+    // of the kind. An agent restart — a panel update, a node reboot — left the
+    // console open, silent and permanently empty, and the browser's own
+    // reconnect never fired either, because from its side nothing had closed.
+    const agent = await standInAgent();
+    try {
+      const { socket } = await open(owner.accessToken, agentServerShortId);
+      await agent.waitForConnections(1);
+
+      // The agent goes away and comes back, as one does during an update.
+      agent.dropAll();
+      await agent.waitForConnections(2);
+
+      socket.close();
+    } finally {
+      await agent.stop();
+    }
   });
 
   it('still answers a ping while all that is going on', async () => {
