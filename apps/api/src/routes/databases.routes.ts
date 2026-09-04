@@ -7,6 +7,7 @@ import {
   type ServerDatabaseView,
 } from '@storm/types';
 import { generatePassword } from '@storm/security';
+import { PRISMA_ERRORS, isPrismaError } from '@storm/database';
 import { body, params } from '../lib/validation.js';
 import { ok } from '../lib/response.js';
 import { AppError, badRequest, notFound } from '../lib/errors.js';
@@ -61,13 +62,21 @@ export default async function serverDatabaseRoutes(app: FastifyInstance): Promis
         );
       }
 
+      // Which hosts this server may use at all. Naming one explicitly used to
+      // skip this and look up any active host on the panel, so a customer
+      // could place their database on hardware they are not on — a host bound
+      // to another node, reserved for another tier or another region. The
+      // binding on a host is the operator's placement decision, and picking
+      // from a list is not the same as being allowed to pick anything.
+      const reachable = {
+        isActive: true,
+        OR: [{ nodeId: access.server.nodeId }, { nodeId: null }],
+      };
+
       const host = input.hostId
-        ? await app.prisma.databaseHost.findFirst({ where: { id: input.hostId, isActive: true } })
+        ? await app.prisma.databaseHost.findFirst({ where: { id: input.hostId, ...reachable } })
         : await app.prisma.databaseHost.findFirst({
-            where: {
-              isActive: true,
-              OR: [{ nodeId: access.server.nodeId }, { nodeId: null }],
-            },
+            where: reachable,
             orderBy: { nodeId: 'desc' },
           });
       if (!host) throw badRequest('No database host is available for this server');
@@ -108,11 +117,22 @@ export default async function serverDatabaseRoutes(app: FastifyInstance): Promis
           include: { host: true },
         });
       } catch (error) {
-        // Never leave an orphaned database behind if the row cannot be written.
-        await app.databases
-          .destroy(host, databaseName, username, input.remoteAccess)
-          .catch(() => undefined);
-        throw error;
+        // Never leave an orphaned database behind if the row cannot be
+        // written — with one exception, and it is the important one.
+        //
+        // A unique violation on the name means somebody else's row already
+        // holds it. Dropping "our" database by name would drop theirs: the
+        // name is the only handle, and by then it is not ours. The check
+        // above catches this on one API process; two of them, or two requests
+        // that interleave, can both pass it and only one can win. The loser
+        // must fail quietly, not take the winner's database with it.
+        if (!isPrismaError(error, PRISMA_ERRORS.UNIQUE_CONSTRAINT)) {
+          await app.databases
+            .destroy(host, databaseName, username, input.remoteAccess)
+            .catch(() => undefined);
+          throw error;
+        }
+        throw badRequest('That database name is already taken. Choose another.');
       }
 
       await app.audit.activity(request, {

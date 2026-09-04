@@ -418,6 +418,16 @@ panel can say which that is.
 | `POST /servers/:id/databases/:databaseId/rotate`     | New password           |
 | `DELETE /servers/:id/databases/:databaseId`          | Drop database and user |
 
+`hostId` on the create is optional and _bounded_: it may only name a host that
+already serves this server — one bound to its node, or one bound to no node at
+all, which is what an operator does to make a host shared. Naming any other
+host is a `400`, the same as having none available. Placement is the
+operator's decision, and being able to name a host is not permission to name
+any of them.
+
+Passwords are never in the listing. `GET …/credentials` returns one and writes
+`database:credentials_viewed` to the server's activity log.
+
 ### SFTP and sub-users
 
 |                                           |                                           |

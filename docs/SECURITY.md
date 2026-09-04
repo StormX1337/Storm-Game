@@ -293,15 +293,27 @@ A customer database gets its own database _and_ its own user on the host,
 granted rights to that one database only. Credentials are generated with a CSPRNG
 and stored encrypted with `ENCRYPTION_KEY`.
 
-Names are derived from the server's id and a counter, never from user input, so
-there is no identifier to inject into the `CREATE DATABASE` statement.
+Names are the server's short id and a name the customer chose, and that second
+half is why the validator matters: `[a-zA-Z0-9_]+`, must start with a letter,
+ASCII only, bounded length — checked again in the provisioner before it reaches
+a statement. (An earlier version of this document said names never came from
+user input. They do. The safety is the validator, not the absence of a
+customer, and a reader loosening that regex should know which.)
+
+Which host a database lands on is the operator's, not the customer's. A host
+bound to a node serves that node; a host bound to none is shared deliberately.
+The create accepts a `hostId` so a customer can pick between the hosts they
+already have, and it is checked against exactly that set — naming a host that
+does not serve this server is refused. It used to be looked up unscoped, which
+made "pick from your options" into "pick anything on the panel".
 
 Deleting a server drops its databases and users. Rotating a password does not
 disturb the grants.
 
 Nothing in the panel exposes another customer's database: the credential
 endpoint resolves the database through the same server-access function every
-other server route uses.
+other server route uses, and reading one is written to the server's activity
+log.
 
 ---
 
