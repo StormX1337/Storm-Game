@@ -289,6 +289,18 @@ Console output is demultiplexed from Docker's stream framing (stdout and
 stderr are interleaved with an 8-byte header on non-TTY containers), buffered
 per server, and trimmed so a chatty server cannot exhaust memory.
 
+There is exactly one attachment per container, however many people are
+watching — attaching is not free, and three separate things ask for one (a
+websocket opening, a server starting, and the heartbeat re-attaching whatever
+came up outside the agent's control). Callers that arrive while an attachment
+is being opened wait on it rather than opening a second, which would deliver
+every line twice and leak the first stream.
+
+A template's `startupDetection` and `crashDetection` patterns are compiled once
+rather than per line, and are shown at most the first 2000 characters of a log
+line. The patterns are not the customer's, but the log lines are influenced by
+them, and this is the agent that runs everybody's servers.
+
 ---
 
 ## How a server runs

@@ -28,6 +28,8 @@ interface Attachment {
  */
 export class ConsoleService extends EventEmitter {
   private readonly attachments = new Map<string, Attachment>();
+  /** Attachments being opened right now, so two callers share one. */
+  private readonly attaching = new Map<string, Promise<void>>();
   private readonly specs = new Map<
     string,
     {
@@ -74,10 +76,29 @@ export class ConsoleService extends EventEmitter {
     return this.attachments.get(uuid)?.buffer ?? [];
   }
 
-  /** Attaches to a container's TTY if it is running and not already attached. */
+  /**
+   * Attaches to a container's TTY if it is running and not already attached.
+   *
+   * Three places attach, all fire-and-forget: a websocket opening, a server
+   * starting, and the heartbeat re-attaching anything that came up outside the
+   * agent's control. Two of them landing together is ordinary, and the check
+   * below is not enough on its own — both callers pass it while the other is
+   * still waiting on Docker. That left the container with two live
+   * attachments: every console line delivered twice, and the first
+   * attachment's stream and stats poller leaked, because the map only ever
+   * kept the second. Whoever asks second waits on the first one's work.
+   */
   async attach(uuid: string): Promise<void> {
     if (this.attachments.has(uuid)) return;
+    const inFlight = this.attaching.get(uuid);
+    if (inFlight) return inFlight;
 
+    const started = this.openAttachment(uuid).finally(() => this.attaching.delete(uuid));
+    this.attaching.set(uuid, started);
+    return started;
+  }
+
+  private async openAttachment(uuid: string): Promise<void> {
     const info = await this.docker.inspect(uuid);
     if (!info?.State.Running) return;
 
@@ -182,13 +203,43 @@ export class ConsoleService extends EventEmitter {
 }
 
 /**
+ * How much of a log line a detection pattern is shown.
+ *
+ * Log lines are attacker-influenced: a customer types into their own console
+ * and the server echoes it back. Detection patterns are not theirs — they come
+ * from templates, and templates come from Pterodactyl eggs written by
+ * strangers — so the pair is somebody else's regex run against something a
+ * customer chose, on the agent that runs everybody's servers. Bounding the
+ * input does not make a pathological pattern linear, but it does stop one
+ * server's log line from being an arbitrarily long lever on it. No real
+ * "server started" line is anywhere near this long.
+ */
+const MAX_MATCH_LENGTH = 2000;
+
+/** Compiled once per pattern, because this runs on every line of every log. */
+const compiled = new Map<string, RegExp | null>();
+
+/**
  * Template-supplied patterns are operator input, but a bad one must degrade to
- * "no detection" rather than crashing the console for everyone.
+ * "no detection" rather than crashing the console for everyone. A pattern that
+ * will not compile falls back to a plain substring; `null` is cached for it so
+ * the failure is not rediscovered a thousand times a second.
  */
 function safeMatch(pattern: string, line: string): boolean {
-  try {
-    return new RegExp(pattern, 'i').test(line);
-  } catch {
-    return line.toLowerCase().includes(pattern.toLowerCase());
+  const subject = line.length > MAX_MATCH_LENGTH ? line.slice(0, MAX_MATCH_LENGTH) : line;
+
+  let expression = compiled.get(pattern);
+  if (expression === undefined) {
+    try {
+      expression = new RegExp(pattern, 'i');
+    } catch {
+      expression = null;
+    }
+    compiled.set(pattern, expression);
   }
+
+  if (!expression) return subject.toLowerCase().includes(pattern.toLowerCase());
+  // Shared across calls, so the last match position must not be either.
+  expression.lastIndex = 0;
+  return expression.test(subject);
 }
