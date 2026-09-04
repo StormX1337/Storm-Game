@@ -6,6 +6,18 @@ import { authenticateSocket } from './server-socket.js';
 const PING_INTERVAL = 25_000;
 
 /**
+ * How stale the socket's answer to "may they see this" is allowed to get.
+ *
+ * Re-reading on every event would mean a database round trip per resource
+ * sample per open dashboard — a lot of queries for a question whose answer
+ * changes about once a month. Bounded staleness is the trade, and the point is
+ * that it is bounded: before this the answer never expired at all.
+ *
+ * Exported so a test can wait exactly this long rather than guessing.
+ */
+export const VISIBILITY_TTL_MS = 10_000;
+
+/**
  * Account-wide socket that powers live dashboard tiles and the notification
  * bell. One Redis subscription per connection keeps the fan-out simple; each
  * message is filtered so a user only ever receives events about their own
@@ -25,37 +37,50 @@ export async function registerAccountSocket(app: FastifyInstance): Promise<void>
       return;
     }
 
-    const isAdmin = user.role === 'OWNER' || user.permissions.has(Permission.ADMIN_SERVERS);
     send(socket, { type: 'ready', userId: user.id });
 
-    // Servers the user can see; refreshed lazily when an unknown id arrives.
-    let visible = new Set(
-      (
-        await app.prisma.server.findMany({
-          where: { OR: [{ ownerId: user.id }, { subusers: { some: { userId: user.id } } }] },
-          select: { id: true },
-        })
-      ).map((server) => server.id),
-    );
-    let lastRefresh = Date.now();
+    /**
+     * Who this account is and what it can see, re-read when it goes stale.
+     *
+     * The cache this replaces only ever filled: a server id that was once
+     * visible was never asked about again, and being an administrator was
+     * decided at the handshake. So an ex-sub-user kept receiving live status
+     * and resource samples — CPU, memory, disk, network — for a server they
+     * had been removed from, and a demoted administrator kept a feed of every
+     * server and every node on the panel, both for as long as the tab stayed
+     * open. A dashboard is left open all day.
+     *
+     * Null means they may no longer be here at all, which closes the socket.
+     */
+    let cache: { at: number; ids: Set<string>; isAdmin: boolean } | null = null;
+
+    const visibility = async (): Promise<typeof cache> => {
+      if (cache && Date.now() - cache.at < VISIBILITY_TTL_MS) return cache;
+
+      const fresh = await app.refreshUser(user).catch(() => null);
+      if (!fresh) {
+        socket.close(4403, 'forbidden');
+        return null;
+      }
+
+      const servers = await app.prisma.server.findMany({
+        where: { OR: [{ ownerId: fresh.id }, { subusers: { some: { userId: fresh.id } } }] },
+        select: { id: true },
+      });
+      cache = {
+        at: Date.now(),
+        ids: new Set(servers.map((server) => server.id)),
+        isAdmin: fresh.role === 'OWNER' || fresh.permissions.has(Permission.ADMIN_SERVERS),
+      };
+      return cache;
+    };
 
     const canSee = async (serverId: string, ownerId?: string): Promise<boolean> => {
-      if (isAdmin) return true;
+      const now = await visibility();
+      if (!now) return false;
+      if (now.isAdmin) return true;
       if (ownerId === user.id) return true;
-      if (visible.has(serverId)) return true;
-      // A server created after the socket opened would otherwise stay invisible
-      // until reconnect; re-read at most once every 30 seconds.
-      if (Date.now() - lastRefresh < 30_000) return false;
-      lastRefresh = Date.now();
-      visible = new Set(
-        (
-          await app.prisma.server.findMany({
-            where: { OR: [{ ownerId: user.id }, { subusers: { some: { userId: user.id } } }] },
-            select: { id: true },
-          })
-        ).map((server) => server.id),
-      );
-      return visible.has(serverId);
+      return now.ids.has(serverId);
     };
 
     const subscriber = app.createRedis();
@@ -74,6 +99,7 @@ export async function registerAccountSocket(app: FastifyInstance): Promise<void>
           switch (channel) {
             case REDIS_CHANNELS.notifications: {
               if ((parsed as { userId?: string }).userId !== user.id) return;
+              if (!(await visibility())) return;
               send(socket, {
                 type: 'notification',
                 notification: (parsed as never as { notification: never }).notification,
@@ -97,7 +123,8 @@ export async function registerAccountSocket(app: FastifyInstance): Promise<void>
               return;
             }
             case REDIS_CHANNELS.nodeStatus: {
-              if (!isAdmin) return;
+              const now = await visibility();
+              if (!now?.isAdmin) return;
               const event = parsed as never as { nodeId: string; status: never };
               send(socket, { type: 'node:status', nodeId: event.nodeId, status: event.status });
               return;

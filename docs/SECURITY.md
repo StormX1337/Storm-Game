@@ -161,6 +161,15 @@ only being watched: the message is refused when the permission went, and the
 socket is closed when the access did. A socket opened with an API key is held
 to that key's scope on the same schedule.
 
+The dashboard socket had the same fault in a worse form: its list of servers
+the account may see only ever filled — an id that was once visible was never
+asked about again, and being an administrator was decided at the handshake. So
+an ex-sub-user kept receiving live status and resource samples for a server
+they had been removed from, and a demoted administrator kept a feed of every
+server and node on the panel. Both now expire after ten seconds. Ten rather
+than zero because re-reading on every event would be a query per resource
+sample per open dashboard; the point is that the answer expires at all.
+
 ---
 
 ## Container isolation
