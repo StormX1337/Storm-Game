@@ -164,14 +164,28 @@ deleted until unlocked — worth doing before any upgrade you are unsure about.
 this is destructive:
 
 1. The server is stopped and waited for.
-2. The archive is verified against its checksum.
-3. The current contents of the server directory are **deleted**.
-4. The archive is extracted, with every entry path re-validated.
-5. Ownership is reset to uid 1000.
-6. The server is started if it was running before.
+2. The archive is fetched, if it lives in object storage.
+3. **The archive is proved good before anything is deleted.** Against the
+   sha256 recorded when the backup was taken, when there is one; otherwise by
+   reading the whole archive through, which catches a truncated download or
+   the wrong bytes entirely.
+4. The current contents of the server directory are **deleted** (a truncating
+   restore only).
+5. The archive is extracted, with every entry path re-validated.
+6. Ownership is reset to uid 1000.
+7. The server is started if it was running before.
 
-A partially-extracted restore leaves the server stopped rather than half-
-restored, and the failure says so.
+Step 3 comes before step 4, and that order is the whole point: a restore is
+what somebody reaches for when something has already gone wrong, and it used
+to empty the live directory first and find out the archive was unreadable
+afterwards — taking the world with it and leaving nothing to put back.
+
+Backups taken before the panel started sending the checksum have none on
+record, and fall back to the read-through check. They restore normally.
+
+A failure during the extraction itself — a disk that fills halfway — can still
+leave a partial tree. Everything that can be known about the archive before
+touching the directory is known first; that one cannot be.
 
 A restore that fails puts the backup back to the state it was in — a record
 left saying `RESTORING` could never be restored again, since the route only
@@ -311,9 +325,10 @@ check the API's worker logs and that Redis is reachable.
 endpoint and region disagree. **Test connection** on the storage target will
 tell you which.
 
-**Checksum mismatch on restore.** The archive is corrupt — a truncated upload,
-usually. Do not extract it. Use an older backup, and check the node's disk
-health.
+**Checksum mismatch on restore.** The archive is not the one the panel
+recorded — a truncated upload usually, or storage that has rotted a block. The
+restore refuses before deleting anything, so the server is untouched: use an
+older backup, and check the node's disk health.
 
 **Restore finished but the server will not start.** The archive was taken from
 a different template version, or file ownership is wrong. Check the console

@@ -3,7 +3,7 @@ import { createReadStream, createWriteStream } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { pipeline } from 'node:stream/promises';
 import path from 'node:path';
-import { create as createTar, extract as extractTar } from 'tar';
+import { create as createTar, extract as extractTar, list as listTar } from 'tar';
 import { request } from 'undici';
 import type { FastifyBaseLogger as Logger } from 'fastify';
 import type { Readable } from 'node:stream';
@@ -114,6 +114,31 @@ export class BackupService {
     if (!stat) throw notFound('That backup archive is not available on this node');
 
     try {
+      // Read the archive through before touching the live directory.
+      //
+      // The order used to be: empty the directory, then extract. So a
+      // truncated download, a half-written file, or simply the wrong bytes
+      // took the live world with it and left nothing to put back — during the
+      // one operation somebody reaches for when something has already gone
+      // wrong. Listing the archive costs a second read of it and answers the
+      // question that matters: is this whole and readable?
+      //
+      // It does not cover a failure during the extraction itself — a disk that
+      // fills halfway can still leave a partial tree — but it does cover every
+      // way the archive can be no good, which is how this fails in practice.
+      //
+      // A checksum, when the panel has one, answers a stronger question than
+      // "does this parse": it says these are the exact bytes that were written
+      // when the backup was taken. The panel has computed and stored that
+      // sha256 since the first release and never once read it back — the one
+      // integrity check in the system was write-only. Archives predating this
+      // have none on record, so the listing stays as the fallback.
+      if (input.checksum) {
+        await assertChecksum(archive, input.checksum);
+      } else {
+        await assertReadable(archive);
+      }
+
       if (input.truncate) {
         // Wipe the directory contents but keep the directory itself: it is a
         // live bind mount for the container.
@@ -222,6 +247,62 @@ function matchesIgnore(entryPath: string, patterns: string[]): boolean {
     }
     return normalised === pattern || normalised.startsWith(`${pattern}/`);
   });
+}
+
+/**
+ * Proves an archive is whole and readable, or refuses it.
+ *
+ * Anything gzip or tar objects to — the wrong bytes entirely, a download that
+ * stopped early, a file still being written — surfaces here rather than after
+ * the live directory has already been emptied.
+ */
+async function assertReadable(archive: string): Promise<void> {
+  let entries = 0;
+  try {
+    await listTar({
+      file: archive,
+      onentry: () => {
+        entries += 1;
+      },
+    });
+  } catch (error) {
+    throw new AgentError(
+      422,
+      'BACKUP_CORRUPT',
+      `That backup archive could not be read and was not restored: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
+
+  // Every archive this agent writes holds at least the directory itself, so
+  // nothing legitimate is empty. Something that is has not finished arriving.
+  if (entries === 0) {
+    throw new AgentError(
+      422,
+      'BACKUP_CORRUPT',
+      'That backup archive is empty and was not restored',
+    );
+  }
+}
+
+/**
+ * Proves an archive is the one the panel says it is.
+ *
+ * Stronger than reading it through: a whole, well-formed archive can still be
+ * the wrong archive, or the right one with a block rotted out of the middle of
+ * it in object storage. This is the check the stored sha256 was always for.
+ */
+async function assertChecksum(archive: string, expected: string): Promise<void> {
+  const actual = await checksumFile(archive);
+  if (actual !== expected.toLowerCase()) {
+    throw new AgentError(
+      422,
+      'BACKUP_CORRUPT',
+      'That backup archive does not match the checksum recorded when it was taken, ' +
+        'and was not restored',
+    );
+  }
 }
 
 async function checksumFile(target: string): Promise<string> {
