@@ -15,7 +15,7 @@ import { UNLIMITED_ACCOUNT_LIMITS, defaultAccountLimits } from '@storm/database'
 import { body, params, query } from '../../lib/validation.js';
 import { ok, paginated, pageArgs } from '../../lib/response.js';
 import { AppError, badRequest, conflict, forbidden, notFound } from '../../lib/errors.js';
-import { assertOutranks } from '../../plugins/auth.js';
+import { assertCanGrant, assertOutranks } from '../../plugins/auth.js';
 import {
   toServerSummary,
   toSessionSummary,
@@ -80,6 +80,7 @@ export default async function adminUserRoutes(app: FastifyInstance): Promise<voi
       const input = body(request, createUserSchema);
 
       assertOutranks(actor, input.role);
+      assertCanGrant(actor, input.extraPermissions);
 
       const existing = await app.prisma.user.findFirst({
         where: { OR: [{ email: input.email }, { username: input.username }] },
@@ -180,6 +181,7 @@ export default async function adminUserRoutes(app: FastifyInstance): Promise<voi
 
     assertOutranks(actor, target.role.name as RoleName);
     if (input.role) assertOutranks(actor, input.role);
+    assertCanGrant(actor, input.extraPermissions);
 
     if (input.email || input.username) {
       const clash = await app.prisma.user.findFirst({

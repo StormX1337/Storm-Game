@@ -236,6 +236,33 @@ export function canSeeEveryNode(user: AuthenticatedUser): boolean {
 }
 
 /** Guards role escalation: you may never act on someone at or above your level. */
+/**
+ * Nobody hands out what they do not hold.
+ *
+ * `assertOutranks` bounds the *role* an account may be given; this bounds the
+ * *permissions*. They are different questions, and only the first was being
+ * asked. A staff account holds `users.manage` and not `settings.manage` — that
+ * is the built-in grant, not a contrived setup — and could write
+ * `settings.manage` onto a customer it created. It can also set that
+ * customer's password, so granting it was the same as taking it.
+ *
+ * Refused rather than filtered, for the reason a scoped API key refuses an
+ * unknown permission instead of dropping it: quietly granting three of the
+ * five somebody ticked leaves them believing they granted five.
+ *
+ * Denials need no ceiling. Taking something away is safe whoever does it.
+ */
+export function assertCanGrant(actor: AuthenticatedUser, permissions: string[] | undefined): void {
+  if (!permissions?.length) return;
+
+  const beyond = permissions.filter((permission) => !actor.permissions.has(permission));
+  if (beyond.length > 0) {
+    throw forbidden(
+      `You cannot grant permissions you do not hold yourself: ${beyond.sort().join(', ')}`,
+    );
+  }
+}
+
 export function assertOutranks(actor: AuthenticatedUser, targetRole: RoleName): void {
   if (actor.role === 'OWNER') return;
   if ((ROLE_PRIORITY[targetRole] ?? 0) >= actor.rolePriority) {

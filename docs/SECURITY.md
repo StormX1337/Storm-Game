@@ -142,6 +142,17 @@ A server you cannot see returns **404, not 403**, so ids are not enumerable.
 Sub-user grants are a subset of the granter's own permissions — you cannot
 delegate what you do not hold.
 
+**Nor can an administrator.** Managing accounts has two bounds and they answer
+different questions: one on the _role_ an account may be given (never at or
+above your own), and one on the _permissions_ written onto it. Only the first
+was there. A staff account holds `users.manage` and not `settings.manage` —
+that is the built-in grant, not a contrived setup — so it could create a
+customer, write `settings.manage` onto it, and set its password. Granting was
+the same as taking. Both bounds apply now, and a request naming anything the
+actor does not hold is refused rather than quietly filtered: granting three of
+the five somebody ticked, silently, leaves them believing they granted five.
+Denials are exempt, because taking something away needs no ceiling.
+
 A share is a **ceiling, not a source**: whatever set a route ends up with, it
 is intersected with what the caller actually holds on this request. So an
 account-level denial keeps applying on somebody else's server, and an API key
