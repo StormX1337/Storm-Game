@@ -151,21 +151,42 @@ export default async function modpackRoutes(app: FastifyInstance): Promise<void>
       /* ------ overrides first, so the pack's own mods folder lands before
                 the individual mods are fetched into it -- */
 
+      // One budget for the whole install, spent down as it goes.
+      //
+      // A modpack is the largest thing a customer can ask this panel to write:
+      // an archive, everything inside it, and then one download per mod, of
+      // which a pack may list hundreds. Each step carried the same fixed cap
+      // and none of them carried the server's disk limit, so the total was
+      // bounded only by how many files the pack author had listed — and the
+      // extraction carried no cap at all, which handed the archive-bomb guard
+      // on the node an explicit "unmetered".
+      let remaining = await app.servers.remainingDiskBytes(access.server);
+      const spend = (bytes: number): number => {
+        const step = remaining === null ? MAX_MRPACK_BYTES : Math.min(MAX_MRPACK_BYTES, remaining);
+        if (remaining !== null) remaining = Math.max(0, remaining - bytes);
+        return step;
+      };
+
       const packFilename = 'pack.mrpack';
-      await agent('/files/fetch', {
+      const packStep = spend(0);
+      const fetched = await agent<{ bytes?: number }>('/files/fetch', {
         method: 'POST',
         body: {
           url: plan.packUrl,
           path: `${STAGING_DIRECTORY}/${packFilename}`,
           sha512: plan.packSha512,
-          maxBytes: MAX_MRPACK_BYTES,
+          maxBytes: packStep,
         },
         timeoutMs: 10 * 60_000,
       });
 
       await agent('/files/decompress', {
         method: 'POST',
-        body: { path: STAGING_DIRECTORY, file: packFilename },
+        body: {
+          path: STAGING_DIRECTORY,
+          file: packFilename,
+          ...(remaining === null ? {} : { maxBytes: spend(fetched?.bytes ?? 0) }),
+        },
         timeoutMs: 10 * 60_000,
       });
 
@@ -190,16 +211,18 @@ export default async function modpackRoutes(app: FastifyInstance): Promise<void>
       /* ------------------------------------------------------- the mods -- */
 
       for (const file of plan.files) {
-        await agent('/files/fetch', {
+        const step = spend(0);
+        const written = await agent<{ bytes?: number }>('/files/fetch', {
           method: 'POST',
           body: {
             url: file.url,
             path: `/${file.path}`,
             sha512: file.sha512,
-            maxBytes: MAX_MRPACK_BYTES,
+            maxBytes: step,
           },
           timeoutMs: 10 * 60_000,
         });
+        spend(written?.bytes ?? 0);
       }
 
       await agent('/files/delete', {

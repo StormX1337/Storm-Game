@@ -229,8 +229,22 @@ the archive. A separate cap on the number of entries covers the other half:
 empty files cost no disk at all, but a node runs out of inodes while `df`
 still reads half free.
 
-Uploads stream to disk with a size cap and a per-server disk quota. Downloads
-stream too — the panel never buffers a file in memory.
+Every path that adds bytes spends from one budget: what is left of the
+server's disk limit, sent to the node and counted while the bytes arrive.
+Uploads, archive extraction, plugin installs and modpack installs all take it,
+and a request that writes more than once — five files in one upload, a pack
+and then each of its mods — spends it down rather than handing each step the
+whole allowance.
+
+That is a different question from the one the panel used to ask. "Is this
+server under its limit" was checked before forwarding and never again, but the
+write is the thing that changes the answer: a server at 9 GB of 10 passed the
+check and could then be handed a hundred. Uploading was the plainest way to do
+it and had no budget at all; the modpack installer went further and asked the
+node to extract an archive with no budget, which the node reads as unmetered —
+the panel's own code walking around the guard.
+
+Downloads stream too — the panel never buffers a file in memory.
 
 **SFTP is the same files through a different door**, and the quota follows it
 there. The agent asks the panel to check the credentials on every login, and

@@ -368,6 +368,21 @@ export class ServerService {
     return { overLimit: usedMb >= server.diskLimit, usedMb };
   }
 
+  /**
+   * How many bytes this server may still add, or null when it is unmetered.
+   *
+   * `assertDiskWithinLimit` answers a different question — is it over right
+   * now — and every path that adds bytes used to ask only that. But the write
+   * is the thing that changes the answer: a server at 9 GB of 10 passes the
+   * check and can then be handed a hundred. This is the number to hand the
+   * node, and to spend down when one request writes more than once.
+   */
+  async remainingDiskBytes(server: { id: string; diskLimit: number }): Promise<number | null> {
+    if (server.diskLimit <= 0) return null; // 0 is unlimited.
+    const { usedMb } = await this.diskUsage(server);
+    return Math.max(0, server.diskLimit - usedMb) * 1024 * 1024;
+  }
+
   async assertDiskWithinLimit(server: { id: string; diskLimit: number }): Promise<void> {
     const { overLimit, usedMb } = await this.diskUsage(server);
     if (!overLimit) return;

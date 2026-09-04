@@ -250,13 +250,18 @@ export default async function serverRoutes(app: FastifyInstance): Promise<void> 
 
   app.post('/servers/:uuid/files/upload', async (request) => {
     const { uuid } = uuidParam.parse(request.params);
-    const { path: target } = pathQuery.parse(request.query);
+    const { path: target, maxBytes } = pathQuery
+      .extend({ maxBytes: z.coerce.number().int().min(0).optional() })
+      .parse(request.query);
 
     // The panel streams the body straight through; nothing is buffered here.
+    // `maxBytes` is what it says is left of this server's disk — absent means
+    // the server is sold unmetered, which is a real configuration.
     const bytes = await app.files.writeStream(
       uuid,
       normalizeDisplayPath(target),
       request.body as Readable,
+      maxBytes,
     );
     return ok({ path: normalizeDisplayPath(target), bytes });
   });

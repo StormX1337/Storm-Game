@@ -149,12 +149,52 @@ export class FilesService {
     await this.own(target);
   }
 
-  /** Streams an upload straight to disk so large files never sit in memory. */
-  async writeStream(uuid: string, requested: string, source: Readable): Promise<number> {
+  /**
+   * Streams an upload straight to disk so large files never sit in memory.
+   *
+   * Bounded by what the panel says is left of the server's disk. The panel
+   * checks the limit before forwarding, but that only answers "is this server
+   * under its limit right now" — the upload is what changes the answer, and
+   * nothing was counting while it did. Uploading is the plainest way there is
+   * to fill a node's disk, and it was the one write path with no budget at
+   * all; the archive extractor had one and this did not.
+   *
+   * A partial file is removed rather than left behind: half a world save is
+   * not a smaller world save.
+   */
+  async writeStream(
+    uuid: string,
+    requested: string,
+    source: Readable,
+    maxBytes?: number,
+  ): Promise<number> {
     const target = await this.paths.resolveChecked(uuid, requested);
     await fs.mkdir(path.dirname(target), { recursive: true });
 
-    await pipeline(source, createWriteStream(target));
+    let written = 0;
+    try {
+      await pipeline(
+        source,
+        async function* (chunks: AsyncIterable<Buffer>) {
+          for await (const chunk of chunks) {
+            written += chunk.length;
+            if (maxBytes !== undefined && written > maxBytes) {
+              throw new AgentError(
+                413,
+                'FILE_TOO_LARGE',
+                'That upload would put this server over its disk limit',
+              );
+            }
+            yield chunk;
+          }
+        },
+        createWriteStream(target),
+      );
+    } catch (error) {
+      await fs.rm(target, { force: true }).catch(() => undefined);
+      throw error;
+    }
+
     const stat = await fs.stat(target);
     await this.own(target);
     return stat.size;

@@ -3,6 +3,7 @@ import { promises as fs, createWriteStream } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { Readable } from 'node:stream';
 import { crc32 } from 'node:zlib';
 import archiver from 'archiver';
 import { FilesService } from '../src/services/files.service.js';
@@ -293,6 +294,37 @@ test('the file manager stays inside the server directory', async (t) => {
       .then((stat) => stat.size)
       .catch(() => 0);
     assert.ok(written <= 1024 + 65536, `wrote ${written} bytes past a 1024-byte budget`);
+  });
+
+  await t.test('will not stream an upload past the disk budget', async () => {
+    // Uploading is the plainest way there is to fill a node's disk, and it was
+    // the one write path with no budget at all — the panel checked the limit
+    // before forwarding, which answers a question the upload itself changes.
+    const { files, root } = await scratch();
+    const source = Readable.from([Buffer.alloc(2048, 1), Buffer.alloc(2048, 2)]);
+
+    await assert.rejects(files.writeStream(UUID, '/big.jar', source, 1024), /disk limit/i);
+    assert.equal(
+      await exists(path.join(root, 'big.jar')),
+      false,
+      'half an upload was left on disk',
+    );
+  });
+
+  await t.test('accepts an upload that fits, and reports what it wrote', async () => {
+    const { files, root } = await scratch();
+    const source = Readable.from([Buffer.alloc(512, 7)]);
+
+    assert.equal(await files.writeStream(UUID, '/small.jar', source, 1024), 512);
+    assert.equal((await fs.stat(path.join(root, 'small.jar'))).size, 512);
+  });
+
+  await t.test('streams freely when the server has no disk limit', async () => {
+    const { files, root } = await scratch();
+    const source = Readable.from([Buffer.alloc(8192, 3)]);
+
+    assert.equal(await files.writeStream(UUID, '/unmetered.jar', source), 8192);
+    assert.equal((await fs.stat(path.join(root, 'unmetered.jar'))).size, 8192);
   });
 
   await t.test('unpacks freely when the server has no disk limit', async () => {

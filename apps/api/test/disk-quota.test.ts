@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import type { FastifyInstance } from 'fastify';
 import { hashPassword } from '@storm/security';
+import { MODPACK_LOADER } from '@storm/types';
 import { createTestApp, deleteUser, registerUser, uniqueSuffix } from './helpers.js';
 import type { RegisteredUser } from './helpers.js';
 
@@ -27,6 +28,7 @@ describe('disk limit', () => {
   const createdUsers: string[] = [];
 
   const DISK_MB = 2048;
+  const PACK_MINECRAFT = '1.20.1';
 
   /** Records what the node last reported this server to be using. */
   async function reportUsage(mib: number): Promise<void> {
@@ -361,6 +363,221 @@ describe('disk limit', () => {
           data: { diskLimit: DISK_MB },
         });
       }
+    });
+  });
+
+  describe('every path that adds bytes spends from the same budget', () => {
+    /**
+     * Runs one request against a stubbed node and registry, and returns every
+     * body the node was sent.
+     *
+     * The registry is stubbed too, because it lives on the internet: without
+     * it these routes fail before they ever reach the node, and a test that
+     * asserts on a call that never happened asserts nothing.
+     */
+    async function sent(
+      run: () => Promise<{ statusCode: number; body: string }>,
+    ): Promise<Record<string, unknown>[]> {
+      const realAgent = app.agents.request;
+      const realPlugin = app.plugins.resolveDownload;
+      const realPlan = app.modpacks.resolvePlan;
+      const bodies: Record<string, unknown>[] = [];
+
+      app.agents.request = (async (
+        _node: unknown,
+        _path: string,
+        options?: {
+          body?: Record<string, unknown>;
+          query?: Record<string, unknown>;
+          stream?: AsyncIterable<Buffer>;
+        },
+      ) => {
+        bodies.push({ ...(options?.query ?? {}), ...(options?.body ?? {}) });
+        // A multipart upload will not advance to the next part until this one
+        // has been read, so a stub that ignores the stream hangs the request.
+        if (options?.stream) for await (const _chunk of options.stream) void _chunk;
+        return { bytes: 0, sha512: 'x', entries: [] };
+      }) as typeof app.agents.request;
+
+      app.plugins.resolveDownload = (async () => ({
+        url: 'https://example.invalid/plugin.jar',
+        filename: 'plugin.jar',
+        sha512: 'a'.repeat(128),
+      })) as typeof app.plugins.resolveDownload;
+
+      app.modpacks.resolvePlan = (async () => ({
+        name: 'Test pack',
+        versionNumber: '1.0.0',
+        minecraft: PACK_MINECRAFT,
+        loaderVersion: '0.15.0',
+        packUrl: 'https://example.invalid/pack.mrpack',
+        packBytes: 1024,
+        packSha512: 'b'.repeat(128),
+        files: [
+          {
+            path: 'mods/one.jar',
+            url: 'https://example.invalid/one.jar',
+            sha512: 'c'.repeat(128),
+            bytes: 512,
+          },
+        ],
+        totalBytes: 1536,
+        skippedClientOnly: [],
+      })) as unknown as typeof app.modpacks.resolvePlan;
+
+      try {
+        await run();
+        return bodies;
+      } finally {
+        app.agents.request = realAgent;
+        app.plugins.resolveDownload = realPlugin;
+        app.modpacks.resolvePlan = realPlan;
+      }
+    }
+
+    /** A multipart body with one part per file, built by hand. */
+    function multipart(files: { name: string; content: string }[]): {
+      body: string;
+      contentType: string;
+    } {
+      const boundary = '----storm-test-boundary';
+      const parts = files
+        .map(
+          (file) =>
+            `--${boundary}\r\n` +
+            `Content-Disposition: form-data; name="files"; filename="${file.name}"\r\n` +
+            'Content-Type: application/octet-stream\r\n\r\n' +
+            `${file.content}\r\n`,
+        )
+        .join('');
+      return {
+        body: `${parts}--${boundary}--\r\n`,
+        contentType: `multipart/form-data; boundary=${boundary}`,
+      };
+    }
+
+    it('hands an upload what is left of the disk, not just permission to start', async () => {
+      await app.prisma.serverStat.deleteMany({ where: { serverId } });
+      await reportUsage(DISK_MB - 8);
+      const { body, contentType } = multipart([{ name: 'one.jar', content: 'x' }]);
+
+      const bodies = await sent(() =>
+        app.inject({
+          method: 'POST',
+          url: `/api/v1/servers/${serverId}/files/upload`,
+          headers: { ...auth(), 'content-type': contentType },
+          payload: body,
+        }),
+      );
+
+      assert.equal(bodies.length, 1, JSON.stringify(bodies));
+      assert.equal(bodies[0]?.maxBytes, 8 * 1024 * 1024, JSON.stringify(bodies[0]));
+    });
+
+    it('spends the budget down across the files in one upload', async () => {
+      // Five files must not each be handed the whole allowance, or the limit
+      // is per file rather than per server.
+      await app.prisma.serverStat.deleteMany({ where: { serverId } });
+      await reportUsage(DISK_MB - 8);
+      const { body, contentType } = multipart([
+        { name: 'one.jar', content: 'x' },
+        { name: 'two.jar', content: 'y' },
+      ]);
+
+      const realAgent = app.agents.request;
+      const seen: number[] = [];
+      app.agents.request = (async (
+        _node: unknown,
+        _path: string,
+        options?: { query?: Record<string, unknown>; stream?: AsyncIterable<Buffer> },
+      ) => {
+        seen.push(Number(options?.query?.maxBytes));
+        if (options?.stream) for await (const _chunk of options.stream) void _chunk;
+        // Each file claims a megabyte of the allowance.
+        return { bytes: 1024 * 1024 };
+      }) as typeof app.agents.request;
+
+      try {
+        await app.inject({
+          method: 'POST',
+          url: `/api/v1/servers/${serverId}/files/upload`,
+          headers: { ...auth(), 'content-type': contentType },
+          payload: body,
+        });
+      } finally {
+        app.agents.request = realAgent;
+      }
+
+      assert.equal(seen.length, 2, JSON.stringify(seen));
+      assert.equal(seen[0], 8 * 1024 * 1024);
+      assert.equal(
+        seen[1],
+        7 * 1024 * 1024,
+        'the second file was handed the whole allowance again',
+      );
+    });
+
+    it('bounds a plugin install by what is left, not just by what a plugin may weigh', async () => {
+      // A plugin may be a quarter of a gigabyte. That is a sanity cap on what
+      // counts as a plugin, not permission to write one onto a full server.
+      await app.prisma.serverStat.deleteMany({ where: { serverId } });
+      await reportUsage(DISK_MB - 4);
+
+      const bodies = await sent(() =>
+        app.inject({
+          method: 'POST',
+          url: `/api/v1/servers/${serverId}/plugins`,
+          headers: auth(),
+          payload: { versionId: 'whatever' },
+        }),
+      );
+
+      const fetch = bodies.find((body) => typeof body.url === 'string');
+      assert.ok(fetch, `the node was never asked to fetch anything: ${JSON.stringify(bodies)}`);
+      assert.equal(fetch.maxBytes, 4 * 1024 * 1024, JSON.stringify(fetch));
+    });
+
+    /** A pack only installs onto a stopped Fabric server pinned to its version. */
+    async function makeInstallable(): Promise<void> {
+      await app.prisma.server.update({
+        where: { id: serverId },
+        data: { status: 'OFFLINE' },
+      });
+      for (const [key, value] of [
+        ['PROJECT', MODPACK_LOADER],
+        ['MINECRAFT_VERSION', PACK_MINECRAFT],
+      ]) {
+        await app.prisma.serverVariable.upsert({
+          where: { serverId_key: { serverId, key: key! } },
+          create: { serverId, key: key!, value: value! },
+          update: { value: value! },
+        });
+      }
+    }
+
+    it('sends the extraction a budget when a modpack unpacks one', async () => {
+      // The modpack path called decompress with no budget at all, which the
+      // node reads as unmetered — the panel's own code walking around the
+      // guard that stops an archive filling a shared disk.
+      await app.prisma.serverStat.deleteMany({ where: { serverId } });
+      await reportUsage(100);
+      await makeInstallable();
+
+      const bodies = await sent(() =>
+        app.inject({
+          method: 'POST',
+          url: `/api/v1/servers/${serverId}/modpacks`,
+          headers: auth(),
+          payload: { versionId: 'whatever' },
+        }),
+      );
+
+      const decompress = bodies.find((body) => typeof body.file === 'string');
+      assert.ok(decompress, `nothing was extracted: ${JSON.stringify(bodies)}`);
+      assert.ok(
+        typeof decompress.maxBytes === 'number',
+        `the extraction was sent no budget: ${JSON.stringify(decompress)}`,
+      );
     });
   });
 

@@ -144,6 +144,13 @@ export default async function pluginRoutes(app: FastifyInstance): Promise<void> 
       const input = body(request, z.object({ versionId: z.string().min(1).max(64) }));
       const download = await app.plugins.resolveDownload(input.versionId);
 
+      // Two ceilings, and the lower one wins: a sanity cap on what counts as a
+      // plugin at all, and what this server may still add. Only the first was
+      // being applied, so a customer sitting at their disk limit could still
+      // pull a quarter of a gigabyte through this door.
+      const remaining = await app.servers.remainingDiskBytes(access.server);
+      const budget = remaining === null ? MAX_PLUGIN_BYTES : Math.min(MAX_PLUGIN_BYTES, remaining);
+
       const result = await app.agents.request<{ bytes: number; sha512: string }>(
         access.server.node,
         `/api/v1/servers/${access.server.uuid}/files/fetch`,
@@ -153,7 +160,7 @@ export default async function pluginRoutes(app: FastifyInstance): Promise<void> 
             url: download.url,
             path: `${PLUGIN_DIRECTORY}/${download.filename}`,
             sha512: download.sha512,
-            maxBytes: MAX_PLUGIN_BYTES,
+            maxBytes: budget,
           },
           timeoutMs: 15 * 60_000,
         },

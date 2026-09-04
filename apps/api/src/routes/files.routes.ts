@@ -185,6 +185,13 @@ export default async function fileRoutes(app: FastifyInstance): Promise<void> {
           : '/',
       );
 
+      // Being under the limit when the upload starts says nothing about where
+      // it ends — the upload is the thing that changes the answer, and this
+      // was the one write path with nothing counting while it did. The budget
+      // goes to the node and is spent down across the files in the request,
+      // so five files cannot each have the whole of it.
+      let remaining = await app.servers.remainingDiskBytes(access.server);
+
       for await (const part of request.parts()) {
         if (part.type !== 'file') continue;
         const filename = sanitizeFilename(part.filename);
@@ -192,17 +199,18 @@ export default async function fileRoutes(app: FastifyInstance): Promise<void> {
 
         // Streamed straight through to the agent: the panel never buffers the
         // file, so multi-gigabyte uploads cost constant memory here.
-        await app.agents.request(
+        const result = await app.agents.request<{ bytes?: number }>(
           access.server.node,
           `/api/v1/servers/${access.server.uuid}/files/upload`,
           {
             method: 'POST',
-            query: { path: target },
+            query: { path: target, ...(remaining === null ? {} : { maxBytes: remaining }) },
             stream: Readable.from(part.file),
             headers: { 'content-type': 'application/octet-stream' },
             timeoutMs: 0,
           },
         );
+        if (remaining !== null) remaining = Math.max(0, remaining - (result?.bytes ?? 0));
         uploaded.push(target);
       }
 
@@ -360,8 +368,7 @@ export default async function fileRoutes(app: FastifyInstance): Promise<void> {
       // where it ends: a megabyte of zip can hold a hundred gigabytes, and the
       // node's disk is shared with every other customer on the machine. The
       // agent gets the budget rather than a promise.
-      const { usedMb } = await app.servers.diskUsage(access.server);
-      const remainingMb = access.server.diskLimit > 0 ? access.server.diskLimit - usedMb : 0;
+      const remaining = await app.servers.remainingDiskBytes(access.server);
 
       await app.agents.request(
         access.server.node,
@@ -371,9 +378,7 @@ export default async function fileRoutes(app: FastifyInstance): Promise<void> {
           body: {
             path: normalizeDisplayPath(input.path),
             file: sanitizeFilename(input.file),
-            ...(access.server.diskLimit > 0
-              ? { maxBytes: Math.max(0, remainingMb) * 1024 * 1024 }
-              : {}),
+            ...(remaining === null ? {} : { maxBytes: remaining }),
           },
           timeoutMs: 30 * 60_000,
         },
