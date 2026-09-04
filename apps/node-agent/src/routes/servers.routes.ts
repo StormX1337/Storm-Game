@@ -355,13 +355,21 @@ export default async function serverRoutes(app: FastifyInstance): Promise<void> 
   app.post('/servers/:uuid/files/decompress', async (request) => {
     const { uuid } = uuidParam.parse(request.params);
     const input = z
-      .object({ path: z.string().min(1).max(4096), file: z.string().min(1).max(255) })
+      .object({
+        path: z.string().min(1).max(4096),
+        file: z.string().min(1).max(255),
+        // What the panel says is left of this server's disk limit. Optional so
+        // an older panel against a newer agent still extracts; absent means
+        // the server is unmetered, which is a real configuration.
+        maxBytes: z.number().int().min(0).optional(),
+      })
       .parse(request.body);
 
     const extracted = await app.files.decompress(
       uuid,
       normalizeDisplayPath(input.path),
       input.file,
+      input.maxBytes,
     );
     return ok({ extracted });
   });

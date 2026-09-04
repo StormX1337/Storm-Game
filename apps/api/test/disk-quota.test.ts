@@ -309,6 +309,61 @@ describe('disk limit', () => {
     });
   });
 
+  /* --------------------------------------------- what the node is told -- */
+
+  describe('unpacking an archive', () => {
+    /** Runs one decompress against a stubbed node and returns what it was sent. */
+    async function decompress(): Promise<Record<string, unknown>> {
+      const real = app.agents.request;
+      let sent: Record<string, unknown> = {};
+      app.agents.request = (async (
+        _node: unknown,
+        _path: string,
+        options?: { body?: Record<string, unknown> },
+      ) => {
+        sent = options?.body ?? {};
+        return {};
+      }) as typeof app.agents.request;
+
+      try {
+        const response = await app.inject({
+          method: 'POST',
+          url: `/api/v1/servers/${serverId}/files/decompress`,
+          headers: auth(),
+          payload: { path: '/', file: 'pack.zip' },
+        });
+        assert.equal(response.statusCode, 200, response.body);
+        return sent;
+      } finally {
+        app.agents.request = real;
+      }
+    }
+
+    it('hands the node what is left of the budget, not just permission to start', async () => {
+      // Being under the limit when the extraction starts says nothing about
+      // where it ends: a megabyte of zip holds a hundred gigabytes, and the
+      // disk it fills belongs to every other customer on the node too.
+      await app.prisma.serverStat.deleteMany({ where: { serverId } });
+      await reportUsage(48);
+
+      const sent = await decompress();
+      assert.equal(sent.maxBytes, (DISK_MB - 48) * 1024 * 1024);
+    });
+
+    it('sends no budget at all for a server sold unmetered disk', async () => {
+      await app.prisma.server.update({ where: { id: serverId }, data: { diskLimit: 0 } });
+      try {
+        const sent = await decompress();
+        assert.equal('maxBytes' in sent, false, JSON.stringify(sent));
+      } finally {
+        await app.prisma.server.update({
+          where: { id: serverId },
+          data: { diskLimit: DISK_MB },
+        });
+      }
+    });
+  });
+
   /* ------------------------------------------------------- unlimited -- */
 
   it('treats a limit of zero as unlimited, as every other limit does', async () => {

@@ -252,8 +252,15 @@ Relative paths only, all resolved inside the server's directory.
 | `POST /servers/:uuid/files/delete`           | Delete                                |
 | `POST /servers/:uuid/files/create-directory` | mkdir -p                              |
 | `POST /servers/:uuid/files/compress`         | tar.gz or zip                         |
-| `POST /servers/:uuid/files/decompress`       | Extract, re-validating every entry    |
+| `POST /servers/:uuid/files/decompress`       | Extract; every entry re-validated     |
 | `POST /servers/:uuid/files/chmod`            | Change mode                           |
+
+`decompress` takes an optional `maxBytes` — what the panel says is left of
+that server's disk limit. The agent refuses an archive that declares more than
+that, and stops one that produces more than it declared. Omitted means the
+server is sold unmetered disk, which is a real configuration rather than a
+missing field. A separate hard cap refuses an archive holding more than 20 000
+files: those cost inodes even when they cost no bytes.
 
 ### Backups
 

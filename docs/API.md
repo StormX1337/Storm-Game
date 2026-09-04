@@ -364,6 +364,10 @@ symlink escapes and null bytes are rejected.
 | `POST /servers/:id/files/decompress`       | Extract one                 |
 | `POST /servers/:id/files/chmod`            | Change mode                 |
 
+Extraction is bounded by what is left of the server's disk limit, so an
+archive cannot be used to get past it: `413 FILE_TOO_LARGE` if unpacking it
+would go over, or if it holds more than 20 000 files.
+
 ### Backups
 
 |                                               |                                           |

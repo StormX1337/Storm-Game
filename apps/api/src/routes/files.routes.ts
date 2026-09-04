@@ -356,12 +356,25 @@ export default async function fileRoutes(app: FastifyInstance): Promise<void> {
       ServerAccessService.assertNotSuspended(access);
       await app.servers.assertDiskWithinLimit(access.server);
 
+      // Being under the limit when the extraction starts says nothing about
+      // where it ends: a megabyte of zip can hold a hundred gigabytes, and the
+      // node's disk is shared with every other customer on the machine. The
+      // agent gets the budget rather than a promise.
+      const { usedMb } = await app.servers.diskUsage(access.server);
+      const remainingMb = access.server.diskLimit > 0 ? access.server.diskLimit - usedMb : 0;
+
       await app.agents.request(
         access.server.node,
         `/api/v1/servers/${access.server.uuid}/files/decompress`,
         {
           method: 'POST',
-          body: { path: normalizeDisplayPath(input.path), file: sanitizeFilename(input.file) },
+          body: {
+            path: normalizeDisplayPath(input.path),
+            file: sanitizeFilename(input.file),
+            ...(access.server.diskLimit > 0
+              ? { maxBytes: Math.max(0, remainingMb) * 1024 * 1024 }
+              : {}),
+          },
           timeoutMs: 30 * 60_000,
         },
       );
