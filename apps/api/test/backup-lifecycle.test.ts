@@ -258,6 +258,28 @@ describe('taking a backup and putting it back', () => {
     const download = call.body.download as { driver: string; key: string };
     assert.equal(download.driver, 'LOCAL');
     assert.equal(download.key, stored.storageKey);
+
+    // The checksum recorded when the archive was made goes with it. The panel
+    // stored one for every backup since the first release and never sent it
+    // anywhere, so the one integrity check in the system was write-only: the
+    // node had no way to tell the right archive from a well-formed wrong one.
+    assert.equal(call.body.checksum, stored.checksum);
+  });
+
+  it('sends no checksum for an archive that never had one recorded', async () => {
+    // Every backup already sitting on a customer's node predates this. The
+    // node falls back to proving the archive is at least whole; refusing them
+    // outright would turn a safety check into an outage.
+    const id = await makeBackup();
+    await runBackup(app, { backupId: id });
+    await app.prisma.backup.update({ where: { id }, data: { checksum: null } });
+    calls = [];
+
+    await runRestore(app, { backupId: id, truncate: false, userId: customer.id });
+
+    const call = calls.find((entry) => entry.path.includes('/restore'));
+    assert.ok(call, JSON.stringify(calls));
+    assert.equal('checksum' in call.body, false, JSON.stringify(call.body));
   });
 
   it('leaves the backup where it started once the restore is done', async () => {

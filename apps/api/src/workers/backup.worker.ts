@@ -144,6 +144,11 @@ export async function runRestore(app: FastifyInstance, data: RestoreJobData): Pr
           backupUuid: backup.uuid,
           truncate: data.truncate,
           download,
+          // Recorded when the archive was made, and until now never read back.
+          // The node proves the bytes match it before unpacking them over a
+          // live server. Backups taken before this have none, and the node
+          // falls back to checking the archive is at least whole.
+          ...(backup.checksum ? { checksum: backup.checksum } : {}),
         },
         timeoutMs: 6 * 3600_000,
       },

@@ -176,6 +176,14 @@ export interface AgentRestoreRequest {
   /** Wipe the server directory before unpacking. */
   truncate: boolean;
   download?: AgentDownloadSource;
+  /**
+   * The sha256 the panel recorded when the archive was made.
+   *
+   * Optional, because backups taken before this was sent have none on record
+   * and an older panel does not send one. When it is here the agent proves the
+   * bytes match it before unpacking them over a live server.
+   */
+  checksum?: string;
 }
 
 /**

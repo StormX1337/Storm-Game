@@ -415,6 +415,12 @@ export default async function serverRoutes(app: FastifyInstance): Promise<void> 
         uuid: z.string().uuid(),
         backupUuid: z.string().uuid(),
         truncate: z.boolean().default(false),
+        // Optional: archives taken before the panel started sending it have
+        // none on record, and an older panel does not send one at all.
+        checksum: z
+          .string()
+          .regex(/^[0-9a-f]{64}$/i)
+          .optional(),
         download: z
           .object({
             driver: z.enum(['LOCAL', 'S3', 'R2', 'MINIO', 'PANEL']),
