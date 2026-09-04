@@ -30,6 +30,8 @@ declare module 'fastify' {
     requirePermission: (...permissions: string[]) => (request: FastifyRequest) => Promise<void>;
     /** Resolves a user from a token string (used by the WebSocket handshake). */
     resolveUserFromToken: (token: string) => Promise<AuthenticatedUser>;
+    /** Re-derives a user on a long-lived connection; throws if they may no longer be there. */
+    refreshUser: (user: AuthenticatedUser) => Promise<AuthenticatedUser>;
   }
   interface FastifyRequest {
     user?: AuthenticatedUser;
@@ -112,14 +114,44 @@ export default fp(
         .catch(() => undefined);
 
       const user = await loadUser(key.userId, null, key.id);
-      if (key.permissions.length > 0) {
-        // An API key can only ever narrow the user's permissions.
-        user.permissions = new Set(
-          [...user.permissions].filter((p) => key.permissions.includes(p)),
-        );
-      }
+      return narrowToKey(user, key.permissions);
+    }
+
+    /** An API key can only ever narrow the user's permissions. */
+    function narrowToKey(user: AuthenticatedUser, scope: string[]): AuthenticatedUser {
+      if (scope.length === 0) return user;
+      user.permissions = new Set([...user.permissions].filter((p) => scope.includes(p)));
       return user;
     }
+
+    /**
+     * Re-derives a user who was authenticated earlier on the same connection.
+     *
+     * A request resolves its user once and is finished milliseconds later; a
+     * websocket resolves once and is then held open for as long as the tab is.
+     * That makes "the permissions they had when they connected" a different
+     * thing from "the permissions they have", and only the first one was ever
+     * being asked about. This is how a long-lived connection asks again: the
+     * session or key must still be alive, the account must still exist and not
+     * be suspended, and the permission set is rebuilt rather than remembered.
+     */
+    app.decorate('refreshUser', async (user: AuthenticatedUser): Promise<AuthenticatedUser> => {
+      if (user.apiKeyId) {
+        const key = await app.prisma.apiKey.findUnique({ where: { id: user.apiKeyId } });
+        if (!key || key.revokedAt || (key.expiresAt && key.expiresAt.getTime() < Date.now())) {
+          throw unauthorized('That API key is not valid');
+        }
+        return narrowToKey(await loadUser(key.userId, null, key.id), key.permissions);
+      }
+
+      if (user.sessionId) {
+        const session = await app.prisma.session.findUnique({ where: { id: user.sessionId } });
+        if (!session || session.revokedAt || session.expiresAt.getTime() < Date.now()) {
+          throw unauthorized('Your session has expired, please sign in again');
+        }
+      }
+      return loadUser(user.id, user.sessionId, null);
+    });
 
     app.decorate('resolveUserFromToken', async (token: string) => {
       if (token.startsWith('storm_')) return fromApiKey(token.slice('storm_'.length));

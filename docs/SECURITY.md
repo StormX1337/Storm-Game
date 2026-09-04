@@ -150,6 +150,17 @@ have been shared with its owner. This holds for the account that runs the
 panel too — the `OWNER` role no longer takes the whole customer set unnarrowed,
 which is what let a scoped key belonging to an owner act unscoped.
 
+**"On every request" has to include the console.** A request resolves its
+permissions and is finished milliseconds later; the console socket resolved
+them once and then held the answer for as long as the tab stayed open. So a
+narrowed share, a permission denied on the account, a suspended account and a
+revoked session all stopped at the edge of an open console — revoked meant
+revoked when they next reloaded, and nobody reloads a console. It now asks
+again before every command and power action, and on a timer for one that is
+only being watched: the message is refused when the permission went, and the
+socket is closed when the access did. A socket opened with an API key is held
+to that key's scope on the same schedule.
+
 ---
 
 ## Container isolation

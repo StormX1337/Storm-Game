@@ -57,18 +57,48 @@ export async function registerServerSocket(app: FastifyInstance): Promise<void> 
       }
 
       const { server } = access;
-      const canCommand = access.permissions.has(Permission.SERVERS_COMMAND);
-      const canPower = ['start', 'stop', 'restart', 'kill'].filter((action) =>
-        access.permissions.has(`servers.${action}`),
-      );
 
       send(socket, { type: 'ready', serverId: server.id, status: server.status });
+
+      /* ----------------------------------------------- who they still are -- */
+
+      /**
+       * What this person may do on this server, asked again.
+       *
+       * Every HTTP route resolves permissions on the request that uses them,
+       * which is what makes a narrowed share, a denied permission or a
+       * suspended account take effect at once. This socket resolved them once
+       * and then kept the answer for as long as the tab stayed open — so a
+       * revoked console kept working until somebody reloaded it, and nobody
+       * reloads a console. Returns null when they may no longer be here at
+       * all, which closes the socket rather than refusing one message.
+       */
+      const currentAccess = async (): Promise<typeof access | null> => {
+        try {
+          const fresh = await app.refreshUser(user);
+          return await app.serverAccess.require(
+            fresh,
+            request.params.id,
+            Permission.SERVERS_CONSOLE,
+          );
+        } catch {
+          return null;
+        }
+      };
+
+      const shutOut = (): void => {
+        send(socket, {
+          type: 'error',
+          code: 'FORBIDDEN',
+          message: 'Your access to this console has been withdrawn',
+        });
+        socket.close(4403, 'forbidden');
+      };
 
       /* ------------------------------------------- upstream agent socket -- */
 
       let upstream: WsClient | null = null;
       let closed = false;
-
       const connectUpstream = async (): Promise<void> => {
         try {
           const { authorization, secret } = await app.agents.credentials(server.nodeId);
@@ -127,6 +157,72 @@ export async function registerServerSocket(app: FastifyInstance): Promise<void> 
 
       /* --------------------------------------------- browser -> upstream -- */
 
+      const refuse = (message: string): void => {
+        send(socket, { type: 'error', code: 'FORBIDDEN', message });
+      };
+
+      async function handleCommand(
+        command: Extract<ServerSocketCommand, { type: 'command' }>,
+      ): Promise<void> {
+        if (typeof command.command !== 'string' || command.command.length > 4000) return;
+
+        const now = await currentAccess();
+        if (!now) return shutOut();
+        if (!now.permissions.has(Permission.SERVERS_COMMAND)) {
+          return refuse('You do not have permission to send commands');
+        }
+        // Suspension is why a server stops being the customer's to drive, and
+        // every HTTP route says so. The console said nothing at all.
+        if (now.server.suspendedAt && !now.isAdmin) {
+          return refuse('This server is suspended. Contact support to have it restored.');
+        }
+
+        upstream?.send(JSON.stringify({ type: 'command', command: command.command }));
+        await app.audit.activity(
+          null,
+          {
+            serverId: server.id,
+            event: 'server:console.command',
+            metadata: { command: command.command.slice(0, 200) },
+          },
+          user.id,
+        );
+      }
+
+      async function handlePower(
+        command: Extract<ServerSocketCommand, { type: 'power' }>,
+      ): Promise<void> {
+        const now = await currentAccess();
+        if (!now) return shutOut();
+        if (!now.permissions.has(`servers.${command.action}`)) {
+          return refuse(`You do not have permission to ${command.action} this server`);
+        }
+
+        // sendPower carries the suspension and install-busy rules of its own.
+        await app.servers.sendPower(server.id, command.action).catch((error: unknown) => {
+          send(socket, {
+            type: 'error',
+            code: 'POWER_FAILED',
+            message: error instanceof Error ? error.message : 'The power action failed',
+          });
+        });
+        await app.audit.activity(
+          null,
+          { serverId: server.id, event: `server:power.${command.action}` },
+          user.id,
+        );
+      }
+
+      // Authorisation is a database round trip now, so two messages sent back
+      // to back could otherwise reach the node in the other order. They are
+      // handled one at a time instead: a console is typed at, not driven.
+      let queue: Promise<void> = Promise.resolve();
+      const enqueue = (work: () => Promise<void>): void => {
+        queue = queue.then(work).catch((error: unknown) => {
+          app.log.warn({ err: error, serverId: server.id }, 'console socket command failed');
+        });
+      };
+
       socket.on('message', (raw: Buffer) => {
         let command: ServerSocketCommand;
         try {
@@ -140,52 +236,13 @@ export async function registerServerSocket(app: FastifyInstance): Promise<void> 
             send(socket, { type: 'pong' });
             break;
 
-          case 'command': {
-            if (!canCommand) {
-              send(socket, {
-                type: 'error',
-                code: 'FORBIDDEN',
-                message: 'You do not have permission to send commands',
-              });
-              return;
-            }
-            if (typeof command.command !== 'string' || command.command.length > 4000) return;
-            upstream?.send(JSON.stringify({ type: 'command', command: command.command }));
-            void app.audit.activity(
-              null,
-              {
-                serverId: server.id,
-                event: 'server:console.command',
-                metadata: { command: command.command.slice(0, 200) },
-              },
-              user.id,
-            );
+          case 'command':
+            enqueue(() => handleCommand(command));
             break;
-          }
 
-          case 'power': {
-            if (!canPower.includes(command.action)) {
-              send(socket, {
-                type: 'error',
-                code: 'FORBIDDEN',
-                message: `You do not have permission to ${command.action} this server`,
-              });
-              return;
-            }
-            void app.servers.sendPower(server.id, command.action).catch((error: unknown) => {
-              send(socket, {
-                type: 'error',
-                code: 'POWER_FAILED',
-                message: error instanceof Error ? error.message : 'The power action failed',
-              });
-            });
-            void app.audit.activity(
-              null,
-              { serverId: server.id, event: `server:power.${command.action}` },
-              user.id,
-            );
+          case 'power':
+            enqueue(() => handlePower(command));
             break;
-          }
 
           case 'logs':
             upstream?.send(JSON.stringify({ type: 'logs' }));
@@ -221,8 +278,16 @@ export async function registerServerSocket(app: FastifyInstance): Promise<void> 
         }
       });
 
+      // A console that only watches is still access, and watching is most of
+      // what one is used for. The same question the actions ask, asked on a
+      // timer, so a withdrawn permission does not wait for a keystroke that
+      // may never come.
       const heartbeat = setInterval(() => {
-        if (socket.readyState === socket.OPEN) socket.ping();
+        if (socket.readyState !== socket.OPEN) return;
+        socket.ping();
+        enqueue(async () => {
+          if ((await currentAccess()) === null) shutOut();
+        });
       }, PING_INTERVAL);
 
       socket.on('close', () => {

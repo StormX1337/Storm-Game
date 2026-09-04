@@ -828,6 +828,14 @@ socket.send(JSON.stringify({ type: 'command', command: 'say hello' }));
 Close codes: `4401` not authenticated, `4403` not permitted, `4404` no such
 server.
 
+Permissions are not settled when the socket opens — they are resolved again on
+every `command` and `power`, and on a timer for a console that is only being
+watched. A narrowed share, a permission denied on the account, a suspended
+account, a revoked session and a scoped API key all reach an open console
+without waiting for anyone to reload it: the message is refused with
+`FORBIDDEN` when it is the permission that went, and the socket is closed with
+`4403` when the access did.
+
 ### Account socket
 
 ```
