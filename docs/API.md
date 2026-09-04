@@ -456,23 +456,30 @@ Passwords are never in the listing. `GET …/credentials` returns one and writes
 
 Everything below needs a staff role.
 
-|                                                                      | Permission           |
-| -------------------------------------------------------------------- | -------------------- |
-| `GET/POST /admin/users`, `GET/PATCH/DELETE /admin/users/:id`         | `users.*`            |
-| `POST /admin/users/:id/suspend` · `/unsuspend`                       | `users.suspend`      |
-| `POST /admin/users/:id/reset-password` · `/disable-2fa`              | `users.update`       |
-| `GET /admin/users/meta/roles` · `/meta/permissions`                  | `users.view`         |
-| `GET/POST /admin/nodes`, `GET/PATCH/DELETE /admin/nodes/:id`         | `nodes.*`            |
-| `GET/POST /admin/nodes/:id/tokens`, `DELETE …/:tokenId`              | `nodes.manage`       |
-| `GET /admin/nodes/:id/configuration`                                 | `nodes.manage`       |
-| `POST /admin/nodes/:id/bootstrap`                                    | `nodes.manage`       |
-| `GET /admin/nodes/:id/health`                                        | `nodes.view`         |
-| `GET/POST /admin/nodes/:id/allocations`, `DELETE …/:allocationId`    | `nodes.manage`       |
-| `POST /admin/nodes/:id/allocations/prune`                            | `nodes.manage`       |
-| `GET /admin/servers`                                                 | `servers.view.all`   |
-| `POST /admin/servers/:id/transfer` · `/sync`                         | `servers.update.all` |
-| `GET/POST /admin/templates`, `GET/PATCH/DELETE /admin/templates/:id` | `templates.*`        |
-| `POST /admin/templates/:id/clone`, `GET …/export`, `POST /import`    | `templates.manage`   |
+|                                                                   | Permission           |
+| ----------------------------------------------------------------- | -------------------- |
+| `GET/POST /admin/users`, `GET/PATCH/DELETE /admin/users/:id`      | `users.*`            |
+| `POST /admin/users/:id/suspend` · `/unsuspend`                    | `users.suspend`      |
+| `POST /admin/users/:id/reset-password` · `/disable-2fa`           | `users.update`       |
+| `GET /admin/users/meta/roles` · `/meta/permissions`               | `users.view`         |
+| `GET/POST /admin/nodes`, `GET/PATCH/DELETE /admin/nodes/:id`      | `nodes.*`            |
+| `GET/POST /admin/nodes/:id/tokens`, `DELETE …/:tokenId`           | `nodes.manage`       |
+| `GET /admin/nodes/:id/configuration`                              | `nodes.manage`       |
+| `POST /admin/nodes/:id/bootstrap`                                 | `nodes.manage`       |
+| `GET /admin/nodes/:id/health`                                     | `nodes.view`         |
+| `GET/POST /admin/nodes/:id/allocations`, `DELETE …/:allocationId` | `nodes.manage`       |
+| `POST /admin/nodes/:id/allocations/prune`                         | `nodes.manage`       |
+| `GET /admin/servers`                                              | `servers.view.all`   |
+| `POST /admin/servers/:id/transfer` · `/sync`                      | `servers.update.all` |
+
+A transfer revokes what the previous owner could still reach with: the SFTP
+password is rotated and every share on the server is removed, in one
+transaction with the ownership change. The response reports `revokedShares`
+and `databasesToRotate` — database passwords are not rotated automatically,
+because that needs the engine to answer and a host being down must not block a
+transfer or report a rotation that did not happen.
+| `GET/POST /admin/templates`, `GET/PATCH/DELETE /admin/templates/:id` | `templates.*` |
+| `POST /admin/templates/:id/clone`, `GET …/export`, `POST /import` | `templates.manage` |
 
 `POST /admin/templates/import` takes either this panel's own export or a
 Pterodactyl egg, works out which, and answers with the template it created

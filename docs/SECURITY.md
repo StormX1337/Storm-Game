@@ -257,6 +257,19 @@ the panel's own code walking around the guard.
 
 Downloads stream too — the panel never buffers a file in memory.
 
+**A server changing hands revokes the old owner's ways in.** Ownership is not
+one column: the SFTP credentials key on the server row and never mention an
+owner, and the shares the previous owner handed out are a relationship with
+_them_, not with whoever holds the server now. Transferring used to change the
+owner and nothing else, which left the previous one with full file access —
+indefinitely, and invisibly, since the panel showed the new owner the same
+credentials. The transfer now rotates the SFTP password and removes the shares
+in the same transaction, and says in the audit entry what it took away.
+Database passwords are the one thing it does not rotate, because that needs
+the engine to be reachable and a host that is down must not block an ownership
+transfer or fake a rotation that did not happen; the response says how many
+are outstanding.
+
 **SFTP is the same files through a different door**, and the quota follows it
 there. The agent asks the panel to check the credentials on every login, and
 that answer now carries whether the session may add bytes: a server over its

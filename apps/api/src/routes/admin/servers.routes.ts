@@ -8,6 +8,7 @@ import {
   moveServerSchema,
   paginationQuerySchema,
 } from '@storm/types';
+import { generatePassword } from '@storm/security';
 import { body, params, query } from '../../lib/validation.js';
 import { ok, paginated, pageArgs } from '../../lib/response.js';
 import { AppError, badRequest, conflict, notFound } from '../../lib/errors.js';
@@ -84,16 +85,52 @@ export default async function adminServerRoutes(app: FastifyInstance): Promise<v
       if (!server) throw notFound('Server was not found', ErrorCode.SERVER_NOT_FOUND);
       if (!owner) throw notFound('User was not found', ErrorCode.USER_NOT_FOUND);
 
-      await app.prisma.server.update({ where: { id }, data: { ownerId } });
+      // Ownership is not one column.
+      //
+      // Everything that opens this server was set up by the person who used to
+      // own it, and none of it mentions an owner — so none of it noticed the
+      // owner changing. The SFTP credentials they were shown key on the server
+      // row alone, which left them full file access to a server that is no
+      // longer theirs, indefinitely and invisibly. The shares they handed out
+      // are a relationship with *them*, not with whoever holds the server now.
+      //
+      // Both go, in one transaction with the ownership itself: a transfer that
+      // half happened would be worse than one that did not.
+      const password = generatePassword(28);
+      const [, revoked] = await app.prisma.$transaction([
+        app.prisma.server.update({
+          where: { id },
+          data: { ownerId, sftpPasswordEnc: app.encrypter.encrypt(password) },
+        }),
+        app.prisma.serverSubuser.deleteMany({ where: { serverId: id } }),
+      ]);
+
       await app.audit.log(request, {
         action: 'admin.server_transferred',
         targetType: 'server',
         targetId: id,
         targetLabel: server.name,
-        metadata: { from: server.ownerId, to: ownerId },
+        metadata: {
+          from: server.ownerId,
+          to: ownerId,
+          revokedShares: revoked.count,
+          sftpPasswordRotated: true,
+        },
       });
 
-      return ok({ transferred: true });
+      // Database passwords are the third way in, and the only one that needs
+      // an engine to be reachable. They are not rotated here: a MySQL host
+      // that is down would either block an ownership transfer or leave the
+      // operator believing something happened that did not. The panel says so
+      // instead, and the rotate button on each database does it.
+      const databases = await app.prisma.serverDatabase.count({ where: { serverId: id } });
+
+      return ok({
+        transferred: true,
+        revokedShares: revoked.count,
+        sftpPasswordRotated: true,
+        databasesToRotate: databases,
+      });
     },
   );
 
