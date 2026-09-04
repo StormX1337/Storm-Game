@@ -9,7 +9,7 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/main.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --import tsx --test test/**/*.test.ts"
+    "test": "node --import tsx --test --test-timeout=120000 test/**/*.test.ts"
   },
   "dependencies": {
     "@fastify/websocket": "11.0.2",

@@ -25,7 +25,7 @@
     "seed": "node --import tsx src/seed/index.ts",
     "build": "prisma generate && tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --import tsx --test test/*.test.ts"
+    "test": "node --import tsx --test --test-timeout=60000 test/*.test.ts"
   },
   "prisma": {
     "schema": "prisma/schema.prisma"
