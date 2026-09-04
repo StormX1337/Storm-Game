@@ -363,7 +363,22 @@ rather than making one. A symlink is the one file a customer could leave behind
 that points somewhere every later read has to be checked against, and no game
 server needs to make one this way. Reads still follow links safely — a server
 that symlinks its own world folder keeps working — the refusal is only on
-creating them remotely.
+creating them remotely. (ssh2 answers "unsupported" for any request type
+nobody handles, so this is a statement of intent rather than the mechanism;
+the agent says it explicitly so the rule does not rest on a library default.)
+
+Reading never creates anything. Opening a path that does not exist used to
+build the directories leading to it before it looked at whether the open was a
+read or a write, so `get /not/here.txt` left `/not/` behind — on a read-only
+session too, which is the one thing it was told not to do. Only a write makes
+its own parent directory now.
+
+Directory listings are answered in batches, which is what READDIR is for: the
+client asks again until it gets EOF. Sending the whole listing in one reply
+worked until a directory outgrew a single packet, and a world's region folder
+does — thousands of files, and the client waiting for an answer that could not
+be sent. Each batch stats its own entries, so opening a large directory is
+immediate rather than proportional to its size.
 
 `chmod` is accepted and ignored. Honouring it would let a client mark its own
 files unreadable by the container user and then wonder why the server will not

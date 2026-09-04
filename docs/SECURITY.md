@@ -239,6 +239,12 @@ disk limit gets a read-only session, and any open for writing is refused with
 permission denied. Otherwise the customer who could not upload a modpack
 through the file manager simply uploaded it over SFTP.
 
+Reading creates nothing on the way. Opening a path that does not exist used to
+make the directories leading to it before deciding whether the open was a read
+or a write, which meant a read-only session — one explicitly told it may not
+add anything — could still leave directories behind by asking for files that
+were never there.
+
 Read-only, not closed. Listing, reading, deleting and renaming keep working,
 because being over a limit has to be a state somebody can get themselves out
 of — the same operations the file manager leaves open for the same reason. The

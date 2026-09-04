@@ -30,6 +30,18 @@ export function openModeFor(flags: number, writable: boolean): string | null {
   return mode;
 }
 
+/**
+ * How many directory entries go in one READDIR reply.
+ *
+ * The listing used to be answered in a single reply with everything in it,
+ * which the protocol cannot carry: past a few thousand entries the packet is
+ * too big to send and the client waits for an answer that never comes — the
+ * customer sees an empty folder where their world is. A batch of sixty-four
+ * `ls -l` lines is comfortably inside a channel packet, and the client asks
+ * again until it gets EOF, which is how READDIR was always meant to work.
+ */
+const READDIR_BATCH = 64;
+
 export interface SftpServiceOptions {
   port: number;
   hostKeyPath: string;
@@ -49,6 +61,12 @@ export interface SftpServiceOptions {
 export class SftpService {
   private server: ssh2.Server | null = null;
   private readonly log: Logger;
+
+  /** The port actually bound, which differs from the configured one on 0. */
+  get boundPort(): number {
+    const address = this.server?.address();
+    return typeof address === 'object' && address ? address.port : this.options.port;
+  }
 
   constructor(private readonly options: SftpServiceOptions) {
     this.log = options.logger.child({ component: 'sftp' });
@@ -139,7 +157,7 @@ export class SftpService {
   private attachSftp(sftp: ssh2.SFTPWrapper, uuid: string, writable: boolean): void {
     const { STATUS_CODE } = utils.sftp;
     const handles = new Map<number, { fd: number; path: string }>();
-    const readdirs = new Map<number, { entries: ssh2.FileEntry[]; done: boolean }>();
+    const readdirs = new Map<number, { dir: string; names: string[]; offset: number }>();
     let nextHandle = 0;
 
     const makeHandle = (): Buffer => {
@@ -204,7 +222,13 @@ export class SftpService {
           return;
         }
 
-        await fsp.mkdir(path.dirname(target), { recursive: true }).catch(() => undefined);
+        // Only a write makes the path it is about to write into. This ran for
+        // every open, so asking to *read* a file that does not exist built the
+        // directories on the way to failing — including on a session the panel
+        // had told may not add anything at all.
+        if (mode !== 'r') {
+          await fsp.mkdir(path.dirname(target), { recursive: true }).catch(() => undefined);
+        }
 
         fs.open(target, mode, 0o644, (error, fd) => {
           if (error) {
@@ -282,42 +306,52 @@ export class SftpService {
           return;
         }
 
-        const dirents = await fsp.readdir(target, { withFileTypes: true }).catch(() => null);
-        if (!dirents) {
+        const names = await fsp.readdir(target).catch(() => null);
+        if (!names) {
           sftp.status(reqid, STATUS_CODE.NO_SUCH_FILE);
           return;
         }
 
-        const entries: ssh2.FileEntry[] = [];
-        for (const dirent of dirents) {
-          const stats = await fsp.lstat(path.join(target, dirent.name)).catch(() => null);
-          if (!stats) continue;
-          entries.push({
-            filename: dirent.name,
-            longname: longname(dirent.name, stats),
-            attrs: toAttrs(stats),
-          });
-        }
-
+        // Only the names here: a world's region folder is thousands of files,
+        // and stat-ing all of them before answering makes opening the
+        // directory take as long as reading it. Each batch stats its own.
         const handle = makeHandle();
-        readdirs.set(handle.readUInt32BE(0), { entries, done: false });
+        readdirs.set(handle.readUInt32BE(0), { dir: target, names, offset: 0 });
         sftp.handle(reqid, handle);
       })();
     });
 
     sftp.on('READDIR', (reqid, handle) => {
-      const id = handle.readUInt32BE(0);
-      const state = readdirs.get(id);
-      if (!state) {
-        sftp.status(reqid, STATUS_CODE.FAILURE);
-        return;
-      }
-      if (state.done) {
-        sftp.status(reqid, STATUS_CODE.EOF);
-        return;
-      }
-      state.done = true;
-      sftp.name(reqid, state.entries);
+      void (async () => {
+        const id = handle.readUInt32BE(0);
+        const state = readdirs.get(id);
+        if (!state) {
+          sftp.status(reqid, STATUS_CODE.FAILURE);
+          return;
+        }
+        if (state.offset >= state.names.length) {
+          sftp.status(reqid, STATUS_CODE.EOF);
+          return;
+        }
+
+        const batch = state.names.slice(state.offset, state.offset + READDIR_BATCH);
+        state.offset += batch.length;
+
+        const entries: ssh2.FileEntry[] = [];
+        for (const name of batch) {
+          const stats = await fsp.lstat(path.join(state.dir, name)).catch(() => null);
+          if (!stats) continue;
+          entries.push({ filename: name, longname: longname(name, stats), attrs: toAttrs(stats) });
+        }
+
+        // A batch whose entries all vanished between the readdir and here is
+        // not the end of the listing; answering EOF would truncate it.
+        if (entries.length === 0) {
+          sftp.name(reqid, []);
+          return;
+        }
+        sftp.name(reqid, entries);
+      })();
     });
 
     sftp.on('REMOVE', (reqid, givenPath) => {
@@ -387,10 +421,15 @@ export class SftpService {
     //
     // A symlink is the one file a customer could create that points somewhere
     // the path checks would otherwise have to catch on every later read, and
-    // there is no reason a game server needs one made over SFTP. Without these
-    // handlers ssh2 simply never answers, so `ln -s` hangs the client until it
-    // times out — the refusal was already the behaviour, just an accidental and
-    // unreadable one.
+    // there is no reason a game server needs one made over SFTP.
+    //
+    // ssh2 would refuse these anyway: a request type with no listener is
+    // answered OP_UNSUPPORTED automatically. Saying it here is a statement of
+    // intent rather than a fix — the refusal is deliberate, so it should not
+    // depend on a library default that could reasonably change, and a reader
+    // should not have to know that default to know links are not allowed. (An
+    // earlier version of this comment claimed the opposite, that an unhandled
+    // request hangs the client. It does not.)
     sftp.on('SYMLINK', (reqid) => sftp.status(reqid, STATUS_CODE.OP_UNSUPPORTED));
     sftp.on('READLINK', (reqid) => sftp.status(reqid, STATUS_CODE.OP_UNSUPPORTED));
 
