@@ -191,8 +191,23 @@ Symlinks are checked separately: after resolution, every component is
 customer could create `link -> /` inside their own directory and read the host
 through their own file manager.
 
-Archive extraction ("zip slip") re-validates every entry path before writing,
-and refuses entries that are symlinks or absolute.
+Archive extraction ("zip slip") re-validates every entry path before writing —
+resolved _and_ proved against the real path on disk, the same check a path
+typed into the file manager gets. The string check on its own was not enough
+and this is the one place where the difference was reachable: an entry named
+`plugins/config.yml` is inside the server directory as text, but if `plugins`
+is a symlink the customer created earlier with their own file manager, writing
+"into" it writes wherever it points. The archive never had to contain a `..`.
+
+Extraction is also bounded, because a node is shared. A megabyte of zip can
+hold a hundred gigabytes of zeroes, and filling the disk takes down every
+server on the machine, not just the one whose customer uploaded it. The panel
+sends the agent what is left of that server's disk limit; the agent checks the
+size the archive declares before reading a byte, and counts what it actually
+produces as it streams, because the declared size is written by whoever built
+the archive. A separate cap on the number of entries covers the other half:
+empty files cost no disk at all, but a node runs out of inodes while `df`
+still reads half free.
 
 Uploads stream to disk with a size cap and a per-server disk quota. Downloads
 stream too — the panel never buffers a file in memory.

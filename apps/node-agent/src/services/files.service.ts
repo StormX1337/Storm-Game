@@ -45,6 +45,24 @@ const MIME_TYPES: Record<string, string> = {
 
 /** Text files editable in the browser are capped so the panel stays responsive. */
 const MAX_EDITABLE_BYTES = 8 * 1024 * 1024;
+
+/**
+ * How many files one archive may unpack.
+ *
+ * Bytes are budgeted separately; this is the other half of the same problem.
+ * Empty files cost no disk at all and the byte budget never notices them, but
+ * they each cost an inode, and a node runs out of those while `df` still reads
+ * half free. Nothing a customer legitimately uploads comes close: a large
+ * modpack is a few thousand files.
+ */
+const MAX_ARCHIVE_ENTRIES = 20_000;
+
+const overBudget = (): AgentError =>
+  new AgentError(
+    413,
+    'FILE_TOO_LARGE',
+    'Extracting that archive would put this server over its disk limit',
+  );
 const MAX_SEARCH_RESULTS = 500;
 const MAX_SEARCH_DEPTH = 12;
 
@@ -341,11 +359,29 @@ export class FilesService {
   }
 
   /**
-   * Extracts a zip archive. Each entry's path is re-validated before it is
-   * written, so a crafted archive cannot escape the server directory
-   * ("zip slip").
+   * Extracts a zip archive.
+   *
+   * Every entry path is re-validated before anything is written, and validated
+   * the same way a path typed into the file manager is: resolved, then proved
+   * against the real path on disk. The string check alone is not enough, and
+   * this is the one place where the difference is reachable by an attacker.
+   * `plugins/config.yml` is inside the server directory as a string; if the
+   * customer earlier created `plugins` as a symlink to somewhere else — which
+   * their own file manager will happily do inside their own directory — then
+   * writing "into" it writes wherever it points. The archive never has to
+   * contain a `..` at all.
+   *
+   * Size is bounded because a node is shared. A megabyte of zip can hold a
+   * hundred gigabytes of zeroes, and filling the disk takes down every other
+   * customer's server on that machine, not just the one who uploaded it. The
+   * budget is what the panel says is left of this server's disk limit.
    */
-  async decompress(uuid: string, requested: string, file: string): Promise<number> {
+  async decompress(
+    uuid: string,
+    requested: string,
+    file: string,
+    maxBytes?: number,
+  ): Promise<number> {
     const clean = sanitizeFilename(file);
     const archivePath = await this.paths.resolveChecked(uuid, path.join(requested, clean));
     const stat = await fs.stat(archivePath).catch(() => null);
@@ -353,12 +389,22 @@ export class FilesService {
 
     const destination = await this.paths.resolveChecked(uuid, requested);
     let extracted = 0;
+    let written = 0;
 
     const directory = await unzipper.Open.file(archivePath);
-    for (const entry of directory.files) {
-      if (entry.type === 'Directory') continue;
+    const entries = directory.files.filter((entry) => entry.type !== 'Directory');
+    if (entries.length > MAX_ARCHIVE_ENTRIES) {
+      throw new AgentError(
+        400,
+        'FILE_TOO_LARGE',
+        `That archive holds more than ${MAX_ARCHIVE_ENTRIES} files`,
+      );
+    }
 
-      const entryTarget = this.paths.resolve(uuid, path.join(requested, entry.path));
+    for (const entry of entries) {
+      const entryTarget = await this.paths.resolveChecked(uuid, path.join(requested, entry.path));
+      // Inside the server directory is not enough on its own: extracting into
+      // /plugins must not write to /, or to a sibling directory.
       if (!entryTarget.startsWith(destination + path.sep) && entryTarget !== destination) {
         throw new AgentError(
           400,
@@ -367,8 +413,26 @@ export class FilesService {
         );
       }
 
+      // What the archive says it holds, checked before a byte is read: the
+      // obvious bomb is refused without writing anything at all.
+      if (maxBytes !== undefined && written + entry.uncompressedSize > maxBytes) {
+        throw overBudget();
+      }
+
       await fs.mkdir(path.dirname(entryTarget), { recursive: true });
-      await pipeline(entry.stream(), createWriteStream(entryTarget));
+      // And what it actually produces, counted as it streams — the header is
+      // the attacker's to write, so a declared size is a hint, not a limit.
+      await pipeline(
+        entry.stream(),
+        async function* (chunks: AsyncIterable<Buffer>) {
+          for await (const chunk of chunks) {
+            written += chunk.length;
+            if (maxBytes !== undefined && written > maxBytes) throw overBudget();
+            yield chunk;
+          }
+        },
+        createWriteStream(entryTarget),
+      );
       await this.own(entryTarget);
       extracted += 1;
     }
