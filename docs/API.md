@@ -296,6 +296,26 @@ does not touch the server's files. Two rules apply:
 New limits are pushed to the node immediately but land in the container on its
 next start, so restart the server to apply them.
 
+`DELETE /servers/:id` takes everything the server had, not only its container.
+Its databases are dropped on their host and its backup archives removed from
+storage before the row goes, because the row is what remembers they exist —
+`ServerDatabase` and `Backup` cascade with the server, and what they point at
+does not. In order:
+
+1. **Databases.** Each is dropped on its host and its row removed as it goes,
+   so a retry only attempts what is actually left. A host that will not answer
+   comes back 503 `SERVICE_UNAVAILABLE`, naming the databases, and the server
+   stays — deleting it would leave a live database with working credentials
+   and nothing left to say so.
+2. **The node.** Unreachable comes back 503 `NODE_UNREACHABLE`, as before.
+3. **Backup archives.** These never veto: one stuck in a bucket costs disk, and
+   is logged and named in the audit entry rather than blocking.
+
+`{ "force": true }` overrides both refusals for an operator who has decided the
+node or host is gone for good. The audit entry records `databasesDropped`,
+`databasesLeftBehind`, `archivesRemoved` and `archivesLeftBehind` either way,
+so whatever survived can be cleaned up by hand.
+
 **The disk limit is enforced by the panel, not by the container.** Docker's own
 quota needs an xfs or btrfs filesystem with project quotas enabled, which most
 hosts are not running, so the node agent cannot set one unconditionally. The

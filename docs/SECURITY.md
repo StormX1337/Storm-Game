@@ -345,8 +345,22 @@ already have, and it is checked against exactly that set — naming a host that
 does not serve this server is refused. It used to be looked up unscoped, which
 made "pick from your options" into "pick anything on the panel".
 
-Deleting a server drops its databases and users. Rotating a password does not
-disturb the grants.
+Deleting a server drops its databases and users on the host, and refuses to
+finish if it cannot. (This document said the first half for a long time before
+it was true. The row cascaded away with the server — `ServerDatabase` is
+`onDelete: Cascade` — and nothing ever spoke to the engine, so the database
+stayed live, reachable from anywhere `remoteAccess` allowed, on a host shared
+with other tenants, with the panel's last record of it gone. Whoever holds the
+credentials still holds them.)
+
+Because the row is about to be cascaded away, there is no "later" to defer to:
+a host that will not answer stops the deletion rather than orphaning a way in.
+`force` overrides that for an operator who has decided the host is gone for
+good, and the audit entry then names every database left behind. This is the
+opposite call from a **transfer**, deliberately — a transfer leaves the rows in
+place, so the work it defers stays visible and doable.
+
+Rotating a password does not disturb the grants.
 
 Nothing in the panel exposes another customer's database: the credential
 endpoint resolves the database through the same server-access function every

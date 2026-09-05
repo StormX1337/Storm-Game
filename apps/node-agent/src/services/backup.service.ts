@@ -161,6 +161,31 @@ export class BackupService {
     await fs.rm(target, { force: true });
   }
 
+  /**
+   * Removes every archive a server has on this node.
+   *
+   * Backups do not live under the server directory — they live beside it, in
+   * `backupDirectory/<uuid>/` — so wiping the server root leaves them behind.
+   * That is by design while the server exists (an archive that a `truncate`
+   * restore could delete would be worthless), but once the server is gone
+   * they are full-size files that nothing on either side can reach: the panel
+   * cascades the rows away in the same breath, so no download, no retention
+   * sweep and no future delete will ever name them again.
+   *
+   * The panel removes each archive it still has a row for before it gets
+   * here. This takes the directory, which also catches archives whose rows
+   * were already lost — every server deleted before this existed left its
+   * entire backup history on the node's disk.
+   */
+  async removeAll(serverUuid: string): Promise<void> {
+    const directory = resolveSafePath(this.options.backupDirectory, serverUuid);
+    // A uuid can never be the backup root itself, but deleting the directory
+    // that holds every server's archives is not a mistake worth being one
+    // validator away from.
+    if (directory === path.resolve(this.options.backupDirectory)) return;
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+
   async open(serverUuid: string, backupUuid: string): Promise<{ stream: Readable; size: number }> {
     const target = this.archivePath(serverUuid, backupUuid);
     const stat = await fs.stat(target).catch(() => null);

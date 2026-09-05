@@ -278,3 +278,71 @@ test('backing a server up and putting it back', async (t) => {
     assert.equal(await fs.readFile(path.join(root, 'world.dat'), 'utf8'), 'the only copy');
   });
 });
+
+/**
+ * What is left on the node once a server is deleted.
+ *
+ * `removeRoot` takes the server directory. Archives are not in it — they are
+ * in `backupDirectory/<uuid>/`, deliberately, so a `truncate` restore cannot
+ * eat the thing it is restoring from. Which means deleting a server left its
+ * entire backup history on the disk, full size, with the panel's rows
+ * cascaded away in the same breath: nothing on either side could name those
+ * files again.
+ */
+test('deleting a server takes its archives with it', async (t) => {
+  await t.test('removes every archive the server had on this node', async () => {
+    const { backups, root, backupDirectory } = await scratch();
+    await fs.writeFile(path.join(root, 'world.dat'), 'terrain');
+    await backups.create({ uuid: UUID, backupUuid: BACKUP, ignore: [] });
+    const other = '00001111-2222-3333-4444-555566667777';
+    await backups.create({ uuid: UUID, backupUuid: other, ignore: [] });
+
+    await backups.removeAll(UUID);
+
+    assert.equal(await exists(path.join(backupDirectory, UUID)), false);
+  });
+
+  await t.test('leaves other servers’ archives alone', async () => {
+    const { backups, root, backupDirectory } = await scratch();
+    await fs.writeFile(path.join(root, 'world.dat'), 'terrain');
+    await backups.create({ uuid: UUID, backupUuid: BACKUP, ignore: [] });
+
+    const neighbour = '12121212-3434-5656-7878-909090909090';
+    const kept = path.join(backupDirectory, neighbour, `${BACKUP}.tar.gz`);
+    await fs.mkdir(path.dirname(kept), { recursive: true });
+    await fs.writeFile(kept, 'somebody else’s only copy');
+
+    await backups.removeAll(UUID);
+
+    assert.equal(await exists(kept), true, 'a deletion reached into another server’s backups');
+  });
+
+  await t.test('does not mind a server that never had a backup', async () => {
+    const { backups } = await scratch();
+    await backups.removeAll(UUID);
+  });
+
+  await t.test('cannot be talked into the directory above', async () => {
+    // The route validates the uuid, so this is the second lock on the door
+    // rather than the first — but the door it guards is every server's
+    // archives at once, and a recursive delete has no undo.
+    const { backups, root, backupDirectory } = await scratch();
+    await fs.writeFile(path.join(root, 'world.dat'), 'terrain');
+    await backups.create({ uuid: UUID, backupUuid: BACKUP, ignore: [] });
+
+    // These name the backup root itself rather than escaping it, so they are
+    // refused by being ignored.
+    for (const attempt of ['', '.', '/', '../backups', 'x/..']) {
+      await backups.removeAll(attempt);
+    }
+    // This one leaves the root, and is refused outright.
+    await assert.rejects(backups.removeAll('../../data'), /outside|traversal|not allowed/i);
+
+    assert.equal(
+      await exists(path.join(backupDirectory, UUID, `${BACKUP}.tar.gz`)),
+      true,
+      'every server’s archives were deleted at once',
+    );
+    assert.equal(await exists(root), true, 'the delete reached outside the backup directory');
+  });
+});

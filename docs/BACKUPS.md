@@ -243,7 +243,17 @@ than silently deleting an older one — nobody wants a backup system that throws
 away history on its own.
 
 A **locked** backup is exempt from age-based pruning entirely, and cannot be
-deleted until it is unlocked. Deleting a server deletes its backups with it.
+deleted until it is unlocked. Deleting a server deletes its backups with it —
+the records and the archives both. (For a long time only the records: `Backup`
+is `onDelete: Cascade`, so the rows went with the server, and the archives they
+named stayed exactly where they were with nothing left that could reach them.
+Archives live in `backupDirectory/<server uuid>/`, beside the server directory
+rather than inside it — deliberately, so a truncating restore cannot eat the
+thing it is restoring from — which is why wiping the server root never touched
+them.) An archive that cannot be removed does not stop the deletion; it is
+logged and named in the audit entry, because unlike a live database it is not
+a way in. The agent removes the whole directory as it takes the server down,
+which also catches archives from servers deleted before this existed.
 
 Pruning removes the archive first and the record second. If the archive cannot
 be removed — a node that is down, a bucket that refuses — the record stays and

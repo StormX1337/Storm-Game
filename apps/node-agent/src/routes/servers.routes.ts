@@ -116,6 +116,9 @@ export default async function serverRoutes(app: FastifyInstance): Promise<void> 
     await app.docker.removeContainer(uuid, true);
     await app.files.remove(uuid, ['/']).catch(() => undefined);
     await app.paths.removeRoot(uuid);
+    // Archives live beside the server directory, not inside it, so removing
+    // the root never touched them.
+    await app.backups.removeAll(uuid);
 
     app.log.info({ uuid }, 'server removed from node');
     return ok({ deleted: true });

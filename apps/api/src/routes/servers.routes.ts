@@ -308,6 +308,62 @@ export default async function serverRoutes(app: FastifyInstance): Promise<void> 
 
       const server = access.server;
 
+      // A server is not only a container.
+      //
+      // Prisma cascades the rows — `ServerDatabase` and `Backup` both go when
+      // the server does. What they point at does not, and cannot: the database
+      // lives on a host other tenants share, the archive lives in a bucket or
+      // on a node's disk, and both are `onDelete: Restrict` precisely because
+      // they are not the panel's to cascade. So deleting the server used to
+      // remove the panel's only record of them and leave them exactly where
+      // they were: a live database the customer still holds working
+      // credentials for, reachable from anywhere, on a host shared with other
+      // people — and archives nothing would ever find again.
+      //
+      // Dropped first, because this is the step that can still refuse without
+      // having destroyed anything else, and each row goes as its database
+      // does, so a retry only attempts what is actually left.
+      const databases = await app.prisma.serverDatabase.findMany({
+        where: { serverId: server.id },
+        include: { host: true },
+      });
+      const droppedDatabases: string[] = [];
+      const strandedDatabases: string[] = [];
+
+      for (const database of databases) {
+        try {
+          await app.databases.destroy(
+            database.host,
+            database.databaseName,
+            database.username,
+            database.remoteAccess,
+          );
+          await app.prisma.serverDatabase.delete({ where: { id: database.id } });
+          droppedDatabases.push(database.databaseName);
+        } catch (error) {
+          app.log.error(
+            { err: error, serverId: server.id, database: database.databaseName },
+            'could not drop a database while deleting its server',
+          );
+          strandedDatabases.push(database.databaseName);
+        }
+      }
+
+      // Unlike an ownership transfer, which leaves the database rows in place
+      // and tells the operator to rotate them, there is no "later" here: the
+      // row is about to be cascaded away, and with it the last thing that
+      // knows this database exists. So a host that will not answer stops the
+      // deletion rather than quietly orphaning a way in.
+      if (strandedDatabases.length > 0 && !input.force) {
+        throw new AppError(
+          503,
+          ErrorCode.SERVICE_UNAVAILABLE,
+          `The database host would not drop ${strandedDatabases.join(', ')}. Deleting the server ` +
+            'now would leave it live with credentials that still work and nothing left to say ' +
+            'so. Retry once the host is reachable, or use force and remove it by hand.',
+        );
+      }
+
       try {
         await app.agents.request(server.node, `/api/v1/servers/${server.uuid}`, {
           method: 'DELETE',
@@ -330,6 +386,34 @@ export default async function serverRoutes(app: FastifyInstance): Promise<void> 
         );
       }
 
+      // Archives last, and they never veto. One left in a bucket costs disk;
+      // it is not a way in, because the row that could have handed it to
+      // anyone is going too.
+      const backups = await app.prisma.backup.findMany({
+        where: { serverId: server.id, storageKey: { not: null } },
+        include: { storage: true },
+      });
+      const strandedArchives: string[] = [];
+      let removedArchives = 0;
+
+      for (const backup of backups) {
+        try {
+          await app.storage.removeArchive(backup.storage, {
+            node: server.node,
+            serverUuid: server.uuid,
+            backupUuid: backup.uuid,
+            key: backup.storageKey!,
+          });
+          removedArchives += 1;
+        } catch (error) {
+          app.log.warn(
+            { err: error, serverId: server.id, backupId: backup.id },
+            'could not remove a backup archive while deleting its server',
+          );
+          strandedArchives.push(backup.storageKey!);
+        }
+      }
+
       await app.prisma.$transaction([
         app.prisma.serverAllocation.updateMany({
           where: { serverId: server.id },
@@ -343,7 +427,13 @@ export default async function serverRoutes(app: FastifyInstance): Promise<void> 
         targetType: 'server',
         targetId: server.id,
         targetLabel: server.name,
-        metadata: { forced: Boolean(input.force) },
+        metadata: {
+          forced: Boolean(input.force),
+          databasesDropped: droppedDatabases.length,
+          databasesLeftBehind: strandedDatabases,
+          archivesRemoved: removedArchives,
+          archivesLeftBehind: strandedArchives,
+        },
       });
       await app.webhooks.dispatch(WebhookEvent.SERVER_DELETED, {
         serverId: server.id,
