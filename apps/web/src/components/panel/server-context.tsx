@@ -24,33 +24,50 @@ export function useServer(): ServerContextValue {
 
 export function ServerProvider({
   server,
+  socketStatus,
   children,
 }: {
   server: ServerDetail;
+  /**
+   * What the account socket last said about this server, which is the panel's
+   * fastest and most complete answer: it arrives on every page, for every
+   * transition, whether or not this tab caused it.
+   *
+   * It is a parameter rather than a subscription in here because the layout
+   * above already holds that socket, and two subscriptions would be two
+   * answers — which is the bug this exists to prevent. The header badge and
+   * the power buttons were reading different sources, so a server that went
+   * into REINSTALLING elsewhere showed the new status next to a lit Start
+   * button that the API then refused.
+   */
+  socketStatus?: ServerStatus;
   children: React.ReactNode;
 }): React.JSX.Element {
   const queryClient = useQueryClient();
-  const [liveStatus, setLiveStatus] = React.useState<ServerStatus | null>(null);
+  const [optimistic, setOptimistic] = React.useState<ServerStatus | null>(null);
 
-  // A fresh fetch is authoritative again: drop the socket override so a
-  // suspend or reinstall performed elsewhere is reflected immediately.
+  const reported = socketStatus ?? server.status;
+
+  // Anything real supersedes the guess. Without this a press of Start would
+  // pin "STARTING" over every later transition, including one that says the
+  // server is being reinstalled and cannot be started at all.
   React.useEffect(() => {
-    setLiveStatus(null);
-  }, [server.status]);
+    setOptimistic(null);
+  }, [reported]);
 
   const permissions = React.useMemo(() => new Set(server.permissions), [server.permissions]);
 
   const value = React.useMemo<ServerContextValue>(
     () => ({
       server,
-      status: liveStatus ?? server.status,
-      setLiveStatus,
+      status: optimistic ?? reported,
+      setLiveStatus: setOptimistic,
       can: (...required) => required.some((permission) => permissions.has(permission as never)),
       refetch: async () => {
         await queryClient.invalidateQueries({ queryKey: ['server', server.shortId] });
       },
     }),
-    [server, liveStatus, permissions, queryClient],
+    [server, optimistic, reported, permissions, queryClient],
   );
 
   return <ServerContext.Provider value={value}>{children}</ServerContext.Provider>;

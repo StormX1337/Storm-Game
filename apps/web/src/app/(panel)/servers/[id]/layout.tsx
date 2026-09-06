@@ -52,6 +52,11 @@ export default function ServerLayout({ children }: { children: React.ReactNode }
     );
   }
 
+  // One status, read once and handed down. The badge and the power buttons
+  // used to take it from different places — the badge from here, the buttons
+  // from a context value only the console page ever refreshed — so a server
+  // that changed state elsewhere showed the new badge beside buttons frozen
+  // at whatever the page load had fetched.
   const status = live[server.id]?.status ?? server.status;
   const base = `/servers/${params.id}`;
   // A tab tied to a feature appears only where the template says its servers
@@ -74,7 +79,7 @@ export default function ServerLayout({ children }: { children: React.ReactNode }
   };
 
   return (
-    <ServerProvider server={server}>
+    <ServerProvider server={server} socketStatus={status}>
       <div className="mx-auto max-w-7xl space-y-5">
         <div className="space-y-4">
           <Link
