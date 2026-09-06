@@ -11,6 +11,7 @@ import {
   type ConfigFileParser,
   type CreateServerInput,
   type PowerAction,
+  isBindAddress,
   isInstallBusy,
 } from '@storm/types';
 import { AppError, conflict, notFound, unprocessable } from '../lib/errors.js';
@@ -459,6 +460,33 @@ export class ServerService {
     const variables = Object.fromEntries(server.variables.map((v) => [v.key, v.value]));
     const allocations = allocationOverride ?? server.allocations;
     const primary = allocations.find((a) => a.isPrimary) ?? allocations[0];
+
+    // The allocation validator refuses a hostname now, but rows written before
+    // it existed are still in the database — and this is where they become a
+    // problem. Docker parses `HostIp` with Go's `netip.ParseAddr` and answers
+    //
+    //   (HTTP code 400) bad parameter - invalid JSON: ParseAddr(...)
+    //
+    // which is a failed install with nothing in it that points at an address
+    // somebody typed on the nodes screen. Caught here it costs one legible
+    // sentence instead of two retries and a stuck server.
+    //
+    // Not repaired automatically: the only safe substitute would be 0.0.0.0,
+    // and quietly publishing a customer's port on every interface of the node
+    // is not a fix anyone asked for.
+    const named = allocations.filter((allocation) => !isBindAddress(allocation.ip));
+    if (named.length > 0) {
+      const list = named.map((a) => `${a.ip}:${a.port}`).join(', ');
+      throw new AppError(
+        422,
+        ErrorCode.VALIDATION_ERROR,
+        `This server has ${named.length === 1 ? 'an allocation' : 'allocations'} bound to a ` +
+          `name rather than an address (${list}). A node binds ports by IP — Docker does not ` +
+          'resolve names — so this cannot be started or installed until it is corrected under ' +
+          'Administration → Nodes → Allocations. Put the node’s address (or 0.0.0.0) in the IP ' +
+          'field, and the name customers connect to in the alias field.',
+      );
+    }
 
     const context: Record<string, string> = {
       ...variables,

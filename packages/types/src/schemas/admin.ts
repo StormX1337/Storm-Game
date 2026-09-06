@@ -82,9 +82,46 @@ export const updateNodeSchema = createNodeSchema.partial();
 
 /* ------------------------------------------------------------ allocations -- */
 
+/**
+ * An allocation's `ip` is a bind address, not a name.
+ *
+ * It travels to the node and becomes `HostIp` on a Docker port binding, and
+ * Docker parses that with Go's `netip.ParseAddr`, which does not resolve
+ * anything. A hostname there fails the whole container create with
+ *
+ *   (HTTP code 400) bad parameter - invalid JSON:
+ *   ParseAddr("storm.example.com"): unexpected character
+ *
+ * — which reaches the operator as a failed install with no hint that the
+ * problem is an address they typed in a different screen days earlier. It
+ * cost one real installation before this validator existed.
+ *
+ * The name customers connect to belongs in `alias`, which is what the network
+ * tab shows them. So the message says that rather than only saying no.
+ */
+/**
+ * Exported so the guard that catches rows written before this validator
+ * existed asks the same question the validator does. Two spellings of "is
+ * this an IP" is how the two ends of a rule drift apart.
+ */
+export function isBindAddress(value: string): boolean {
+  return z.string().ip().safeParse(value.trim()).success;
+}
+
+const bindAddress = z
+  .string()
+  .trim()
+  .max(45)
+  .refine(isBindAddress, {
+    message:
+      'This must be an IP address the node can bind to, such as 0.0.0.0 or the node’s own ' +
+      'address — Docker does not resolve names here. A hostname customers connect to goes ' +
+      'in the alias field instead.',
+  });
+
 export const createAllocationSchema = z.object({
   nodeId: cuidLikeId,
-  ip: z.string().trim().min(3).max(45),
+  ip: bindAddress,
   alias: z.string().trim().max(100).optional(),
   protocol: z.enum(['TCP', 'UDP']).default('TCP'),
   /** Either a list of ports or an inclusive range. */
