@@ -77,19 +77,30 @@ export interface StatCardProps {
 }
 
 /**
- * The chip carries the tone, and the ordinary tone is no colour at all.
+ * The chip carries the tone, and the ordinary tone is no chip at all.
  *
- * Tinting `default` was a mistake: on the server overview every card is
- * `default` almost all of the time, so four identical blue squares marched
+ * Tinting `default` was the first mistake: on the server overview every card
+ * is `default` almost all of the time, so four identical blue squares marched
  * across the top competing with the figures beside them. Colour that appears
  * on everything cannot single anything out — which was the entire argument
  * for putting it there.
+ *
+ * Making it grey said the right thing in the wrong material. The box is the
+ * carrier for a colour that is usually absent, so on almost every card it was
+ * carrying nothing: thirty-six pixels of bordered grey with a dim glyph in
+ * the middle, which is the shape of a disabled button, four across the top of
+ * a page. The figures are what the card is for, and they were sharing the
+ * width with four of those.
+ *
+ * So the box goes when the colour does. The icon stays — it is how you find
+ * the memory card without reading — and a card that does have something to
+ * report is then the only one wearing a chip, which is what a chip is for.
  */
 const TONE_CHIP: Record<NonNullable<StatCardProps['tone']>, string> = {
-  default: 'border-border bg-secondary/50 text-muted-foreground',
-  success: 'border-success/25 bg-success/12 text-success',
-  warning: 'border-warning/25 bg-warning/12 text-warning',
-  destructive: 'border-destructive/25 bg-destructive/12 text-destructive',
+  default: 'text-muted-foreground/70',
+  success: 'border border-success/25 bg-success/12 text-success',
+  warning: 'border border-warning/25 bg-warning/12 text-warning',
+  destructive: 'border border-destructive/25 bg-destructive/12 text-destructive',
 };
 
 export function StatCard({
@@ -132,16 +143,16 @@ export function StatCard({
         </div>
 
         {Icon ? (
-          // Tinted with the figure's own tone rather than left grey: on a
-          // wall of stat cards the colour is what tells you which one is the
-          // one in trouble, before you have read a single number.
+          // The same 36px of corner either way, so a card that gains a tone
+          // does not change height or shove its figures sideways — only the
+          // chip appears around the icon that was already there.
           <div
             className={cn(
-              'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border',
+              'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg',
               TONE_CHIP[tone],
             )}
           >
-            <Icon className="h-4 w-4" />
+            <Icon className="h-5 w-5" />
           </div>
         ) : null}
       </div>
