@@ -67,35 +67,107 @@ const SECTIONS: NavSection[] = [
 ];
 
 /**
- * The administration sections, as tabs on `/admin`.
+ * The order the administration sections are grouped in.
+ *
+ * Thirteen of anything needs grouping before it needs styling. Laid out flat
+ * they were a wrapped row that broke into two ragged lines at the width most
+ * people use, and the second line stopped halfway with a full-width rule under
+ * it — which reads as something that went wrong rather than something that was
+ * decided. Grouped, the list also answers a question the flat one could not:
+ * which of these thirteen is the one I want.
+ *
+ * `null` is the first group and takes no heading: with a single entry a
+ * heading would only repeat the link.
+ */
+export const ADMIN_GROUPS = ['fleet', 'catalogue', 'operations', 'panel'] as const;
+
+export const ADMIN_GROUP_LABELS: Record<(typeof ADMIN_GROUPS)[number], string> = {
+  fleet: 'Fleet',
+  catalogue: 'Catalogue',
+  operations: 'Operations',
+  panel: 'Panel',
+};
+
+/**
+ * The administration sections, shown down the side of `/admin`.
  *
  * Each carries the permission that gated it in the sidebar, so a support
  * account that could only see the audit log still sees only that.
  */
 export const ADMIN_TABS = [
-  { segment: '', label: 'Overview', icon: Gauge, permission: 'admin.dashboard' },
-  { segment: 'servers', label: 'All servers', icon: Server, permission: 'admin.servers' },
-  { segment: 'users', label: 'Users', icon: Users, permission: 'users.manage' },
-  { segment: 'roles', label: 'Roles', icon: ShieldCheck, permission: 'users.manage' },
-  { segment: 'nodes', label: 'Nodes', icon: Network, permission: 'nodes.manage' },
-  { segment: 'templates', label: 'Game templates', icon: Package, permission: 'templates.manage' },
+  { segment: '', label: 'Overview', icon: Gauge, permission: 'admin.dashboard', group: null },
+  {
+    segment: 'servers',
+    label: 'All servers',
+    icon: Server,
+    permission: 'admin.servers',
+    group: 'fleet',
+  },
+  { segment: 'users', label: 'Users', icon: Users, permission: 'users.manage', group: 'fleet' },
+  {
+    segment: 'roles',
+    label: 'Roles',
+    icon: ShieldCheck,
+    permission: 'users.manage',
+    group: 'fleet',
+  },
+  { segment: 'nodes', label: 'Nodes', icon: Network, permission: 'nodes.manage', group: 'fleet' },
+  {
+    segment: 'templates',
+    label: 'Game templates',
+    icon: Package,
+    permission: 'templates.manage',
+    group: 'catalogue',
+  },
   {
     segment: 'databases',
     label: 'Database hosts',
     icon: Database,
     permission: 'databasehosts.manage',
+    group: 'catalogue',
   },
   {
     segment: 'backups',
     label: 'Backup storage',
     icon: HardDrive,
     permission: 'backupstorage.manage',
+    group: 'catalogue',
   },
-  { segment: 'audit', label: 'Audit log', icon: Shield, permission: 'audit.view' },
-  { segment: 'jobs', label: 'Background jobs', icon: ListChecks, permission: 'admin.dashboard' },
-  { segment: 'webhooks', label: 'Webhooks', icon: Webhook, permission: 'webhooks.manage' },
-  { segment: 'settings', label: 'Settings', icon: Settings, permission: 'settings.manage' },
-  { segment: 'updates', label: 'Updates', icon: Download, permission: 'panel.update' },
+  {
+    segment: 'audit',
+    label: 'Audit log',
+    icon: Shield,
+    permission: 'audit.view',
+    group: 'operations',
+  },
+  {
+    segment: 'jobs',
+    label: 'Background jobs',
+    icon: ListChecks,
+    permission: 'admin.dashboard',
+    group: 'operations',
+  },
+  {
+    segment: 'webhooks',
+    label: 'Webhooks',
+    icon: Webhook,
+    permission: 'webhooks.manage',
+    group: 'operations',
+  },
+  {
+    segment: 'settings',
+    label: 'Settings',
+    icon: Settings,
+    permission: 'settings.manage',
+    group: 'panel',
+  },
+  {
+    segment: 'updates',
+    label: 'Updates',
+    icon: Download,
+    permission: 'panel.update',
+    group: 'panel',
+  },
 ] as const;
 
 /** Server-scoped links, shown while a server is open. */

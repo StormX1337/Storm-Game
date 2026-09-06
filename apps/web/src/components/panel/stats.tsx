@@ -123,7 +123,12 @@ export function StatCard({
               {value}
             </p>
           )}
-          {hint ? <p className="truncate text-xs text-muted-foreground">{hint}</p> : null}
+          {/* Wraps rather than truncates. The value above is a figure and may
+              be clipped without losing its sense; the hint is a sentence, and
+              "Average across onl…" is not a shorter way of saying anything.
+              These sit in a grid row, so the extra line lifts every card in
+              the row together and the tops still align. */}
+          {hint ? <p className="text-xs leading-snug text-muted-foreground">{hint}</p> : null}
         </div>
 
         {Icon ? (
@@ -167,6 +172,7 @@ export function UsageMeter({
   limit,
   formatValue,
   icon: Icon,
+  showPercent = true,
   className,
 }: {
   label: string;
@@ -174,6 +180,12 @@ export function UsageMeter({
   limit: number;
   formatValue: (value: number) => string;
   icon?: React.ComponentType<{ className?: string }>;
+  /**
+   * Off when the values are themselves percentages — a CPU meter reading
+   * "0% · 0% / 200%" makes a reader work out which percent is of what, and
+   * the answer is that the first is redundant.
+   */
+  showPercent?: boolean;
   className?: string;
 }) {
   const percent = usagePercent(used, limit);
@@ -193,25 +205,40 @@ export function UsageMeter({
   return (
     <div className={cn('space-y-2', className)}>
       <div className="flex items-center justify-between gap-2 text-sm">
-        <span className="flex items-center gap-1.5 text-muted-foreground">
-          {Icon ? <Icon className="h-3.5 w-3.5" /> : null}
-          {label}
+        {/* The label gives way, never the figures: squeezed into a narrow
+            card the row used to break "0 B / 84 GiB" across five lines, one
+            fragment each, which is not a smaller way of showing a number. */}
+        <span className="flex min-w-0 items-center gap-1.5 text-muted-foreground">
+          {Icon ? <Icon className="h-3.5 w-3.5 shrink-0" /> : null}
+          <span className="truncate">{label}</span>
         </span>
-        <span className="font-medium tabular-nums">
-          {formatValue(used)}
-          {unlimited ? (
-            <span className="text-muted-foreground"> / unlimited</span>
-          ) : (
-            <span className="text-muted-foreground"> / {formatValue(limit)}</span>
-          )}
+        {/*
+          One line, not two.
+
+          This used to end with a right-aligned "0% used" caption under the
+          bar, which made every meter three rows tall to carry two rows of
+          idea — the bar is already the percentage, drawn to scale, and the
+          figures above it are already the amounts. Stacked three deep, four
+          meters filled a card with a fact stated three times.
+
+          The number itself stays: at 1.4 of 2 GiB nobody wants to do the
+          division, and it is the number the colour shift is keyed to. It just
+          does not need a row of its own.
+        */}
+        <span className="shrink-0 whitespace-nowrap tabular-nums">
+          {!unlimited && showPercent ? (
+            <span className="font-medium">{formatPercent(percent, 0)}</span>
+          ) : null}
+          <span className={cn(!unlimited && showPercent ? 'text-muted-foreground' : 'font-medium')}>
+            {!unlimited && showPercent ? ' · ' : null}
+            {formatValue(used)}
+            <span className="text-muted-foreground">
+              {unlimited ? ' / unlimited' : ` / ${formatValue(limit)}`}
+            </span>
+          </span>
         </span>
       </div>
       <Progress value={percent} indicatorClassName={tone} />
-      {!unlimited ? (
-        <p className="text-right text-2xs text-muted-foreground">
-          {formatPercent(percent, 0)} used
-        </p>
-      ) : null}
     </div>
   );
 }

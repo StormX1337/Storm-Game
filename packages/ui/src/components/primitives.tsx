@@ -303,7 +303,9 @@ export const Progress = React.forwardRef<
   <ProgressPrimitive.Root
     ref={ref}
     className={cn(
-      'relative h-1.5 w-full overflow-hidden rounded-full bg-surface-sunken',
+      // `--track`, not a sunken surface: a meter is drawn on a card, and the
+      // sunken token is defined against the page. See the note in styles.css.
+      'relative h-1.5 w-full overflow-hidden rounded-full bg-track',
       'shadow-[inset_0_1px_2px_hsl(222_40%_4%/0.18)]',
       className,
     )}

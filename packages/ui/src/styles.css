@@ -47,6 +47,22 @@
     --input: 220 16% 88%;
     --ring: 221 83% 53%;
 
+    /*
+     * The empty part of a meter.
+     *
+     * Not `--surface-sunken`, which is what it used to be. A sunken surface is
+     * defined against the *page*, and every meter in the panel is drawn on a
+     * card: in dark mode that put a 6.5% track on a 9% card, two and a half
+     * points of lightness apart, so a bar at 0% showed nothing at all and a
+     * bar at 20% looked like a stray highlight with no scale behind it. A
+     * meter has to state its whole range before the fill means anything.
+     *
+     * Pinned to the border lightness instead — a track is exactly as visible
+     * as a hairline, which is this system's established "there is an edge
+     * here" level, and it lands correctly on a card in both themes.
+     */
+    --track: 220 16% 89%;
+
     --chart-1: 221 83% 53%;
     --chart-2: 262 72% 58%;
     --chart-3: 173 62% 40%;
@@ -153,6 +169,10 @@
     --border: 218 16% 16%;
     --input: 218 16% 18%;
     --ring: 217 91% 60%;
+
+    /* Eight points of lightness above the card, rather than two and a half
+       below it. See the note on the light value. */
+    --track: 218 16% 17%;
 
     --chart-1: 217 91% 62%;
     --chart-2: 262 83% 68%;

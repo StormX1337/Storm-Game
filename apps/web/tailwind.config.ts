@@ -22,6 +22,7 @@ const config: Config = {
           raised: 'hsl(var(--surface-raised))',
           sunken: 'hsl(var(--surface-sunken))',
         },
+        track: 'hsl(var(--track))',
         primary: {
           DEFAULT: 'hsl(var(--primary))',
           foreground: 'hsl(var(--primary-foreground))',

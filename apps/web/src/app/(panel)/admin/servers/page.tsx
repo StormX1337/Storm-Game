@@ -106,15 +106,25 @@ export default function AdminServersPage() {
             ))}
           </div>
         ) : data && data.items.length > 0 ? (
-          <Table>
+          // Fixed layout, so the widths on the headers are the widths.
+          //
+          // Under the default auto layout they are only suggestions, and a
+          // cell that must not wrap reports its whole string as its minimum
+          // width — so the columns fought, and the loser wrapped: a node
+          // called `disk-node-e8af561103` broke after the hyphen, and a
+          // server's subtitle came out as three lines of one word each.
+          // Neither is a shorter way of writing a name. Fixed, each column
+          // gets what it was given, the first takes the remainder, and
+          // anything too long is truncated with the value in its tooltip.
+          <Table className="table-fixed">
             <TableHeader>
               <TableRow>
                 <TableHead>Server</TableHead>
-                <TableHead className="w-32">Status</TableHead>
-                <TableHead className="w-40">Owner</TableHead>
-                <TableHead className="w-36">Node</TableHead>
-                <TableHead className="w-40">Resources</TableHead>
-                <TableHead className="w-32">Created</TableHead>
+                <TableHead className="w-28">Status</TableHead>
+                <TableHead className="w-44">Owner</TableHead>
+                <TableHead className="w-40">Node</TableHead>
+                <TableHead className="w-28">Resources</TableHead>
+                <TableHead className="w-28">Created</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -122,8 +132,10 @@ export default function AdminServersPage() {
                 <TableRow key={server.id} interactive>
                   <TableCell>
                     <Link href={`/servers/${server.shortId}`} className="block">
-                      <span className="block font-medium">{server.name}</span>
-                      <span className="block font-mono text-xs text-muted-foreground">
+                      <span className="block truncate font-medium" title={server.name}>
+                        {server.name}
+                      </span>
+                      <span className="block truncate font-mono text-xs text-muted-foreground">
                         {server.shortId} · {server.template?.game ?? 'Custom'}
                       </span>
                     </Link>
@@ -133,22 +145,27 @@ export default function AdminServersPage() {
                   </TableCell>
                   <TableCell className="text-sm">
                     <span className="block truncate">{server.owner?.username ?? '—'}</span>
-                    <span className="block truncate text-xs text-muted-foreground">
+                    <span
+                      className="block truncate text-xs text-muted-foreground"
+                      title={server.owner?.email}
+                    >
                       {server.owner?.email}
                     </span>
                   </TableCell>
                   <TableCell className="text-sm">
-                    <span className="block">{server.node.name}</span>
-                    <span className="block text-xs text-muted-foreground">
+                    <span className="block truncate" title={server.node.name}>
+                      {server.node.name}
+                    </span>
+                    <span className="block truncate text-xs text-muted-foreground">
                       {server.node.location}
                     </span>
                   </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
+                  <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
                     {formatMib(server.limits.memoryLimit, 0)} RAM
                     <br />
                     {formatMib(server.limits.diskLimit, 0)} disk
                   </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
+                  <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
                     {formatRelative(server.createdAt)}
                   </TableCell>
                 </TableRow>

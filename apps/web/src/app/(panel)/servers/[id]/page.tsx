@@ -136,7 +136,9 @@ export default function ServerOverviewPage() {
         />
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
+      {/* `items-start`, so the two short cards beside three tall charts keep
+          their own height instead of being stretched to match them. */}
+      <div className="grid items-start gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
           <ResourceChart
             title="CPU usage"
@@ -210,6 +212,10 @@ export default function ServerOverviewPage() {
                 used={stats?.cpuPercent ?? 0}
                 limit={server.limits.cpuLimit}
                 formatValue={(value) => `${value.toFixed(0)}%`}
+                // Both figures are already percentages of a core, so the
+                // meter's own "share of the limit" percent would be a third
+                // percent with a different denominator.
+                showPercent={false}
               />
             </CardContent>
           </Card>

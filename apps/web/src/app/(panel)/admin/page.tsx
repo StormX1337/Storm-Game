@@ -66,8 +66,22 @@ export default function AdminOverviewPage() {
         />
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        <Card className="lg:col-span-1">
+      {/*
+        `items-start`, because a grid stretches its cells to the tallest row by
+        default — which gave a four-line capacity card the height of a
+        twenty-event feed, and half a screen of nothing under it. These are
+        unrelated things side by side, not columns of one table, so each should
+        be as tall as what it holds.
+
+        The three-column split waits for 1400px, which is not a device class and
+        is not meant to be. What this row actually needs is about 290px per
+        third for "0% · 0 B / 84 GiB" to sit on one line, and the chrome before
+        it — a 256px sidebar and a 232px section rail — is fixed. 1400 is where
+        the arithmetic comes out; `xl` was 120px short of it, and put "Me…" in
+        a card whose whole job is naming what the number measures.
+      */}
+      <div className="grid items-start gap-6 min-[1400px]:grid-cols-3">
+        <Card className="min-[1400px]:col-span-1">
           <CardHeader>
             <CardTitle>Capacity</CardTitle>
           </CardHeader>
@@ -96,7 +110,7 @@ export default function AdminOverviewPage() {
           </CardContent>
         </Card>
 
-        <Card className="lg:col-span-2">
+        <Card className="min-[1400px]:col-span-2">
           <CardHeader className="flex-row items-center justify-between">
             <CardTitle>Recent events</CardTitle>
             <Button variant="ghost" size="sm" asChild>
@@ -139,7 +153,9 @@ export default function AdminOverviewPage() {
         </Card>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {/* `xl` for four across, matching the stat row above it and for the same
+          reason: the rail leaves too little for four columns at `lg`. */}
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <SummaryCard
           title="Server states"
           rows={[

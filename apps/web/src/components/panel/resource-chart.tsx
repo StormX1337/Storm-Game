@@ -83,11 +83,15 @@ export function ResourceChart({
         style={{ height }}
         aria-hidden={false}
       >
+        {/* The same weight as the real `CartesianGrid`, which draws at a flat
+            `hsl(var(--border))`. Held at a third of that the lines were there
+            in the markup and not on the screen, so the card still read as an
+            empty box with a caption in it. A ghost has to be visible to be
+            one. */}
         <div
-          className="pointer-events-none absolute inset-0 opacity-60"
+          className="pointer-events-none absolute inset-0"
           style={{
-            backgroundImage:
-              'linear-gradient(to bottom, hsl(var(--border) / 0.55) 1px, transparent 1px)',
+            backgroundImage: 'linear-gradient(to bottom, hsl(var(--border)) 1px, transparent 1px)',
             backgroundSize: `100% ${Math.max(24, Math.round(height / 5))}px`,
           }}
         />
