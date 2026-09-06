@@ -8,7 +8,7 @@ import { Badge, Button, Card, ScrollArea, cn, useToast } from '@storm/ui';
 import { SERVER_TABS, SERVER_TABS_NAV_CLASS } from '@/components/panel/sidebar';
 import { ServerProvider, useServerQuery } from '@/components/panel/server-context';
 import { ServerStatusBadge } from '@/components/panel/stats';
-import { PowerControls } from '@/components/panel/power-controls';
+import { ServerHeaderPowerControls } from '@/components/panel/power-controls';
 import { useAccountSocket } from '@/hooks/use-account-socket';
 import { errorMessage } from '@/lib/api';
 
@@ -111,14 +111,7 @@ export default function ServerLayout({ children }: { children: React.ReactNode }
               </div>
             </div>
 
-            <PowerControls
-              serverId={server.id}
-              status={status}
-              can={(...permissions) =>
-                permissions.some((permission) => server.permissions.includes(permission as never))
-              }
-              size="sm"
-            />
+            <ServerHeaderPowerControls />
           </div>
         </div>
 
@@ -136,8 +129,8 @@ export default function ServerLayout({ children }: { children: React.ReactNode }
           One navigation, laid out two ways.
 
           Wide enough and it is a rail down the left, the shape people know
-          from other panels: icon over label, the current one filled rather
-          than underlined.
+          from other panels: icon over label, the current one tinted and
+          barred rather than underlined.
 
           Narrow and it falls back to the wrapped row, which is what a phone
           needs — a rail beside the content leaves too little of it, and the
@@ -148,8 +141,12 @@ export default function ServerLayout({ children }: { children: React.ReactNode }
           Two navigations would have been simpler to write and wrong: both sit
           in the document whatever the width, so a page would carry the same
           landmark twice and a test would not know which it had found.
+
+          Stretched rather than start-aligned, so the rule down the rail's
+          edge runs the height of the page instead of stopping where the
+          twelve tabs happen to end.
         */}
-        <div className="lg:flex lg:items-start lg:gap-6">
+        <div className="lg:flex lg:gap-6">
           <ScrollArea className="w-full border-b border-border lg:w-auto lg:shrink-0 lg:border-b-0 lg:border-r">
             <nav
               className={cn(
@@ -168,17 +165,26 @@ export default function ServerLayout({ children }: { children: React.ReactNode }
                     className={cn(
                       'relative flex items-center gap-1.5 whitespace-nowrap px-3 py-2.5 text-sm font-medium transition-colors',
                       'lg:w-full lg:flex-col lg:gap-1.5 lg:rounded-lg lg:px-2 lg:py-3 lg:text-2xs',
+                      // The same active state the administration rail uses.
+                      // This one was a flat grey fill, which is the colour of
+                      // something switched off — the panel's own vocabulary
+                      // for "you are here" is the primary tint and the bar,
+                      // and two rails in the same product should not disagree
+                      // about it.
                       active
-                        ? 'text-foreground lg:bg-secondary'
-                        : 'text-muted-foreground hover:text-foreground lg:hover:bg-secondary/50',
+                        ? 'text-foreground lg:bg-primary/12 lg:text-primary lg:shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.2)]'
+                        : 'text-muted-foreground hover:text-foreground lg:hover:bg-secondary/60',
                     )}
                     aria-current={active ? 'page' : undefined}
                   >
+                    {active ? (
+                      <>
+                        <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-primary lg:hidden" />
+                        <span className="absolute left-0 top-1/2 hidden h-6 w-0.5 -translate-y-1/2 rounded-r-full bg-primary shadow-[0_0_10px_hsl(var(--primary)/0.7)] lg:block" />
+                      </>
+                    ) : null}
                     <tab.icon className="h-3.5 w-3.5 lg:h-5 lg:w-5" />
                     {tab.label}
-                    {active ? (
-                      <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-primary lg:hidden" />
-                    ) : null}
                   </Link>
                 );
               })}

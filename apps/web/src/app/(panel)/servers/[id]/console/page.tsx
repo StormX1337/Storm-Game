@@ -4,7 +4,6 @@ import * as React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@storm/ui';
 import { formatBytes, formatPercent, formatUptime } from '@/lib/format';
 import { ServerConsole } from '@/components/panel/console';
-import { PowerControls } from '@/components/panel/power-controls';
 import { useServer } from '@/components/panel/server-context';
 import { useServerSocket } from '@/hooks/use-server-socket';
 
@@ -33,43 +32,46 @@ export default function ConsolePage() {
         className="h-[calc(100vh-19rem)] min-h-[420px]"
       />
 
-      <div className="space-y-4">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm">Power</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-col gap-2 [&>div]:flex-col [&>div]:items-stretch [&_button]:w-full">
-              <PowerControls
-                serverId={server.id}
-                status={status}
-                can={can}
-                size="sm"
-                onAction={(action) => {
-                  if (action === 'start' || action === 'restart') setLiveStatus('STARTING');
-                  if (action === 'stop') setLiveStatus('STOPPING');
-                  if (action === 'kill') setLiveStatus('OFFLINE');
-                }}
-              />
-            </div>
-          </CardContent>
-        </Card>
+      {/*
+        No power card here.
 
+        There was one, holding the same four buttons the page header holds,
+        both live, about nine hundred pixels apart on the same screen. It
+        existed because only its copy told the page it had pressed anything —
+        so that moved onto the header's set, which is on every server page,
+        and this one went.
+      */}
+      <div className="space-y-4">
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-sm">Live usage</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2.5 text-sm">
-            <Row label="CPU" value={stats ? formatPercent(stats.cpuPercent) : '—'} />
-            <Row label="Memory" value={stats ? formatBytes(stats.memoryBytes) : '—'} />
-            <Row label="Disk" value={stats ? formatBytes(stats.diskBytes) : '—'} />
-            <Row label="Network in" value={stats ? formatBytes(stats.networkRx) : '—'} />
-            <Row label="Network out" value={stats ? formatBytes(stats.networkTx) : '—'} />
-            <Row
-              label="Uptime"
-              value={stats && status === 'ONLINE' ? formatUptime(stats.uptime) : '—'}
-            />
-          </CardContent>
+          {/*
+            Six em-dashes in a column is not a reading.
+
+            While the server is off there are no samples, and every row said
+            so separately — six times, in a card two hundred pixels tall,
+            which is more space than the numbers take when they exist. One
+            sentence says the same thing and stops pretending to be a table.
+          */}
+          {stats ? (
+            <CardContent className="space-y-2.5 text-sm">
+              <Row label="CPU" value={formatPercent(stats.cpuPercent)} />
+              <Row label="Memory" value={formatBytes(stats.memoryBytes)} />
+              <Row label="Disk" value={formatBytes(stats.diskBytes)} />
+              <Row label="Network in" value={formatBytes(stats.networkRx)} />
+              <Row label="Network out" value={formatBytes(stats.networkTx)} />
+              <Row label="Uptime" value={status === 'ONLINE' ? formatUptime(stats.uptime) : '—'} />
+            </CardContent>
+          ) : (
+            <CardContent>
+              <p className="text-sm text-muted-foreground">
+                {status === 'ONLINE' || status === 'STARTING'
+                  ? 'Waiting for the first sample from the node.'
+                  : 'The server reports usage while it is running.'}
+              </p>
+            </CardContent>
+          )}
         </Card>
       </div>
     </div>

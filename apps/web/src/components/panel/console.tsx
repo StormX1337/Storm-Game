@@ -193,18 +193,34 @@ export function ServerConsole({
   return (
     <Card className={cn('flex flex-col overflow-hidden', className)}>
       <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2">
+        {/*
+          This pill is about the log stream, and it used to read as if it were
+          about the server.
+
+          A green "Connected" is the most confident thing on the page, and it
+          was sitting directly above three lines saying the node hosting this
+          server could not be reached — because the websocket to the *panel*
+          was open, which is all it ever meant. Two claims, one green and one
+          not, about different things with the same word.
+
+          So it says "Live", which is true of a stream and cannot be read as a
+          claim about the server; and it is grey while that is the ordinary
+          case. Colour arrives only when the stream is in trouble — the header
+          badge beside it is where the server's own state is reported, and one
+          page should not have two green badges meaning different things.
+        */}
         <span
           className={cn(
             'flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-2xs font-medium',
             state === 'open'
-              ? 'border-success/40 text-success'
+              ? 'border-border text-muted-foreground'
               : state === 'connecting'
                 ? 'border-warning/40 text-warning'
                 : 'border-destructive/40 text-destructive',
           )}
         >
           {state === 'open' ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
-          {state === 'open' ? 'Connected' : state === 'connecting' ? 'Connecting' : 'Disconnected'}
+          {state === 'open' ? 'Live' : state === 'connecting' ? 'Connecting' : 'Disconnected'}
         </span>
 
         <span className="text-2xs text-muted-foreground">

@@ -6,6 +6,7 @@ import { Play, RotateCw, Skull, Square } from 'lucide-react';
 import { Button, useConfirm, useToast } from '@storm/ui';
 import { INSTALL_BUSY_STATUSES, type ServerStatus } from '@storm/types';
 import { api, errorMessage } from '@/lib/api';
+import { useServer } from '@/components/panel/server-context';
 
 type PowerAction = 'start' | 'stop' | 'restart' | 'kill';
 
@@ -149,5 +150,38 @@ export function PowerControls({
         Kill
       </Button>
     </div>
+  );
+}
+
+/**
+ * The server header's power buttons.
+ *
+ * There used to be two sets of these on the console page: the header's, on
+ * every server page, and a "Power" card in the console's right rail — four
+ * identical buttons, both live, roughly 900px apart on the same screen. Only
+ * the console's set told the page it had pressed anything, which is why it
+ * existed and why deleting it needed this: the same optimistic update, on the
+ * one set that is always there.
+ *
+ * It reads the status from context rather than taking it as a prop, so the
+ * button that says Start is the one the server's current state allows.
+ */
+export function ServerHeaderPowerControls(): React.JSX.Element {
+  const { server, status, can, setLiveStatus } = useServer();
+
+  return (
+    <PowerControls
+      serverId={server.id}
+      status={status}
+      can={can}
+      size="sm"
+      onAction={(action) => {
+        // The socket reports the real transition a moment later; this is so
+        // the badge does not sit on the old state until it arrives.
+        if (action === 'start' || action === 'restart') setLiveStatus('STARTING');
+        if (action === 'stop') setLiveStatus('STOPPING');
+        if (action === 'kill') setLiveStatus('OFFLINE');
+      }}
+    />
   );
 }

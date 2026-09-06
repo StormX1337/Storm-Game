@@ -31,7 +31,6 @@ import {
   EmptyState,
   Field,
   Input,
-  Progress,
   Skeleton,
   Table,
   TableBody,
@@ -39,6 +38,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  cn,
   useConfirm,
   useToast,
 } from '@storm/ui';
@@ -186,7 +186,18 @@ export default function BackupsPage() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold">Backups</h2>
-          <p className="text-sm text-muted-foreground">
+          {/*
+            The count, and no bar under it.
+
+            There was a full-width meter here, a thousand pixels of track
+            between the heading and the list. At zero it was a horizontal rule
+            in the wrong place; at four of five it said what "4 of 5" already
+            says, only less precisely. A meter earns its width on a continuous
+            quantity — bytes, a percentage — not on something you can count on
+            one hand. Being full is the part worth a colour, so that is the
+            part that gets one.
+          */}
+          <p className={cn('text-sm', atLimit ? 'text-warning' : 'text-muted-foreground')}>
             {limit > 0
               ? `${backups.length} of ${limit} backup slots used`
               : `${backups.length} backups stored`}
@@ -199,13 +210,6 @@ export default function BackupsPage() {
           </Button>
         ) : null}
       </div>
-
-      {limit > 0 ? (
-        <Progress
-          value={(backups.length / limit) * 100}
-          indicatorClassName={atLimit ? 'bg-warning' : 'bg-primary'}
-        />
-      ) : null}
 
       <Card className="overflow-hidden">
         {isLoading ? (
