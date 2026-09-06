@@ -136,6 +136,25 @@ export const agentEnvSchema = z.object({
   BACKUP_DIRECTORY: z.string().default('/var/lib/storm/backups'),
   DOCKER_SOCKET: z.string().default('/var/run/docker.sock'),
   DOCKER_NETWORK: z.string().default('storm_net'),
+  /**
+   * Resolvers for the containers this agent runs, comma separated.
+   *
+   * Empty means Docker decides, which is correct on a host whose own DNS
+   * works. Set it when the host's does not — a systemd-resolved stub that
+   * Docker cannot pass through, or a provider that filters outbound 53 — and
+   * when the node needs an internal resolver its install scripts fetch from.
+   *
+   *   DOCKER_DNS=1.1.1.1,1.0.0.1
+   */
+  DOCKER_DNS: z
+    .string()
+    .default('')
+    .transform((value) =>
+      value
+        .split(',')
+        .map((entry) => entry.trim())
+        .filter((entry) => entry.length > 0),
+    ),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   HEARTBEAT_INTERVAL: z.coerce.number().int().min(5).max(300).default(20),
   SFTP_ENABLED: booleanish.default(true),

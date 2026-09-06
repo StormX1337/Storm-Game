@@ -75,6 +75,7 @@ async function main(): Promise<void> {
   const docker = new DockerService({
     socketPath: env.DOCKER_SOCKET,
     network: env.DOCKER_NETWORK,
+    dns: env.DOCKER_DNS,
     dataDirectory: env.DATA_DIRECTORY,
     logger: app.log,
   });

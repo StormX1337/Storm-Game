@@ -36,7 +36,7 @@ describe('what a customer container is allowed', () => {
     const internals = service as unknown as Record<string, unknown>;
 
     let captured: Record<string, any> | null = null;
-    internals.options = { network: 'storm_net', dataDirectory: '/var/lib/storm/servers' };
+    internals.options = { network: 'storm_net', dataDirectory: '/var/lib/storm/servers', dns: [] };
     internals.nofileLimit = 4096;
     const quiet = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} };
     internals.log = { ...quiet, child: () => quiet };

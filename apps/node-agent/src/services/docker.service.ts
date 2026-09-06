@@ -17,6 +17,24 @@ export interface DockerServiceOptions {
   socketPath: string;
   network: string;
   dataDirectory: string;
+  /**
+   * Resolvers to hand to the containers, or empty to inherit the daemon's.
+   *
+   * Empty is the default and stays the default: Docker's own arrangement is
+   * right on a correctly configured host, and overriding it everywhere would
+   * break the operator who runs an internal resolver on purpose — a private
+   * mirror an install script fetches from resolves nowhere else.
+   *
+   * The lever exists because the arrangement is wrong often enough to matter.
+   * The usual shape is a host running systemd-resolved: `/etc/resolv.conf`
+   * holds only the 127.0.0.53 stub, Docker refuses to hand a loopback address
+   * to a container and falls back to 8.8.8.8, and if outbound 53 is filtered
+   * — which several providers do by default — every container on the machine
+   * has no DNS at all. What that looks like is not a DNS error anywhere near
+   * the panel; it is `UnknownHostException` in the middle of a game's install
+   * script.
+   */
+  dns: string[];
   logger: Logger;
 }
 
@@ -243,6 +261,7 @@ export class DockerService {
         Binds: [`${root}:/home/container:rw`],
         PortBindings: portBindings,
         NetworkMode: this.options.network,
+        ...(this.options.dns.length > 0 ? { Dns: this.options.dns } : {}),
         Memory: memoryBytes,
         MemoryReservation: Math.floor(memoryBytes * 0.75),
         MemorySwap: memorySwap,
@@ -557,6 +576,9 @@ export class DockerService {
         Binds: [`${root}:/mnt/server:rw`, `${scriptDir}:/mnt/install:ro`],
         Memory: 2048 * 1024 * 1024,
         NetworkMode: 'bridge',
+        // An install script's whole job is usually to download something, so
+        // this is the container where broken resolution shows up first.
+        ...(this.options.dns.length > 0 ? { Dns: this.options.dns } : {}),
         SecurityOpt: ['no-new-privileges'],
         CapDrop: ['ALL'],
         CapAdd: ['CHOWN', 'SETUID', 'SETGID', 'DAC_OVERRIDE', 'FOWNER'],

@@ -160,6 +160,55 @@ server's _owner_, not its node.
 panel stops offering it for new servers while everything already on it keeps
 running, so you can move servers off at your own pace.
 
+### When an install cannot reach the internet
+
+An install script's job is almost always to download something, so a node whose
+containers have no DNS fails there first — and it does not fail as a DNS error.
+It fails as this, in the middle of a game's own stack trace:
+
+```
+java.net.UnknownHostException: launcher.mojang.com
+Failed to download vanilla jar
+```
+
+Check what a container on that node actually gets:
+
+```bash
+docker run --rm alpine cat /etc/resolv.conf
+docker run --rm alpine nslookup github.com
+```
+
+The common cause is a host running **systemd-resolved**. Its `/etc/resolv.conf`
+holds only the `127.0.0.53` stub; Docker will not hand a loopback address to a
+container, so it falls back to `8.8.8.8` — and on a provider that filters
+outbound port 53, every container on the machine is then left with no
+resolution at all. The container's `resolv.conf` says `8.8.8.8` and the lookup
+still fails, which is what makes it confusing.
+
+Point the agent's containers at a resolver that works, in `/etc/storm/agent.env`:
+
+```
+DOCKER_DNS=1.1.1.1,1.0.0.1
+```
+
+then `systemctl restart storm-agent`. It applies to game containers and install
+containers alike — the install container is the one that surfaced it, and a
+setting that reached only the other would have fixed nothing.
+
+Empty is the default and does not override anything, because Docker's own
+arrangement is correct on a host whose DNS is; set this only when it is not, or
+when the node needs an internal resolver its install scripts fetch from.
+
+The alternative is to fix it for every container on the machine rather than
+just the panel's, in `/etc/docker/daemon.json`:
+
+```json
+{ "dns": ["1.1.1.1", "1.0.0.1"] }
+```
+
+followed by `systemctl restart docker`. That restarts every container on the
+node, so drain it first.
+
 ---
 
 ## PostgreSQL

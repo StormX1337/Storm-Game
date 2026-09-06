@@ -400,6 +400,12 @@ DATA_DIRECTORY=${DATA_DIR}
 BACKUP_DIRECTORY=${BACKUP_DIR}
 DOCKER_SOCKET=/var/run/docker.sock
 DOCKER_NETWORK=storm_net
+# Resolvers for this node's containers, comma separated. Empty leaves Docker
+# its own arrangement, which is right on a host whose DNS is. Set it when an
+# install fails with UnknownHostException — the usual cause is systemd-resolved
+# plus a provider that filters outbound 53. See docs/DEPLOYMENT.md.
+#   DOCKER_DNS=1.1.1.1,1.0.0.1
+DOCKER_DNS=
 
 SFTP_ENABLED=true
 SFTP_PORT=${SFTP_PORT}
