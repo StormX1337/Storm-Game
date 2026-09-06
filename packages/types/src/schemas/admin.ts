@@ -83,40 +83,60 @@ export const updateNodeSchema = createNodeSchema.partial();
 /* ------------------------------------------------------------ allocations -- */
 
 /**
- * An allocation's `ip` is a bind address, not a name.
+ * What ends up in an allocation's `ip` is a bind address, always.
  *
  * It travels to the node and becomes `HostIp` on a Docker port binding, and
- * Docker parses that with Go's `netip.ParseAddr`, which does not resolve
- * anything. A hostname there fails the whole container create with
+ * Docker parses that with Go's `netip.ParseAddr`, which resolves nothing. A
+ * hostname stored there fails the whole container create with
  *
  *   (HTTP code 400) bad parameter - invalid JSON:
  *   ParseAddr("storm.example.com"): unexpected character
  *
- * — which reaches the operator as a failed install with no hint that the
- * problem is an address they typed in a different screen days earlier. It
- * cost one real installation before this validator existed.
+ * — which reached one operator as an install that failed twice with a Go
+ * parser error and a server stuck on "Reinstalling", with nothing anywhere
+ * naming the address or the screen it had been typed on.
  *
- * The name customers connect to belongs in `alias`, which is what the network
- * tab shows them. So the message says that rather than only saying no.
+ * What may be *typed* is wider, and deliberately so. Pterodactyl accepts a
+ * hostname here and resolves it with `gethostbyname` before storing the
+ * result, so operators coming from it arrive expecting that — and it is a
+ * fair thing to expect, because the address of a machine is a thing people
+ * know by name. The lookup happens once, in the route; this only says which
+ * shapes are worth trying.
  */
+
 /**
- * Exported so the guard that catches rows written before this validator
- * existed asks the same question the validator does. Two spellings of "is
- * this an IP" is how the two ends of a rule drift apart.
+ * Exported so the guard that catches rows written before any of this existed
+ * asks the same question the validator does. Two spellings of "is this an IP"
+ * is how the two ends of a rule drift apart.
  */
 export function isBindAddress(value: string): boolean {
   return z.string().ip().safeParse(value.trim()).success;
 }
 
+/**
+ * A name that could plausibly resolve.
+ *
+ * Deliberately loose: DNS decides what exists, not a regex. This only rules
+ * out the things that are clearly neither an address nor a host — a URL, a
+ * `host:port` pair, a path — so those fail with a sentence about the field
+ * rather than as a lookup that was never going to succeed.
+ */
+export function isResolvableName(value: string): boolean {
+  const host = value.trim();
+  if (host.length === 0 || host.length > 253) return false;
+  if (!host.includes('.')) return false;
+  return /^(?!-)[a-zA-Z0-9-]{1,63}(?<!-)(\.(?!-)[a-zA-Z0-9-]{1,63}(?<!-))*\.?$/.test(host);
+}
+
 const bindAddress = z
   .string()
   .trim()
-  .max(45)
-  .refine(isBindAddress, {
+  .max(253)
+  .refine((value) => isBindAddress(value) || isResolvableName(value), {
     message:
-      'This must be an IP address the node can bind to, such as 0.0.0.0 or the node’s own ' +
-      'address — Docker does not resolve names here. A hostname customers connect to goes ' +
-      'in the alias field instead.',
+      'This must be an IP address the node binds to — 0.0.0.0 means every interface — or a ' +
+      'hostname that resolves to one. Docker resolves nothing itself, so a name is looked up ' +
+      'once here and the address it answers with is what gets stored.',
   });
 
 export const createAllocationSchema = z.object({

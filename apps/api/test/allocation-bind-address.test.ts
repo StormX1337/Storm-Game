@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import dns from 'node:dns/promises';
 import { after, before, beforeEach, describe, it } from 'node:test';
 import type { FastifyInstance } from 'fastify';
 import { hashPassword } from '@storm/security';
@@ -36,6 +37,12 @@ describe('an allocation binds to an address, not a name', () => {
 
   const asAdmin = () => ({ authorization: `Bearer ${adminToken}` });
 
+  // DNS is stubbed. What is under test is what the panel does with an answer,
+  // not whether this machine can reach a resolver — and a suite that needs the
+  // network is a suite that fails for reasons that are not the code's.
+  const RESOLVES_TO = '203.0.113.7';
+  const realLookup = dns.lookup;
+
   let port = 30000;
   const nextPort = () => (port += 1);
 
@@ -48,6 +55,11 @@ describe('an allocation binds to an address, not a name', () => {
     });
 
   before(async () => {
+    (dns as { lookup: unknown }).lookup = async (host: string) => {
+      if (host === 'nowhere.invalid') throw new Error('ENOTFOUND');
+      return { address: RESOLVES_TO, family: 4 };
+    };
+
     const context = await createTestApp();
     app = context.app;
     cleanup = context.cleanup;
@@ -91,6 +103,7 @@ describe('an allocation binds to an address, not a name', () => {
   });
 
   after(async () => {
+    (dns as { lookup: unknown }).lookup = realLookup;
     await app.prisma.serverAllocation.deleteMany({ where: { nodeId } });
     await app.prisma.server.deleteMany({ where: { nodeId } });
     await app.prisma.node.delete({ where: { id: nodeId } }).catch(() => undefined);
@@ -143,26 +156,106 @@ describe('an allocation binds to an address, not a name', () => {
     assert.equal(response.statusCode, 201, response.body);
   });
 
-  it('refuses a hostname', async () => {
+  it('refuses something that is neither an address nor a name', async () => {
     // 400 is what this panel answers for a body that does not validate.
-    const response = await createAllocation('storm.stormclient.xyz');
+    const response = await createAllocation('http://storm.example.com:25565/x');
     assert.equal(response.statusCode, 400, response.body);
   });
 
-  it('says where the hostname was supposed to go', async () => {
-    // The operator did not make a typo — they put a real value in the wrong
-    // field. A refusal that only says "invalid" sends them back to guess.
-    const response = await createAllocation('storm.stormclient.xyz');
-    assert.match(response.body, /alias/i, response.body);
-  });
-
-  it('still takes the hostname in the field that is for it', async () => {
+  it('takes the alias when one is given', async () => {
     const response = await createAllocation('10.0.0.6', 'storm.stormclient.xyz');
     assert.equal(response.statusCode, 201, response.body);
     const stored = await app.prisma.serverAllocation.findFirstOrThrow({
       where: { nodeId, ip: '10.0.0.6' },
     });
     assert.equal(stored.alias, 'storm.stormclient.xyz');
+  });
+
+  /* ------------------------------------------------------- a typed name -- */
+
+  it('takes a hostname and stores what it resolved to', async () => {
+    // Pterodactyl's bargain, and the reason an operator expects this to work:
+    // the name is looked up once, and the address is what is kept.
+    const port = nextPort();
+    const response = await app.inject({
+      method: 'POST',
+      url: `/api/v1/admin/nodes/${nodeId}/allocations`,
+      headers: asAdmin(),
+      payload: { ip: 'storm.stormclient.xyz', ports: [port] },
+    });
+    assert.equal(response.statusCode, 201, response.body);
+
+    const stored = await app.prisma.serverAllocation.findFirstOrThrow({ where: { nodeId, port } });
+    assert.equal(stored.ip, RESOLVES_TO, 'the name was stored instead of the address');
+  });
+
+  it('keeps the name as the alias, because that is what it was', async () => {
+    // Somebody who types a name into an address field means customers to see
+    // it. Pterodactyl drops it here and the name is simply gone.
+    const port = nextPort();
+    await app.inject({
+      method: 'POST',
+      url: `/api/v1/admin/nodes/${nodeId}/allocations`,
+      headers: asAdmin(),
+      payload: { ip: 'storm.stormclient.xyz', ports: [port] },
+    });
+
+    const stored = await app.prisma.serverAllocation.findFirstOrThrow({ where: { nodeId, port } });
+    assert.equal(stored.alias, 'storm.stormclient.xyz');
+  });
+
+  it('does not overwrite an alias the operator gave', async () => {
+    const port = nextPort();
+    await app.inject({
+      method: 'POST',
+      url: `/api/v1/admin/nodes/${nodeId}/allocations`,
+      headers: asAdmin(),
+      payload: { ip: 'storm.stormclient.xyz', alias: 'play.example.com', ports: [port] },
+    });
+
+    const stored = await app.prisma.serverAllocation.findFirstOrThrow({ where: { nodeId, port } });
+    assert.equal(stored.alias, 'play.example.com');
+  });
+
+  it('says what it resolved, rather than quietly storing something else', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: `/api/v1/admin/nodes/${nodeId}/allocations`,
+      headers: asAdmin(),
+      payload: { ip: 'storm.stormclient.xyz', ports: [nextPort()] },
+    });
+    const data = response.json<{ data: { ip: string; resolvedFrom: string | null } }>().data;
+    assert.equal(data.ip, RESOLVES_TO);
+    assert.equal(data.resolvedFrom, 'storm.stormclient.xyz');
+  });
+
+  it('reports nothing resolved when an address was typed', async () => {
+    const response = await createAllocation('10.0.0.9');
+    const data = response.json<{ data: { resolvedFrom: string | null } }>().data;
+    assert.equal(data.resolvedFrom, null);
+  });
+
+  it('refuses a name that does not resolve, and says to use the alias', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: `/api/v1/admin/nodes/${nodeId}/allocations`,
+      headers: asAdmin(),
+      payload: { ip: 'nowhere.invalid', ports: [nextPort()] },
+    });
+    assert.equal(response.statusCode, 400, response.body);
+    assert.match(response.body, /did not resolve/i);
+    assert.match(response.body, /alias/i);
+  });
+
+  it('stores nothing at all when the name does not resolve', async () => {
+    const port = nextPort();
+    await app.inject({
+      method: 'POST',
+      url: `/api/v1/admin/nodes/${nodeId}/allocations`,
+      headers: asAdmin(),
+      payload: { ip: 'nowhere.invalid', ports: [port] },
+    });
+    assert.equal(await app.prisma.serverAllocation.count({ where: { nodeId, port } }), 0);
   });
 
   /* ------------------------------------------------------------ the guard -- */

@@ -1,3 +1,4 @@
+import dns from 'node:dns/promises';
 import { z } from 'zod';
 import type { FastifyInstance } from 'fastify';
 import {
@@ -7,6 +8,7 @@ import {
   createAllocationSchema,
   createNodeSchema,
   paginationQuerySchema,
+  isBindAddress,
   updateNodeSchema,
   type AgentSystemInfo,
   type AgentSystemStats,
@@ -359,6 +361,20 @@ export default async function adminNodeRoutes(app: FastifyInstance): Promise<voi
       const node = await app.prisma.node.findUnique({ where: { id } });
       if (!node) throw notFound('Node was not found', ErrorCode.NODE_NOT_FOUND);
 
+      // A name is looked up once, here, and the address it answers with is
+      // what gets stored — the same bargain Pterodactyl makes with
+      // `gethostbyname`, and for the same reason: Docker binds by address and
+      // resolves nothing, but the address of a machine is a thing people know
+      // by name. Storing the name instead is what broke a real install.
+      //
+      // The name is kept too, as the alias, when the operator did not give
+      // one. Pterodactyl leaves that field empty and the name is simply gone;
+      // but somebody who typed `play.example.com` into a field meant an
+      // address plainly meant customers to see it, and the alias is exactly
+      // where the panel shows customers an address.
+      const resolved = await resolveBindAddress(input.ip);
+      const alias = input.alias ?? (resolved.fromName ? input.ip : null);
+
       const ports = new Set<number>(input.ports ?? []);
       if (input.portRangeStart && input.portRangeEnd) {
         if (input.portRangeEnd < input.portRangeStart)
@@ -374,10 +390,10 @@ export default async function adminNodeRoutes(app: FastifyInstance): Promise<voi
       const result = await app.prisma.serverAllocation.createMany({
         data: [...ports].map((port) => ({
           nodeId: id,
-          ip: input.ip,
+          ip: resolved.address,
           port,
           protocol: input.protocol,
-          alias: input.alias ?? null,
+          alias,
         })),
         // Re-adding an existing port is a no-op rather than an error.
         skipDuplicates: true,
@@ -388,12 +404,24 @@ export default async function adminNodeRoutes(app: FastifyInstance): Promise<voi
         targetType: 'node',
         targetId: id,
         targetLabel: node.name,
-        metadata: { ip: input.ip, count: result.count },
+        metadata: {
+          ip: resolved.address,
+          count: result.count,
+          ...(resolved.fromName ? { resolvedFrom: input.ip } : {}),
+        },
       });
 
-      return reply
-        .status(201)
-        .send(ok({ created: result.count, skipped: ports.size - result.count }));
+      return reply.status(201).send(
+        ok({
+          created: result.count,
+          skipped: ports.size - result.count,
+          ip: resolved.address,
+          alias,
+          // So the panel can say "storm.example.com resolved to 1.2.3.4"
+          // rather than silently storing something else than was typed.
+          resolvedFrom: resolved.fromName ? input.ip : null,
+        }),
+      );
     },
   );
 
@@ -461,4 +489,48 @@ async function mintToken(
   });
 
   return { tokenId, token, secret };
+}
+
+/** How long a name gets to resolve before the request gives up on it. */
+const DNS_TIMEOUT_MS = 5_000;
+
+/**
+ * Turns whatever was typed into the address that will be stored.
+ *
+ * An IP passes straight through. A name is looked up once and the result is
+ * what the allocation holds from then on — the panel never resolves it again,
+ * and neither does Docker, which cannot. That is a deliberate trade: if the
+ * record later points somewhere else, the binding does not follow it. Binding
+ * a container's port is not a lookup, it is a claim on an interface that
+ * exists at the moment the container starts, so there is nothing to re-resolve
+ * against; and an address that silently changed under a running fleet would be
+ * far worse than one that is simply out of date and says so.
+ *
+ * `dns.lookup` rather than `dns.resolve` on purpose: it goes through the
+ * system resolver, so /etc/hosts, a search domain and a split-horizon setup
+ * all work — which is exactly how an operator's node names usually resolve.
+ * `getaddrinfo` has no timeout of its own, hence the race.
+ */
+async function resolveBindAddress(value: string): Promise<{ address: string; fromName: boolean }> {
+  const host = value.trim();
+  if (isBindAddress(host)) return { address: host, fromName: false };
+
+  let result;
+  try {
+    result = await Promise.race([
+      dns.lookup(host),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('timed out')), DNS_TIMEOUT_MS),
+      ),
+    ]);
+  } catch {
+    throw badRequest(
+      `"${host}" did not resolve to an address. A node binds ports by address — Docker ` +
+        'resolves nothing itself — so the name has to be looked up here, and this one could ' +
+        'not be. Check the record, or enter the address directly and put the name in the ' +
+        'alias field.',
+    );
+  }
+
+  return { address: result.address, fromName: true };
 }

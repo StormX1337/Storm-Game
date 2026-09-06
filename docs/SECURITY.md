@@ -384,6 +384,29 @@ the operator has defined.
 Deleting a server frees its allocations. A primary allocation cannot be removed
 while the server exists.
 
+**What is stored in an allocation's `ip` is always an address.** It becomes
+`HostIp` on a Docker port binding, and Docker parses that with Go's
+`netip.ParseAddr`, which resolves nothing — a hostname there fails the whole
+container create with `ParseAddr("…"): unexpected character`, which reaches an
+operator as an install that fails with a Go parser error and no hint about
+where the address came from.
+
+A hostname may still be **typed**: it is looked up once, at creation, and the
+address it answers with is what gets stored — the same thing Pterodactyl does
+with `gethostbyname`. The response says what it resolved to rather than
+quietly storing something other than what was entered, and the name is kept as
+the allocation's alias, which is where the panel shows customers an address.
+A name that does not resolve is refused; it is never silently replaced with
+`0.0.0.0`, because publishing a customer's port on every interface of a node
+is not a repair.
+
+The lookup is not repeated. Binding a port is a claim on an interface that
+exists when the container starts, not a lookup, so there is nothing to
+re-resolve against — and an address that changed under a running fleet would be
+worse than one that is merely out of date. Rows written before any of this
+existed are caught where the container spec is built, with a message naming the
+allocation and the screen to correct it on.
+
 ---
 
 ## Node placement
