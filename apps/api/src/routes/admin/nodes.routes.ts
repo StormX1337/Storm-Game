@@ -9,6 +9,7 @@ import {
   createNodeSchema,
   paginationQuerySchema,
   isBindAddress,
+  updateAllocationSchema,
   updateNodeSchema,
   type AgentSystemInfo,
   type AgentSystemStats,
@@ -422,6 +423,72 @@ export default async function adminNodeRoutes(app: FastifyInstance): Promise<voi
           resolvedFrom: resolved.fromName ? input.ip : null,
         }),
       );
+    },
+  );
+
+  app.patch(
+    '/:id/allocations/:allocationId',
+    { schema: { tags: ['Admin: Allocations'], summary: 'Correct an address or alias' } },
+    async (request) => {
+      const { id, allocationId } = params(
+        request,
+        idParam.extend({ allocationId: z.string().min(1) }),
+      );
+      const input = body(request, updateAllocationSchema);
+
+      const allocation = await app.prisma.serverAllocation.findFirst({
+        where: { id: allocationId, nodeId: id },
+        include: { server: { select: { id: true, name: true } } },
+      });
+      if (!allocation) throw notFound('Allocation was not found');
+
+      // Assigned or not. Refusing here is what left an operator with a wrong
+      // address they could not change: the delete route already refuses an
+      // assigned port, so between the two there was no way to correct one
+      // without opening the database.
+      const resolved = input.ip === undefined ? null : await resolveBindAddress(input.ip);
+
+      let updated;
+      try {
+        updated = await app.prisma.serverAllocation.update({
+          where: { id: allocationId },
+          data: {
+            ...(resolved ? { ip: resolved.address } : {}),
+            ...(input.alias !== undefined ? { alias: input.alias } : {}),
+          },
+        });
+      } catch (error) {
+        // (nodeId, ip, port, protocol) is unique, so moving a port onto an
+        // address that already has it collides. The database says so; this
+        // says which port.
+        if ((error as { code?: string }).code === 'P2002') {
+          throw conflict(
+            `${resolved?.address ?? allocation.ip}:${allocation.port} already exists on this node`,
+          );
+        }
+        throw error;
+      }
+
+      await app.audit.log(request, {
+        action: 'admin.allocation_updated',
+        targetType: 'node',
+        targetId: id,
+        metadata: {
+          port: allocation.port,
+          ...(resolved ? { from: allocation.ip, to: resolved.address } : {}),
+          ...(resolved?.fromName ? { resolvedFrom: input.ip } : {}),
+          ...(input.alias !== undefined ? { alias: input.alias } : {}),
+        },
+      });
+
+      return ok({
+        allocation: toAllocation(updated),
+        resolvedFrom: resolved?.fromName ? (input.ip ?? null) : null,
+        // The node holds a container spec built from the old address. Nothing
+        // rebinds a running container, so this lands when it next starts —
+        // the same bargain the resource limits make.
+        appliesOnNextStart: Boolean(allocation.server),
+      });
     },
   );
 

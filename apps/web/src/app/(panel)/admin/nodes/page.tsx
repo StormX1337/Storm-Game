@@ -559,6 +559,7 @@ interface AllocationRow {
   ip: string;
   port: number;
   protocol: string;
+  alias: string | null;
   isPrimary: boolean;
   server: { id: string; name: string; shortId: string } | null;
 }
@@ -664,19 +665,17 @@ function AllocationsDialog({
             ) : data && data.items.length > 0 ? (
               <div className="divide-y divide-border">
                 {data.items.map((row) => (
-                  <div key={row.id} className="flex items-center justify-between gap-2 px-3 py-2">
-                    <span className="font-mono text-sm">
-                      {row.ip}:{row.port}
-                    </span>
-                    {row.server ? (
-                      <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <Server className="h-3 w-3" />
-                        {row.server.name}
-                      </span>
-                    ) : (
-                      <Badge variant="muted">free</Badge>
-                    )}
-                  </div>
+                  <AllocationLine
+                    key={row.id}
+                    nodeId={node.id}
+                    row={row}
+                    onChanged={() => {
+                      void queryClient.invalidateQueries({
+                        queryKey: ['admin', 'nodes', node.id, 'allocations'],
+                      });
+                      onChanged();
+                    }}
+                  />
                 ))}
               </div>
             ) : (
@@ -696,5 +695,108 @@ function AllocationsDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * One allocation, correctable in place.
+ *
+ * It used to be a line of text. Ports could be added and unassigned ones
+ * removed, so an address that turned out to be wrong on a port a server was
+ * already using could not be changed at all — and the panel's own error about
+ * exactly that told operators to come here and fix it. There was nothing here
+ * to fix it with; the only way through was the database.
+ */
+function AllocationLine({
+  nodeId,
+  row,
+  onChanged,
+}: {
+  nodeId: string;
+  row: AllocationRow;
+  onChanged: () => void;
+}) {
+  const toast = useToast();
+  const [editing, setEditing] = React.useState(false);
+  const [ip, setIp] = React.useState(row.ip);
+  const [alias, setAlias] = React.useState(row.alias ?? '');
+
+  const save = useMutation({
+    mutationFn: () =>
+      api.patch<{ resolvedFrom: string | null; appliesOnNextStart: boolean }>(
+        `/admin/nodes/${nodeId}/allocations/${row.id}`,
+        { ip, alias: alias.trim() === '' ? null : alias.trim() },
+      ),
+    onSuccess: (result) => {
+      toast.success(
+        result.resolvedFrom ? `${result.resolvedFrom} resolved to ${ip}` : 'Address updated',
+        result.appliesOnNextStart ? 'It takes effect the next time the server starts.' : undefined,
+      );
+      setEditing(false);
+      onChanged();
+    },
+    onError: (error) => toast.error('Could not update the allocation', errorMessage(error)),
+  });
+
+  if (editing) {
+    return (
+      <div className="space-y-2 px-3 py-2.5">
+        <div className="grid items-end gap-2 sm:grid-cols-[1fr_1fr_auto_auto]">
+          <Field label="IP or hostname">
+            <Input value={ip} onChange={(event) => setIp(event.target.value)} className="h-8" />
+          </Field>
+          <Field label="Alias">
+            <Input
+              value={alias}
+              onChange={(event) => setAlias(event.target.value)}
+              placeholder="what customers connect to"
+              className="h-8"
+            />
+          </Field>
+          <Button size="sm" onClick={() => save.mutate()} loading={save.isPending}>
+            Save
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              setIp(row.ip);
+              setAlias(row.alias ?? '');
+              setEditing(false);
+            }}
+          >
+            Cancel
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          A hostname is looked up once and the address it answers with is stored — the node binds
+          ports by address. Port {row.port} does not change.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center justify-between gap-2 px-3 py-2">
+      <span className="min-w-0 truncate font-mono text-sm">
+        {row.ip}:{row.port}
+        {row.alias ? (
+          <span className="ml-2 font-sans text-xs text-muted-foreground">{row.alias}</span>
+        ) : null}
+      </span>
+      <div className="flex shrink-0 items-center gap-2">
+        {row.server ? (
+          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Server className="h-3 w-3" />
+            {row.server.name}
+          </span>
+        ) : (
+          <Badge variant="muted">free</Badge>
+        )}
+        <Button size="sm" variant="ghost" onClick={() => setEditing(true)}>
+          Edit
+        </Button>
+      </div>
+    </div>
   );
 }

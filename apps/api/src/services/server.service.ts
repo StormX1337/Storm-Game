@@ -482,9 +482,10 @@ export class ServerService {
         ErrorCode.VALIDATION_ERROR,
         `This server has ${named.length === 1 ? 'an allocation' : 'allocations'} bound to a ` +
           `name rather than an address (${list}). A node binds ports by IP — Docker does not ` +
-          'resolve names — so this cannot be started or installed until it is corrected under ' +
-          'Administration → Nodes → Allocations. Put the node’s address (or 0.0.0.0) in the IP ' +
-          'field, and the name customers connect to in the alias field.',
+          'resolve names — so this cannot be started or installed until it is corrected. Open ' +
+          'Administration → Nodes, choose Manage ports on this server’s node, and press Edit ' +
+          'on the port: put an address (or a hostname, which is looked up once) in the first ' +
+          'field, and the name customers connect to in the alias.',
       );
     }
 

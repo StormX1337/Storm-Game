@@ -150,6 +150,23 @@ export const createAllocationSchema = z.object({
   portRangeEnd: z.number().int().min(1).max(65535).optional(),
 });
 
+/**
+ * Correcting an allocation that already exists.
+ *
+ * There was no way to. Ports could be added and unassigned ones removed, and
+ * an allocation attached to a server could be neither — so an address that
+ * turned out to be wrong was permanent for as long as the server lived, and
+ * the panel's own error message about it named a screen that could not act on
+ * it. Fixing it meant editing the database by hand.
+ *
+ * `alias` is nullable rather than merely optional, so a name can be taken off
+ * again: absent means "leave it", null means "there is none".
+ */
+export const updateAllocationSchema = z.object({
+  ip: bindAddress.optional(),
+  alias: z.string().trim().max(100).nullable().optional(),
+});
+
 export const assignAllocationSchema = z.object({
   allocationId: cuidLikeId,
   primary: z.boolean().default(false),

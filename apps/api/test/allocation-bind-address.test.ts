@@ -289,11 +289,18 @@ describe('an allocation binds to an address, not a name', () => {
     });
   });
 
-  it('names the screen the address is corrected on', async () => {
+  it('names a control that exists, not just a screen', async () => {
+    // The first version of this message said "corrected under Administration
+    // → Nodes → Allocations". There was no way to correct one there: ports
+    // could be added and unassigned ones removed, and this port is assigned.
+    // A message that sends somebody somewhere they cannot act is worse than
+    // one that says nothing, because they will try.
     await attachAllocation('storm.stormclient.xyz');
     await assert.rejects(buildSpec(), (error: { message?: string }) => {
-      assert.match(String(error.message), /allocations/i);
-      assert.match(String(error.message), /alias/i);
+      const message = String(error.message);
+      assert.match(message, /manage ports/i);
+      assert.match(message, /\bedit\b/i);
+      assert.match(message, /alias/i);
       return true;
     });
   });
@@ -305,5 +312,157 @@ describe('an allocation binds to an address, not a name', () => {
     await assert.rejects(buildSpec());
     const stored = await app.prisma.serverAllocation.findFirstOrThrow({ where: { serverId } });
     assert.equal(stored.ip, 'storm.stormclient.xyz');
+  });
+  /* --------------------------------------------------- correcting one -- */
+
+  /**
+   * The repair path, which did not exist.
+   *
+   * Ports could be added, and unassigned ones removed. An allocation attached
+   * to a server could be neither — so an address that turned out to be wrong
+   * was permanent for the life of the server, and the panel's own message
+   * about it pointed at a screen with no control that could act on it. The
+   * only way through was to edit the database by hand.
+   */
+  describe('correcting an allocation that already exists', () => {
+    const patch = (allocationId: string, payload: Record<string, unknown>) =>
+      app.inject({
+        method: 'PATCH',
+        url: `/api/v1/admin/nodes/${nodeId}/allocations/${allocationId}`,
+        headers: asAdmin(),
+        payload,
+      });
+
+    async function assignedAllocation(ip: string) {
+      return app.prisma.serverAllocation.create({
+        data: { nodeId, ip, port: nextPort(), serverId, isPrimary: true },
+      });
+    }
+
+    it('corrects the address of an allocation a server is using', async () => {
+      // Exactly the stuck case: assigned, primary, and holding a name.
+      const allocation = await assignedAllocation('storm.stormclient.xyz');
+
+      const response = await patch(allocation.id, { ip: '10.0.0.20' });
+      assert.equal(response.statusCode, 200, response.body);
+
+      const stored = await app.prisma.serverAllocation.findUniqueOrThrow({
+        where: { id: allocation.id },
+      });
+      assert.equal(stored.ip, '10.0.0.20');
+    });
+
+    it('unblocks the server it was holding up', async () => {
+      const allocation = await assignedAllocation('storm.stormclient.xyz');
+      await assert.rejects(buildSpec(), 'the guard should refuse this before the fix');
+
+      await patch(allocation.id, { ip: '10.0.0.21' });
+
+      const spec = await buildSpec();
+      assert.deepEqual(
+        spec.ports.map((port) => port.ip),
+        ['10.0.0.21'],
+      );
+    });
+
+    it('resolves a name here too, rather than storing it again', async () => {
+      const allocation = await assignedAllocation('10.0.0.22');
+
+      const response = await patch(allocation.id, { ip: 'storm.stormclient.xyz' });
+      assert.equal(response.statusCode, 200, response.body);
+
+      const stored = await app.prisma.serverAllocation.findUniqueOrThrow({
+        where: { id: allocation.id },
+      });
+      assert.equal(stored.ip, RESOLVES_TO);
+      assert.equal(
+        response.json<{ data: { resolvedFrom: string | null } }>().data.resolvedFrom,
+        'storm.stormclient.xyz',
+      );
+    });
+
+    it('says the change lands when the server next starts', async () => {
+      // Nothing rebinds a running container, and pretending otherwise is how
+      // an operator concludes the panel ignored them.
+      const allocation = await assignedAllocation('10.0.0.23');
+      const response = await patch(allocation.id, { ip: '10.0.0.24' });
+      assert.equal(
+        response.json<{ data: { appliesOnNextStart: boolean } }>().data.appliesOnNextStart,
+        true,
+      );
+    });
+
+    it('sets an alias without touching the address', async () => {
+      const allocation = await assignedAllocation('10.0.0.25');
+
+      await patch(allocation.id, { alias: 'storm.stormclient.xyz' });
+
+      const stored = await app.prisma.serverAllocation.findUniqueOrThrow({
+        where: { id: allocation.id },
+      });
+      assert.equal(stored.ip, '10.0.0.25');
+      assert.equal(stored.alias, 'storm.stormclient.xyz');
+    });
+
+    it('takes an alias off again when asked', async () => {
+      const allocation = await app.prisma.serverAllocation.create({
+        data: { nodeId, ip: '10.0.0.26', port: nextPort(), alias: 'old.example.com' },
+      });
+
+      await patch(allocation.id, { alias: null });
+
+      const stored = await app.prisma.serverAllocation.findUniqueOrThrow({
+        where: { id: allocation.id },
+      });
+      assert.equal(stored.alias, null);
+    });
+
+    it('refuses to move a port onto an address that already has it', async () => {
+      const port = nextPort();
+      await app.prisma.serverAllocation.create({ data: { nodeId, ip: '10.0.0.30', port } });
+      const moving = await app.prisma.serverAllocation.create({
+        data: { nodeId, ip: '10.0.0.31', port },
+      });
+
+      const response = await patch(moving.id, { ip: '10.0.0.30' });
+      assert.equal(response.statusCode, 409, response.body);
+      assert.match(response.body, new RegExp(`10\\.0\\.0\\.30:${port}`));
+    });
+
+    it('refuses a name that does not resolve, leaving the row alone', async () => {
+      const allocation = await assignedAllocation('10.0.0.27');
+
+      const response = await patch(allocation.id, { ip: 'nowhere.invalid' });
+      assert.equal(response.statusCode, 400, response.body);
+
+      const stored = await app.prisma.serverAllocation.findUniqueOrThrow({
+        where: { id: allocation.id },
+      });
+      assert.equal(stored.ip, '10.0.0.27');
+    });
+
+    it('does not reach into another node', async () => {
+      const other = await app.prisma.node.create({
+        data: {
+          name: `bind-other-${uniqueSuffix()}`,
+          location: 'Test',
+          hostname: '127.0.0.1',
+          ip: '127.0.0.1',
+          scheme: 'http',
+          memoryTotal: 1024,
+          diskTotal: 10240,
+          status: 'ONLINE',
+        },
+      });
+      const elsewhere = await app.prisma.serverAllocation.create({
+        data: { nodeId: other.id, ip: '10.9.9.9', port: nextPort() },
+      });
+
+      const response = await patch(elsewhere.id, { ip: '10.0.0.28' });
+      assert.equal(response.statusCode, 404, response.body);
+
+      await app.prisma.serverAllocation.delete({ where: { id: elsewhere.id } });
+      await app.prisma.node.delete({ where: { id: other.id } });
+    });
   });
 });
