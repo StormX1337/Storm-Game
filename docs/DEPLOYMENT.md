@@ -305,6 +305,43 @@ curl -s https://panel.example.com/api/health
 `scripts/update.sh` does all four steps, keeps ten dumps, and refuses to
 continue if the checkout has local edits.
 
+### Disk, and the build cache nobody collects
+
+**Every rebuild leaves cache behind, and nothing removes it.** A panel updated a
+dozen times was found holding 14 GB of Docker build cache on a 38 GB disk,
+beside 3 GB of images. A build that runs out of disk does not fail cleanly — it
+can take the running containers with it, and the first anyone hears about it is
+a 521 from Cloudflare.
+
+So `update.sh` now checks before it starts anything: fewer than 4096 MB free
+(`STORM_MIN_FREE_MB`) and it refuses while the panel is still serving the old
+version, naming the cache it can see. After an update has proved itself it drops
+cache older than 48 hours (`STORM_KEEP_BUILD_CACHE`) — the recent window is what
+makes the next build quick, which is the point of a cache; the rest is only
+weight.
+
+To reclaim it by hand:
+
+```bash
+docker builder prune -af      # the build cache — usually the largest share
+docker image prune -af        # images nothing references any more
+```
+
+> **Never run `docker system prune --volumes` on a panel host.** That flag
+> deletes unused volumes, and `postgres-data` is a volume. It is the one command
+> that turns a full disk into a lost panel. The two above touch no volumes.
+
+**Give the host swap if it builds its own images.** `next build` alone wants
+upwards of 2 GB. On a 4 GB box with no swap — the Hetzner default — a build and
+a running Postgres can meet the OOM killer, and what it kills is not always the
+build. A few GB of swap costs nothing and turns a crash into a slow minute:
+
+```bash
+fallocate -l 4G /swapfile && chmod 600 /swapfile
+mkswap /swapfile && swapon /swapfile
+echo '/swapfile none swap sw 0 0' >> /etc/fstab
+```
+
 **`git pull` on its own changes nothing you can see.** The panel is served from
 images, and the frontend is compiled into them by `next build` at image build
 time — so a checkout at the newest commit and a browser showing last month's

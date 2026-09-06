@@ -32,6 +32,21 @@ STASH_LOCAL=0
 BACKUP_DIR="${STORM_BACKUP_DIR:-${HOME:-/root}/storm-backups}"
 KEEP_BACKUPS="${STORM_KEEP_BACKUPS:-10}"
 
+# How much free disk a build needs before it is worth starting, and how much
+# build cache is allowed to survive one.
+#
+# Docker's build cache grows without limit and nothing ever collects it: a
+# panel updated a dozen times had 14 GB of it on a 38 GB disk, next to 3 GB of
+# images. A build that runs out of disk does not fail cleanly — it can take the
+# containers with it, and the first anyone hears is a 521 from Cloudflare.
+#
+# So: refuse before starting if the room is not there, and drop the cache the
+# next build will not use anyway once the update has proved itself. The window
+# is kept rather than emptied because same-day cache is what makes the next
+# build quick, which is the whole reason the cache exists.
+NEED_FREE_MB="${STORM_MIN_FREE_MB:-4096}"
+KEEP_BUILD_CACHE="${STORM_KEEP_BUILD_CACHE:-48h}"
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --check)       CHECK_ONLY=1; shift ;;
@@ -185,6 +200,34 @@ if [[ "$CHECK_ONLY" == "1" ]]; then
   exit 0
 fi
 
+# ------------------------------------------------------------ room to build --
+
+# Before the merge, the dump or the build — because this is the one preflight
+# whose whole value is that nothing has happened yet.
+#
+# Docker's build cache grows without limit and nothing collects it: a panel
+# updated a dozen times had 14 GB of it on a 38 GB disk. A build that runs out
+# of disk does not fail cleanly; it can take the running containers with it,
+# and the first anyone hears is a 521 from Cloudflare. Checked here, the worst
+# case is an update that did not happen.
+#
+# `df` on the checkout rather than on `/`: Docker's data root is usually on the
+# same filesystem, and where it is not, the number under the thing being built
+# is still the one that decides whether the build fits.
+step "Checking there is room to build"
+FREE_MB="$(df -Pm . | awk 'NR==2 {print $4}')"
+if [[ -n "$FREE_MB" && "$FREE_MB" -lt "$NEED_FREE_MB" ]]; then
+  CACHE="$(docker system df --format '{{.Type}} {{.Reclaimable}}' 2>/dev/null \
+    | awk '/Build Cache/ {print $NF}')"
+  printf '\n'
+  fail "Only ${FREE_MB} MB free here and a build wants at least ${NEED_FREE_MB} MB.
+    Nothing has been changed — the panel is still running the old version.
+    ${CACHE:+Docker is holding ${CACHE} of reclaimable build cache. }Free some with:
+      docker builder prune -af
+    Never add --volumes to a prune here: that deletes the panel's database."
+fi
+ok "${FREE_MB} MB free"
+
 # --------------------------------------------------------------- the backup --
 
 if [[ "$BACKUP" == "1" ]]; then
@@ -283,6 +326,16 @@ if [[ -n "$UNHEALTHY" ]]; then
   printf '\n'
   warn "Some containers are not healthy:"
   printf '%s\n' "$UNHEALTHY" | sed 's/^/    /'
+fi
+
+# Only now, with the panel proved up. Pruning before this point would throw
+# away the cache a rollback rebuild is about to want.
+step "Reclaiming build cache"
+if PRUNED="$(docker builder prune -f --filter "until=${KEEP_BUILD_CACHE}" 2>/dev/null \
+  | awk '/Total reclaimed space/ {print $4, $5}')"; then
+  ok "Freed ${PRUNED:-nothing}, keeping the last ${KEEP_BUILD_CACHE}"
+else
+  warn "Could not reclaim build cache; run 'docker builder prune -af' if disk is tight"
 fi
 
 printf '\n%s✔ Updated to %s%s\n' "$GREEN" "$(git rev-parse --short HEAD)" "$RESET"
