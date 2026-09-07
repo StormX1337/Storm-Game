@@ -588,6 +588,12 @@ entschiedener Märkte.
 
 Swagger UI: <http://localhost:8080/docs> · OpenAPI: `/openapi.json`
 
+> Swagger UI lädt sein JavaScript von `cdn.jsdelivr.net`. Auf einem Server
+> **ohne ausgehenden Internetzugang** bleibt die Seite deshalb leer —
+> `/openapi.json` liefert das Schema davon unabhängig und lässt sich mit jedem
+> lokalen OpenAPI-Viewer öffnen. Für genau diese drei Pfade lockert nginx die
+> Content-Security-Policy; das Dashboard behält die strenge Policy.
+
 | Endpunkt | Zweck |
 |---|---|
 | `GET /health` | Gesamtstatus inkl. Redis und Datenbank |
@@ -948,11 +954,22 @@ einen Bruchteil eines B-Trees.
 **In dieser Umgebung nicht ausgeführt**
 
 Die Docker-Images konnten hier nicht gebaut werden (im Build-Container lief
-kein Docker-Daemon). Verifiziert wurden stattdessen: Compose-Datei und
-Dockerfile syntaktisch, die Migration gegen ein echtes PostgreSQL 16, die
-komplette Pipeline gegen echtes Redis und PostgreSQL, die API inklusive
-WebSocket, und das Dashboard in einem echten Chromium (Live-Updates, Filter,
-Responsiveness, keine JS-Fehler).
+kein Docker-Daemon). Verifiziert wurde stattdessen alles, was ohne ihn
+möglich ist:
+
+- `docker compose config` löst die komplette Datei auf; der Pflicht-Check für
+  `POSTGRES_PASSWORD` greift wie vorgesehen
+- Migration und Schema gegen ein echtes PostgreSQL 16 (`alembic check` sauber)
+- die komplette Pipeline gegen echtes Redis und PostgreSQL
+- die API inklusive WebSocket-Handshake
+- **die nginx-Konfiguration mit echtem nginx**: alle Routen, das Strippen des
+  `/api`-Präfixes, Swagger unter `/docs`, der WebSocket-Upgrade und die
+  Security-Header
+- das Dashboard in einem echten Chromium **durch nginx**: Live-Updates über
+  `/ws`, Filter, Responsiveness, keine JS-Fehler und keine CSP-Verstöße
+
+Ungetestet bleibt damit nur der Image-Build selbst (`pip install` der
+gepinnten Abhängigkeiten in `python:3.12-slim`).
 
 ---
 

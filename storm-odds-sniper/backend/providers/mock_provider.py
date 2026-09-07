@@ -347,6 +347,9 @@ class MockProvider(OddsProvider):
         self.events: list[SimEvent] = []
         self._last_prices: dict[str, float] = {}
         self._errors: list[FatFingerError] = []
+        #: Zeiger in die Paarungs-Pools für nachrückende Partien.
+        self._football_cursor = 0
+        self._tennis_cursor = 0
         self._queue: asyncio.Queue[ProviderMessage] = asyncio.Queue(maxsize=1000)
         self._task: asyncio.Task | None = None
 
@@ -410,6 +413,60 @@ class MockProvider(OddsProvider):
             log.error("mock producer fehlgeschlagen", error=str(exc))
 
     # ----------------------------------------------------------- Simulation
+    def _free_pairing(
+        self, pool: list[tuple[str, str, str]], cursor: int, finished: SimEvent
+    ) -> tuple[str, str, str]:
+        """Nächste Paarung aus dem Pool, die gerade nicht bespielt wird."""
+        active = {(ev.home, ev.away) for ev in self.events if ev is not finished}
+        for offset in range(len(pool)):
+            candidate = pool[(cursor + 1 + offset) % len(pool)]
+            if (candidate[0], candidate[1]) not in active:
+                return candidate
+        # Pool erschöpft: mehr gleichzeitige Events als Paarungen konfiguriert.
+        return pool[(cursor + 1) % len(pool)]
+
+    def _next_fixture(self, finished: SimEvent) -> SimEvent:
+        """Ersatz für eine beendete Partie: die nächste Paarung aus dem Pool.
+
+        Wichtig: die Paarung darf nicht bereits laufen. Zwei gleichzeitige
+        Events mit denselben Teilnehmern würde der EventMatcher zu *einem*
+        Event zusammenführen - ihre Quoten landeten im selben Marktbuch und
+        wären Unsinn.
+        """
+        now = datetime.now(UTC)
+        if finished.sport is Sport.TENNIS:
+            home, away, league = self._free_pairing(
+                MOCK_TENNIS_PLAYERS, self._tennis_cursor, finished
+            )
+            self._tennis_cursor += 1
+            return SimEvent(
+                event_id=f"mock-t-{self._tennis_cursor}",
+                sport=Sport.TENNIS,
+                home=home,
+                away=away,
+                league=league,
+                start_time=now,
+                status=EventStatus.LIVE,
+                base_p_home=self.rng.uniform(0.35, 0.72),
+                total_games_line=self.rng.choice([20.5, 22.5, 23.5]),
+            )
+        home, away, league = self._free_pairing(
+            MOCK_FOOTBALL_TEAMS, self._football_cursor, finished
+        )
+        self._football_cursor += 1
+        return SimEvent(
+            event_id=f"mock-f-{self._football_cursor}",
+            sport=Sport.FOOTBALL,
+            home=home,
+            away=away,
+            league=league,
+            start_time=now,
+            status=EventStatus.LIVE,
+            lam_home=self.rng.uniform(1.0, 2.1),
+            lam_away=self.rng.uniform(0.8, 1.8),
+            minute=0,
+        )
+
     def _build_events(self) -> None:
         """Jede Paarung genau einmal - sonst führt der EventMatcher zwei
         Sim-Events (korrekterweise) zu einem zusammen."""
@@ -457,6 +514,8 @@ class MockProvider(OddsProvider):
                         minute=self.rng.randint(5, 70) if live else 0,
                     )
                 )
+        self._football_cursor = max(0, football_index - 1)
+        self._tennis_cursor = max(0, tennis_index - 1)
 
     def _advance(self) -> None:
         """Spielverlauf einen Tick weiterdrehen."""
@@ -471,6 +530,12 @@ class MockProvider(OddsProvider):
                 self._advance_football(ev)
             else:
                 self._advance_tennis(ev)
+
+        # Beendete Partien durch neue ersetzen - sonst wäre nach etwa einer
+        # Stunde kein Event mehr live und das Dashboard sähe defekt aus.
+        for index, ev in enumerate(self.events):
+            if ev.status is EventStatus.FINISHED:
+                self.events[index] = self._next_fixture(ev)
 
         self._errors = [e for e in self._errors if e.expires_at > now]
         if self.rng.random() < self.error_probability:

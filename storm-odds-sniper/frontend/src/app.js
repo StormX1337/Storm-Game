@@ -78,13 +78,23 @@
           <td class="num">${a.confidence ?? "–"}
             <div class="meter"><i class="${
               a.confidence >= 80 ? "good" : a.confidence >= 60 ? "" : "warn"
-            }" style="width:${Math.max(0, Math.min(100, a.confidence || 0))}%"></i></div>
+            }" data-width="${Math.max(0, Math.min(100, a.confidence || 0))}"></i></div>
           </td>
           <td><span class="tag tag--${tag}">${esc(a.status || "?")}</span></td>
         </tr>`;
       })
       .join("");
+    applyMeterWidths(body);
     state.alerts.forEach((a) => delete a.__fresh);
+  }
+
+  /* Balkenbreiten per CSSOM setzen statt über style="…".
+     Die Content-Security-Policy erlaubt bewusst keine Inline-Styles; das
+     Setzen über element.style ist davon nicht betroffen. */
+  function applyMeterWidths(root) {
+    root.querySelectorAll(".meter > i[data-width]").forEach((bar) => {
+      bar.style.width = `${bar.dataset.width}%`;
+    });
   }
 
   function renderMoves() {

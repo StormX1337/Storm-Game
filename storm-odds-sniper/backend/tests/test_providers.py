@@ -146,6 +146,32 @@ class TestMockProvider:
         assert quotes, "andere Märkte müssen weiterhin Quoten liefern"
         assert not [q for q in quotes if q.market.type is MarketType.DRAW_NO_BET]
 
+    async def test_finished_events_are_replaced(self):
+        """Ohne Nachschub wäre nach etwa einer Stunde kein Event mehr live."""
+        provider = MockProvider(events=8, bookmakers=7, seed=17)
+        provider._build_events()
+        live_counts = []
+        for step in range(4000):
+            for sim in provider.events:
+                sim.last_progress = 0.0
+            provider._advance()
+            if step % 400 == 0:
+                live_counts.append(sum(1 for e in provider.events if e.status is EventStatus.LIVE))
+        assert len(provider.events) == 8
+        assert min(live_counts[1:]) > 0, f"Simulation lief leer: {live_counts}"
+
+    async def test_replacements_never_duplicate_a_live_pairing(self):
+        """Zwei gleichzeitige Events mit derselben Paarung würde der
+        EventMatcher zusammenführen - ihre Quoten wären dann vermischt."""
+        provider = MockProvider(events=8, bookmakers=7, seed=17)
+        provider._build_events()
+        for _ in range(4000):
+            for sim in provider.events:
+                sim.last_progress = 0.0
+            provider._advance()
+            pairings = [(e.home, e.away) for e in provider.events]
+            assert len(set(pairings)) == len(pairings), f"Doppelte Paarung: {pairings}"
+
     async def test_suspended_events_recover(self):
         """Regression: suspendierte Events wurden von _advance() übersprungen
         und blieben deshalb für immer stehen."""

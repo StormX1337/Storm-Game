@@ -27,6 +27,11 @@ Die Fußball-Wahrscheinlichkeiten stammen aus einem Poisson-Modell über die
 Restspielzeit: fällt ein Tor, bewegt sich der ganze Markt realistisch. Tennis
 nutzt ein bewusst einfacheres Modell aus Grundstärke plus Führungsbonus.
 
+Beendete Partien werden automatisch durch neue ersetzt, damit auch nach
+Stunden noch etwas live ist. Dabei wird darauf geachtet, dass nie zwei Events
+mit derselben Paarung gleichzeitig laufen — der EventMatcher würde sie sonst
+(korrekterweise) zu einem Event zusammenführen und ihre Quoten vermischen.
+
 **Wichtig:** Alle Namen tragen das Präfix `Mock`. Es werden keine echten
 Buchmacherquoten nachgebildet oder behauptet.
 

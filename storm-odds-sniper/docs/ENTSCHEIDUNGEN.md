@@ -139,6 +139,39 @@ Der Status wird bewusst **nach** dem `disconnect()` gesetzt, sonst
 überschriebe `mark_disconnected()` den Grund und das Dashboard zeigte
 „getrennt" statt „deaktiviert: Key fehlt".
 
+## Warum in nginx kein location-Block eigene add_header setzt
+
+Eine Falle der nginx-Semantik: `add_header` wird von der übergeordneten Ebene
+**nur dann** geerbt, wenn der aktuelle Block selbst *kein* `add_header`
+definiert. Ein einzelnes `add_header Cache-Control` im `location /`-Block
+hatte deshalb sämtliche Security-Header — inklusive CSP — von der HTML-Seite
+entfernt, also genau dort, wo sie am wichtigsten sind. Der Fehler war im
+Browser nur daran zu erkennen, dass die Header fehlten; funktional lief alles.
+
+Deshalb stehen jetzt **alle** gemeinsamen Header auf Server-Ebene, und kein
+`location`-Block setzt eigene — mit einer bewusst dokumentierten Ausnahme für
+die Doku-Pfade, die eine gelockerte CSP brauchen.
+
+Aus demselben Grund nutzt `/healthz` `default_type` statt
+`add_header Content-Type`: Letzteres hätte den Header doppelt gesendet.
+
+## Warum die API dieselben Header nochmal setzt
+
+Sie ist im Compose-Setup zusätzlich auf `127.0.0.1:8000` erreichbar, also ohne
+nginx davor. Damit auch dieser Weg abgesichert ist, setzt die Middleware die
+Header selbst. Auf dem Weg durch nginx würden sie dadurch doppelt erscheinen —
+und widersprüchliche Mehrfachangaben werden von Browsern teilweise ganz
+ignoriert. Deshalb blendet nginx die drei Header der Anwendung per
+`proxy_hide_header` aus und setzt seine eigenen.
+
+## Warum das Dashboard keine Inline-Styles benutzt
+
+Die Content-Security-Policy erlaubt `style-src 'self'` ohne `'unsafe-inline'`.
+Ein `style="width:…"` im generierten HTML wurde deshalb blockiert und die
+Confidence-Balken blieben leer. Die Breite wird jetzt nach dem Rendern über
+`element.style.width` gesetzt — das ist CSSOM-Zugriff und fällt nicht unter
+`style-src`. Die Policy konnte so streng bleiben.
+
 ## Warum das Dashboard ohne Framework auskommt
 
 Eine Seite, ein WebSocket, sechs Panels. React oder Vue hätten einen
