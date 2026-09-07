@@ -37,6 +37,11 @@
   const fmtPct = (value) =>
     typeof value === "number" ? `${value >= 0 ? "+" : ""}${value.toFixed(1)}%` : "–";
 
+  // Quellen, deren Daten erfunden sind. Zeilen daraus werden markiert, damit
+  // echte und simulierte Einträge nicht nebeneinander gleich aussehen.
+  const SIMULATED = new Set(["mock"]);
+  const isSim = (provider) => SIMULATED.has(String(provider || "").toLowerCase());
+
   const STATUS_TAG = { LIVE: "live", PRE_MATCH: "pre", SUSPENDED: "susp", FINISHED: "fin" };
   const SPORT_ICON = { football: "⚽", tennis: "🎾" };
   const KIND_LABEL = { fixed_error: "🎯 Fixed", value: "💎 Value", odds_move: "📈 Move" };
@@ -71,7 +76,9 @@
             <div class="event-sub">${esc(a.league || "")}${a.score ? " · " + esc(a.score) : ""}</div>
           </td>
           <td>${esc(a.market_label)}<div class="event-sub">${esc(a.selection_label)}</div></td>
-          <td>${esc(a.bookmaker)}</td>
+          <td>${isSim(a.provider) ? "🧪 " : ""}${esc(a.bookmaker)}
+            <div class="event-sub">${esc(a.provider || "")}</div>
+          </td>
           <td class="num"><strong>${fmtOdds(a.odds)}</strong></td>
           <td class="num dim">${fmtOdds(a.fair_odds)}</td>
           <td class="num ${valueClass}">${fmtPct(a.value_percent)}</td>
@@ -107,7 +114,7 @@
       .map((m) => {
         const cls = m.deviation_percent >= 0 ? "pos" : "neg";
         return `<li>
-          <div class="row"><span>${esc(m.event_title)}</span>
+          <div class="row"><span>${isSim(m.provider) ? "🧪 " : ""}${esc(m.event_title)}</span>
             <span class="mono ${cls}">${fmtPct(m.deviation_percent)}</span></div>
           <div class="row"><span class="dim">${esc(m.market_label)} · ${esc(m.bookmaker)}</span>
             <span class="mono dim">${fmtOdds(m.previous_odds)} → ${fmtOdds(m.odds)}</span></div>
@@ -149,7 +156,7 @@
             : "";
         return `<li>
           <div class="row">
-            <span>${SPORT_ICON[e.sport] || "🏟"} <strong>${esc(e.home)}</strong> vs <strong>${esc(e.away)}</strong></span>
+            <span>${isSim(e.provider) ? "🧪 " : ""}${SPORT_ICON[e.sport] || "🏟"} <strong>${esc(e.home)}</strong> vs <strong>${esc(e.away)}</strong></span>
             <span class="mono">${esc(score)}</span>
           </div>
           <div class="row"><span class="event-sub">${esc(e.league || "")}</span>
@@ -210,7 +217,29 @@
      halten Nutzer die erfundenen Partien für echte Spiele. */
   function updateDemoBanner(providers) {
     const simulating = providers.some((p) => p.kind === "mock" && p.healthy);
-    $("demo-banner").hidden = !simulating;
+    const real = providers.filter((p) => p.kind !== "mock" && p.healthy);
+    const banner = $("demo-banner");
+    banner.hidden = !simulating;
+    if (!simulating) return;
+
+    const note = $("demo-banner-text");
+    if (real.length) {
+      // Der heikle Fall: echte Daten fließen, gehen aber in der Simulation
+      // unter. Ohne Hinweis hält man alles für erfunden.
+      note.innerHTML =
+        "Die Simulation läuft <strong>parallel</strong> zu " +
+        real.map((p) => `<strong>${esc(p.title)}</strong>`).join(", ") +
+        ". Mit 🧪 markierte Zeilen sind <strong>erfunden</strong>, alle anderen echt. " +
+        "Nur echte Daten: <code>PROVIDERS</code> in der <code>.env</code> auf die " +
+        "echte Quelle setzen und <code>docker compose up -d</code>.";
+    } else {
+      note.innerHTML =
+        "Die angezeigten Spiele, Teams und Quoten sind <strong>erfunden</strong> und " +
+        "existieren nicht in der Wirklichkeit. Der Bot läuft mit dem MockProvider, " +
+        "damit du das System ohne Zugangsdaten ausprobieren kannst. Für echte Daten " +
+        "<code>PROVIDERS</code> in der <code>.env</code> umstellen – siehe README, " +
+        "Abschnitt „Datenquellen konfigurieren“.";
+    }
   }
 
   function renderSystem(health, stats) {
@@ -284,6 +313,7 @@
         deviation_percent: raw.deviation_percent,
         confidence: raw.confidence,
         previous_odds: raw.previous_odds,
+        provider: raw.provider,
         detected_at: raw.detected_at,
       };
     }

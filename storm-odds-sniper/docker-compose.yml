@@ -8,6 +8,11 @@
 
 name: storm-odds-sniper
 
+# Alle Dienste lesen die komplette .env (env_file). Der folgende Block
+# überschreibt danach nur das, was im Compose-Netz zwingend anders lauten muss -
+# etwa die Hostnamen von PostgreSQL und Redis. Ohne env_file müsste jede neue
+# Einstellung hier von Hand nachgetragen werden, und wer sie in der .env setzt,
+# hätte keinerlei Rückmeldung, dass sie nie im Container ankommt.
 x-python-env: &python-env
   ENVIRONMENT: ${ENVIRONMENT:-production}
   LOG_LEVEL: ${LOG_LEVEL:-INFO}
@@ -87,6 +92,10 @@ services:
       context: .
       dockerfile: Dockerfile
     image: storm-odds-sniper:latest
+    env_file:
+      # Fehlt die Datei, startet Compose trotzdem - required:false.
+      - path: .env
+        required: false
     restart: "no"
     command: ["alembic", "upgrade", "head"]
     environment:
@@ -101,6 +110,10 @@ services:
       context: .
       dockerfile: Dockerfile
     image: storm-odds-sniper:latest
+    env_file:
+      # Fehlt die Datei, startet Compose trotzdem - required:false.
+      - path: .env
+        required: false
     restart: unless-stopped
     command: ["python", "-m", "backend.api"]
     environment:
@@ -132,6 +145,10 @@ services:
       context: .
       dockerfile: Dockerfile
     image: storm-odds-sniper:latest
+    env_file:
+      # Fehlt die Datei, startet Compose trotzdem - required:false.
+      - path: .env
+        required: false
     restart: unless-stopped
     command: ["python", "-m", "backend.scanner"]
     environment:
@@ -160,6 +177,10 @@ services:
       context: .
       dockerfile: Dockerfile
     image: storm-odds-sniper:latest
+    env_file:
+      # Fehlt die Datei, startet Compose trotzdem - required:false.
+      - path: .env
+        required: false
     restart: unless-stopped
     command: ["python", "-m", "backend.telegram"]
     environment:
