@@ -127,6 +127,18 @@ class AlertResponse(BaseModel):
     provider: str = ""
     previous_odds: float | None = None
     notes: list[str] = Field(default_factory=list)
+    #: Herleitung: Modelle, Signalpunkte und die verglichenen Preise.
+    fair_models: dict[str, float | None] = Field(default_factory=dict)
+    score_components: dict[str, float] = Field(default_factory=dict)
+    references: dict[str, float] = Field(default_factory=dict)
+
+
+class SuppressionReason(BaseModel):
+    """Ein Grund, aus dem Alarme verworfen wurden."""
+
+    code: str
+    label: str
+    count: int
 
 
 class StatsResponse(BaseModel):
@@ -143,6 +155,9 @@ class StatsResponse(BaseModel):
     live_events_redis: int = 0
     providers_connected: int = 0
     providers_total: int = 0
+    #: Warum kein Alarm entstand - absteigend nach Häufigkeit.
+    suppressed: list[SuppressionReason] = Field(default_factory=list)
+    suppressed_total: int = 0
 
 
 class WsMessage(BaseModel):

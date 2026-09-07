@@ -69,7 +69,8 @@ class TestQuoteFilter:
         quote = make_quote(bookmaker="b1", price=4.20, ts=now_ts() - 45)
         decision = check_quote(quote, make_event(), thresholds)
         assert not decision.passed
-        assert decision.reason.startswith("stale")
+        assert decision.code == "stale"  # stabil, fürs Zählen
+        assert "45" in decision.reason  # Messwert, fürs Log
 
     def test_is_stale_helper(self):
         assert is_stale(make_quote(bookmaker="b", price=2.0, ts=now_ts() - 20), 10.0)
@@ -88,46 +89,46 @@ class TestQuoteFilter:
 
     def test_suspended_quote_is_rejected(self, thresholds):
         quote = make_quote(bookmaker="b1", price=4.20, suspended=True)
-        assert check_quote(quote, make_event(), thresholds).reason == "suspended"
+        assert check_quote(quote, make_event(), thresholds).code == "suspended"
 
     def test_suspended_event_is_rejected(self, thresholds):
         quote = make_quote(bookmaker="b1", price=4.20)
         event = make_event(status=EventStatus.SUSPENDED)
-        assert check_quote(quote, event, thresholds).reason == "event_suspended"
+        assert check_quote(quote, event, thresholds).code == "event_suspended"
 
     def test_finished_event_is_rejected(self, thresholds):
         quote = make_quote(bookmaker="b1", price=4.20)
         event = make_event(status=EventStatus.FINISHED)
-        assert check_quote(quote, event, thresholds).reason == "event_finished"
+        assert check_quote(quote, event, thresholds).code == "event_finished"
 
     def test_odds_below_minimum(self, thresholds):
         quote = make_quote(bookmaker="b1", price=1.20)
-        assert check_quote(quote, make_event(), thresholds).reason == "odds_below_min"
+        assert check_quote(quote, make_event(), thresholds).code == "odds_below_min"
 
     def test_odds_above_maximum(self, thresholds):
         quote = make_quote(bookmaker="b1", price=250.0)
-        assert check_quote(quote, make_event(), thresholds).reason == "odds_above_max"
+        assert check_quote(quote, make_event(), thresholds).code == "odds_above_max"
 
     def test_disabled_sport(self, thresholds):
         limited = thresholds.with_overrides(sports=frozenset({Sport.TENNIS}))
         quote = make_quote(bookmaker="b1", price=4.20)
-        assert check_quote(quote, make_event(), limited).reason == "sport_disabled"
+        assert check_quote(quote, make_event(), limited).code == "sport_disabled"
 
     def test_live_can_be_switched_off(self, thresholds):
         limited = thresholds.with_overrides(scan_live=False)
         quote = make_quote(bookmaker="b1", price=4.20)
-        assert check_quote(quote, make_event(), limited).reason == "live_disabled"
+        assert check_quote(quote, make_event(), limited).code == "live_disabled"
 
     def test_prematch_can_be_switched_off(self, thresholds):
         limited = thresholds.with_overrides(scan_prematch=False)
         quote = make_quote(bookmaker="b1", price=4.20)
         event = make_event(status=EventStatus.PRE_MATCH)
-        assert check_quote(quote, event, limited).reason == "prematch_disabled"
+        assert check_quote(quote, event, limited).code == "prematch_disabled"
 
     def test_market_whitelist(self, thresholds):
         limited = thresholds.with_overrides(markets=frozenset({MarketType.MATCH_ODDS}))
         quote = make_quote(bookmaker="b1", price=4.20)
-        assert check_quote(quote, make_event(), limited).reason == "market_disabled"
+        assert check_quote(quote, make_event(), limited).code == "market_disabled"
 
 
 class TestSignalFilter:
@@ -150,7 +151,8 @@ class TestSignalFilter:
             error_score=88,
             thresholds=thresholds,
         )
-        assert decision.reason == "too_few_bookmakers_2"
+        assert decision.code == "too_few_bookmakers"
+        assert "2" in decision.reason
 
     def test_value_below_minimum(self, thresholds):
         assert not check_value_signal(
@@ -166,7 +168,8 @@ class TestSignalFilter:
         decision = check_value_signal(
             value_percent=40.0, bookmaker_count=6, confidence=30, thresholds=thresholds
         )
-        assert decision.reason == "confidence_30_below_min"
+        assert decision.code == "confidence_below_min"
+        assert "30" in decision.reason
 
     def test_error_signal_needs_deviation_and_score(self, thresholds):
         assert not check_error_signal(
@@ -209,12 +212,12 @@ class TestCooldownAndDuplicates:
         assert (await gate.allow(alert)).passed
         second = await gate.allow(make_alert())
         assert not second.passed
-        assert second.reason in {"duplicate", "cooldown"}
+        assert second.code in {"duplicate", "cooldown"}
 
     async def test_same_price_is_a_duplicate(self, thresholds):
         gate = AlertGate(InMemoryCooldownStore(), thresholds)
         await gate.allow(make_alert(odds=4.20))
-        assert (await gate.allow(make_alert(odds=4.21))).reason == "duplicate"
+        assert (await gate.allow(make_alert(odds=4.21))).code == "duplicate"
 
     async def test_clearly_different_price_is_a_new_signal(self, thresholds):
         # Cooldown-Schlüssel greift trotzdem - hier nur der Duplikat-Bucket.

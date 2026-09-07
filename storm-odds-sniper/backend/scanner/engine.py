@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+from collections import Counter
 from dataclasses import dataclass
 
 from backend.core.config import Settings, get_settings
@@ -140,6 +141,9 @@ class ScannerEngine:
         self._snapshot_counter = 0
         #: Letzter beobachteter Markt-Median je Quotenzeile (Preis, Zeitpunkt).
         self._line_medians: dict[str, tuple[float, float]] = {}
+        #: Unterdrückte Alarme je Grund. Wird gebündelt nach Redis geschrieben -
+        #: ein Redis-Aufruf je verworfener Quote wäre im Hot-Path zu teuer.
+        self._suppressed: Counter[str] = Counter()
         self.stats = {"messages": 0, "quotes": 0, "changes": 0, "alerts": 0, "dropped": 0}
 
     # ------------------------------------------------------------- Lifecycle
@@ -200,6 +204,10 @@ class ScannerEngine:
         self._tasks.clear()
         self._supervisors.clear()
         await self._flush_db(final=True)
+        with contextlib.suppress(Exception):
+            if self._suppressed:
+                await self.state.add_suppressions(dict(self._suppressed))
+                self._suppressed.clear()
         log.info("scanner gestoppt", **{k: v for k, v in self.stats.items()})
 
     async def _enqueue(self, message: ProviderMessage) -> None:
@@ -249,6 +257,7 @@ class ScannerEngine:
             quote = self._normalize_quote(raw_quote, message.provider)
             if quote is None:
                 QUOTES_DROPPED.labels("unknown_event").inc()
+                self._suppress("unknown_event")
                 continue
             change = await self.state.apply_quote(quote)
             if change is None:
@@ -323,6 +332,11 @@ class ScannerEngine:
         return quote
 
     # -------------------------------------------------------------- Analyse
+    def _suppress(self, code: str) -> None:
+        """Eine Unterdrückung vermerken - lokal, Übertragung erfolgt gebündelt."""
+        ALERTS_SUPPRESSED.labels(code).inc()
+        self._suppressed[code] += 1
+
     async def _analyze_market(
         self, event_id: str, market_key: str, changes: list[OddsChange]
     ) -> list[Alert]:
@@ -428,14 +442,14 @@ class ScannerEngine:
         quote = change.quote
         decision = check_quote(quote, event, self.thresholds, reference=reference)
         if not decision.passed:
-            ALERTS_SUPPRESSED.labels(decision.reason.split("_")[0]).inc()
+            self._suppress(decision.code)
             return None
 
         # Der ganze Markt zieht nach oben: dann ist die hohe Quote in aller
         # Regel die *aktuellere*, und die Referenz hinkt hinterher. Melden
         # würde hier systematisch Fehlalarme erzeugen.
         if market_drift is not None and market_drift >= self.settings.market_drift_suppress_percent:
-            ALERTS_SUPPRESSED.labels("market_drift").inc()
+            self._suppress("market_drift")
             return None
 
         # Dieses Buch springt kräftig, der Markt hat noch nicht bestätigt:
@@ -446,7 +460,7 @@ class ScannerEngine:
         if own_jump >= self.settings.market_shock_percent and (
             market_drift is None or abs(market_drift) < own_jump / 2.0
         ):
-            ALERTS_SUPPRESSED.labels("market_leader").inc()
+            self._suppress("market_leader")
             return None
 
         is_live = event.status is EventStatus.LIVE
@@ -458,7 +472,7 @@ class ScannerEngine:
             is_live=is_live,
         )
         if fair is None:
-            ALERTS_SUPPRESSED.labels("no_fair_odds").inc()
+            self._suppress("no_fair_odds")
             return None
         if (
             fair.fair_probability > self.settings.max_fair_probability
@@ -466,7 +480,7 @@ class ScannerEngine:
         ):
             # Praktisch entschiedener Markt bzw. extremer Außenseiter jenseits
             # des Quotenbands - dort ist jede Value-Angabe Modellrauschen.
-            ALERTS_SUPPRESSED.labels("extreme_probability").inc()
+            self._suppress("extreme_probability")
             return None
 
         value = value_percent(quote.price, fair.fair_probability)
@@ -511,7 +525,7 @@ class ScannerEngine:
         elif value_ok.passed:
             kind = AlertKind.VALUE
         else:
-            ALERTS_SUPPRESSED.labels((error_ok.reason or value_ok.reason).split("_")[0]).inc()
+            self._suppress(error_ok.code or value_ok.code)
             return None
 
         alert = Alert(
@@ -532,9 +546,30 @@ class ScannerEngine:
             speed_percent_per_second=change.speed_percent_per_second,
             previous_odds=change.previous_price,
             notes=[*fair.notes, *outlier.reasons],
+            fair_models={
+                "median": fair.model_a_odds,
+                "margin_removed": fair.model_b_odds,
+                "weighted_consensus": fair.model_c_odds,
+            },
+            score_components=dict(outlier.components),
+            references=self._reference_prices(book, quote),
         )
         alert.fingerprint = fingerprint(alert)
         return await self._emit(alert)
+
+    @staticmethod
+    def _reference_prices(book: MarketBook, quote: OddsQuote) -> dict[str, float]:
+        """Die Preise, gegen die verglichen wurde - ohne den geprüften selbst.
+
+        Ohne sie ist ein Alarm nicht nachprüfbar: man sieht nur das Ergebnis,
+        nicht die Grundlage.
+        """
+        others = book.quotes.get(quote.selection.key, {})
+        return {
+            bookmaker: round(other.price, 3)
+            for bookmaker, other in sorted(others.items())
+            if bookmaker != quote.bookmaker and not other.suspended
+        }
 
     async def _evaluate_movement(self, change: OddsChange, event: EventSnapshot) -> Alert | None:
         """Reine Bewegungsmeldung - unabhängig von Value."""
@@ -589,14 +624,14 @@ class ScannerEngine:
         )
         allowed = await gate.allow(alert)
         if not allowed.passed:
-            ALERTS_SUPPRESSED.labels(allowed.reason).inc()
+            self._suppress(allowed.code)
             return None
         return await self._publish(alert)
 
     async def _emit(self, alert: Alert) -> Alert | None:
         allowed = await self.gate.allow(alert)
         if not allowed.passed:
-            ALERTS_SUPPRESSED.labels(allowed.reason).inc()
+            self._suppress(allowed.code)
             return None
         return await self._publish(alert)
 
@@ -694,6 +729,10 @@ class ScannerEngine:
                     await self.state.set_provider_health(provider.name, payload)
                     if self.repository is not None:
                         await self.repository.upsert_provider_health(provider.health)
+                if self._suppressed:
+                    pending = dict(self._suppressed)
+                    self._suppressed.clear()
+                    await self.state.add_suppressions(pending)
                 counters = await self.state.counters()
                 LIVE_EVENTS.set(counters["live_events"])
                 TRACKED_EVENTS.set(counters["tracked_events"])

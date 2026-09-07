@@ -274,6 +274,32 @@ class RedisState:
             await pubsub.unsubscribe(*channels)
             await pubsub.aclose()
 
+    # ------------------------------------------- Unterdrückte Alarme
+    async def add_suppressions(self, counts: dict[str, int]) -> None:
+        """Zähler gebündelt erhöhen - ein Roundtrip für alle Gründe."""
+        if not counts:
+            return
+        pipe = self.client.pipeline(transaction=False)
+        for code, amount in counts.items():
+            pipe.hincrby("stat:suppressed", code, amount)
+        pipe.expire("stat:suppressed", 86400 * 2)
+        await pipe.execute()
+
+    async def get_suppressions(self) -> dict[str, int]:
+        """Warum kam nichts an? Zähler je Grund."""
+        raw = await self.client.hgetall("stat:suppressed")
+        out: dict[str, int] = {}
+        for key, value in (raw or {}).items():
+            code = key.decode() if isinstance(key, bytes) else key
+            try:
+                out[code] = int(value)
+            except (TypeError, ValueError):
+                continue
+        return out
+
+    async def reset_suppressions(self) -> None:
+        await self.client.delete("stat:suppressed")
+
     # ------------------------------------------------------------ Statistik
     async def counters(self) -> dict[str, int]:
         live = await self.client.scard("ev:live")

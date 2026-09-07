@@ -64,7 +64,16 @@ class FilterThresholds:
 
 @dataclass(slots=True)
 class FilterDecision:
+    """Ergebnis einer Filterstufe.
+
+    ``code`` ist stabil und zum Zählen gedacht, ``reason`` enthält zusätzlich
+    die konkreten Messwerte für Log und Anzeige. Die Trennung ist notwendig:
+    ein Grund wie ``stale_45.0s`` als Metrik-Label würde für jede vorkommende
+    Alterszahl eine eigene Zeitreihe anlegen.
+    """
+
     passed: bool
+    code: str = ""
     reason: str = ""
 
     def __bool__(self) -> bool:  # pragma: no cover - Komfort
@@ -73,13 +82,41 @@ class FilterDecision:
 
 PASS = FilterDecision(True)
 
+#: Alle Unterdrückungsgründe mit ihrer Bedeutung. Das Dashboard zeigt daraus
+#: die Klartexte, damit "warum kommt nichts an?" beantwortbar wird.
+SUPPRESSION_LABELS: dict[str, str] = {
+    "suspended": "Quote ausgesetzt",
+    "event_suspended": "Event ausgesetzt",
+    "event_finished": "Event beendet",
+    "sport_disabled": "Sportart abgeschaltet",
+    "live_disabled": "Live abgeschaltet",
+    "prematch_disabled": "Pre-Match abgeschaltet",
+    "market_disabled": "Markt nicht ausgewählt",
+    "odds_below_min": "Quote unter MIN_ODDS",
+    "odds_above_max": "Quote über MAX_ODDS",
+    "stale": "Quote älter als MAX_ODDS_AGE_SECONDS",
+    "too_few_bookmakers": "weniger Buchmacher als MIN_BOOKMAKERS",
+    "value_below_min": "Value unter MIN_VALUE_PERCENT",
+    "deviation_below_min": "Abweichung unter MIN_OUTLIER_PERCENT",
+    "confidence_below_min": "Confidence unter MIN_CONFIDENCE",
+    "error_score_below_min": "Error-Score unter MIN_ERROR_SCORE",
+    "duplicate": "Duplikat (gleicher Preis)",
+    "cooldown": "Cooldown läuft noch",
+    "no_fair_odds": "zu wenig Daten für eine faire Quote",
+    "extreme_probability": "Markt praktisch entschieden",
+    "market_drift": "ganzer Markt in Bewegung",
+    "market_leader": "Buch führt die Bewegung an",
+    "unknown_event": "Event nicht zuzuordnen",
+    "queue_full": "Rückstau - Nachricht verworfen",
+}
+
 #: Schwellenvergleiche mit Fließkommazahlen: ein Wert exakt auf der Grenze
 #: soll bestehen, nicht an Rundungsrauschen scheitern.
 EPS = 1e-9
 
 
-def _fail(reason: str) -> FilterDecision:
-    return FilterDecision(False, reason)
+def _fail(code: str, reason: str = "") -> FilterDecision:
+    return FilterDecision(False, code, reason or code)
 
 
 # --------------------------------------------------------------- Stufe 1
@@ -116,7 +153,7 @@ def check_quote(
 
     age = quote.age(ref)
     if age > thresholds.max_odds_age_seconds + EPS:
-        return _fail(f"stale_{age:.1f}s")
+        return _fail("stale", f"Quote {age:.1f}s alt")
     return PASS
 
 
@@ -138,15 +175,15 @@ def check_signal(
 ) -> FilterDecision:
     """Ist das Signal stark genug für einen Alarm?"""
     if bookmaker_count < thresholds.min_bookmakers:
-        return _fail(f"too_few_bookmakers_{bookmaker_count}")
+        return _fail("too_few_bookmakers", f"nur {bookmaker_count} Buchmacher")
     if value_percent < thresholds.min_value_percent - EPS:
-        return _fail(f"value_{value_percent:.1f}_below_min")
+        return _fail("value_below_min", f"Value {value_percent:.1f}%")
     if deviation_percent < thresholds.min_outlier_percent - EPS:
-        return _fail(f"deviation_{deviation_percent:.1f}_below_min")
+        return _fail("deviation_below_min", f"Abweichung {deviation_percent:.1f}%")
     if confidence < thresholds.min_confidence:
-        return _fail(f"confidence_{confidence}_below_min")
+        return _fail("confidence_below_min", f"Confidence {confidence}")
     if error_score < thresholds.min_error_score:
-        return _fail(f"error_score_{error_score}_below_min")
+        return _fail("error_score_below_min", f"Error-Score {error_score}")
     return PASS
 
 
@@ -159,11 +196,11 @@ def check_value_signal(
 ) -> FilterDecision:
     """Value-Alarm: positiver Erwartungswert bei ausreichender Datenlage."""
     if bookmaker_count < thresholds.min_bookmakers:
-        return _fail(f"too_few_bookmakers_{bookmaker_count}")
+        return _fail("too_few_bookmakers", f"nur {bookmaker_count} Buchmacher")
     if value_percent < thresholds.min_value_percent - EPS:
-        return _fail(f"value_{value_percent:.1f}_below_min")
+        return _fail("value_below_min", f"Value {value_percent:.1f}%")
     if confidence < thresholds.min_confidence:
-        return _fail(f"confidence_{confidence}_below_min")
+        return _fail("confidence_below_min", f"Confidence {confidence}")
     return PASS
 
 
@@ -182,13 +219,13 @@ def check_error_signal(
     "Abweichung" keine belastbare Aussage.
     """
     if bookmaker_count < thresholds.min_bookmakers:
-        return _fail(f"too_few_bookmakers_{bookmaker_count}")
+        return _fail("too_few_bookmakers", f"nur {bookmaker_count} Buchmacher")
     if deviation_percent < thresholds.min_outlier_percent - EPS:
-        return _fail(f"deviation_{deviation_percent:.1f}_below_min")
+        return _fail("deviation_below_min", f"Abweichung {deviation_percent:.1f}%")
     if confidence < thresholds.min_confidence:
-        return _fail(f"confidence_{confidence}_below_min")
+        return _fail("confidence_below_min", f"Confidence {confidence}")
     if error_score < thresholds.min_error_score:
-        return _fail(f"error_score_{error_score}_below_min")
+        return _fail("error_score_below_min", f"Error-Score {error_score}")
     return PASS
 
 

@@ -156,6 +156,10 @@ def format_alert(alert: Alert, *, compact: bool = False) -> str:
             )
 
     lines.append(f"⚡ <b>Erkannt</b>: {format_time(alert.detected_at)}")
+
+    if not compact and alert.kind is not AlertKind.ODDS_MOVE:
+        lines.extend(explain_alert(alert))
+
     if not compact:
         lines.append(f"⏳ Quotenalter: {alert.odds_age:.1f}s")
         for note in alert.notes[:3]:
@@ -163,6 +167,50 @@ def format_alert(alert: Alert, *, compact: bool = False) -> str:
         lines.append("")
         lines.append("<i>Nur Analyse - keine automatische Wettabgabe.</i>")
     return "\n".join(line for line in lines if line is not None)
+
+
+def explain_alert(alert: Alert) -> list[str]:
+    """Kurze Begründung: woraus die faire Quote stammt.
+
+    Ohne sie muss man dem Ergebnis blind vertrauen - mit ihr lässt sich der
+    Alarm in Sekunden gegen den Markt prüfen.
+    """
+    lines: list[str] = []
+
+    if alert.references:
+        prices = sorted(alert.references.items(), key=lambda kv: kv[1])
+        shown = ", ".join(f"{esc(name)} {price:.2f}" for name, price in prices[:6])
+        more = f" (+{len(prices) - 6})" if len(prices) > 6 else ""
+        lines += ["", f"🔎 <b>Verglichen mit</b>: {shown}{more}"]
+
+    models = {k: v for k, v in (alert.fair_models or {}).items() if v}
+    if models:
+        labels = {
+            "median": "Median",
+            "margin_removed": "margenbereinigt",
+            "weighted_consensus": "Konsens",
+        }
+        parts = " · ".join(f"{labels.get(k, k)} {v:.2f}" for k, v in models.items())
+        lines.append(f"🧮 <b>Modelle</b>: {parts}")
+
+    if alert.score_components:
+        top = sorted(alert.score_components.items(), key=lambda kv: kv[1], reverse=True)[:3]
+        parts = " · ".join(f"{_COMPONENT_LABELS.get(k, k)} {v:.0f}" for k, v in top)
+        lines.append(f"🎯 <b>Stärkste Signale</b>: {parts}")
+
+    return lines
+
+
+_COMPONENT_LABELS = {
+    "deviation": "Abweichung",
+    "breadth": "Marktbreite",
+    "speed": "Tempo",
+    "history": "Historie",
+    "live": "Live",
+    "liquidity": "Liquidität",
+    "quality": "Datenqualität",
+    "freshness": "Aktualität",
+}
 
 
 def format_alert_short(alert: Alert) -> str:

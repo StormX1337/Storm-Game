@@ -641,7 +641,31 @@ Preis zuletzt *bestätigt* wurde (Datenaktualität) und seit wann er *gilt*
 (Standzeit). Ohne diese Trennung fiele der interessanteste Fall aus dem
 Stale-Filter heraus.
 
-### Schritt 6 — False-Positive-Schutz
+### Schritt 6 — jeder Alarm ist nachprüfbar
+
+Ein Alarm nennt nicht nur das Ergebnis, sondern die Grundlage: gegen welche
+Preise verglichen wurde, was jedes der drei Modelle ergab und welche Signale
+den Error-Score getragen haben. Im Dashboard klappt ein Klick auf die
+Alarmzeile die Herleitung auf, Telegram schickt sie kompakt mit.
+
+### Schritt 7 — und wenn nichts kommt?
+
+Jede verworfene Quote wird nach Grund gezählt und im Dashboard unter
+**„Warum keine Alarme?"** angezeigt — mit Klartext statt Codes:
+
+```
+Abweichung unter MIN_OUTLIER_PERCENT     42.090
+Quote unter MIN_ODDS                     11.699
+Buch führt die Bewegung an                8.850
+Duplikat (gleicher Preis)                 6.859
+```
+
+Ein korrekt arbeitendes, aber zu streng eingestelltes System sieht sonst
+genauso aus wie ein kaputtes. Dieselben Zahlen liefert
+`GET /stats` im Feld `suppressed` und Prometheus unter
+`storm_alerts_suppressed_total`.
+
+### Schritt 8 — False-Positive-Schutz
 
 Mindestanzahl Buchmacher · Mindest-Value · Mindestabweichung · maximales
 Quotenalter · Cooldown je Quotenzeile · Duplikaterkennung über Preis-Buckets ·

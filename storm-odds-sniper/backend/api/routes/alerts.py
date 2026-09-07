@@ -44,6 +44,9 @@ def _row_to_response(row) -> AlertResponse:
         provider=row.provider,
         previous_odds=payload.get("previous_odds"),
         notes=list(payload.get("notes", [])),
+        fair_models=payload.get("fair_models") or {},
+        score_components=payload.get("score_components") or {},
+        references=payload.get("references") or {},
     )
 
 

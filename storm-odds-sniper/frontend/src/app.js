@@ -63,10 +63,10 @@
       return;
     }
     body.innerHTML = rows
-      .map((a) => {
+      .map((a, index) => {
         const valueClass = a.value_percent >= 0 ? "pos" : "neg";
         const tag = STATUS_TAG[a.status] || "fin";
-        return `<tr class="${a.__fresh ? "row--new" : ""}">
+        return `<tr class="row--clickable ${a.__fresh ? "row--new" : ""}" data-index="${index}">
           <td class="mono dim">${esc(fmtTime(a.detected_at))}</td>
           <td>${SPORT_ICON[a.sport] || "🏟"} <span class="tag tag--${esc(a.kind)}">${
           KIND_LABEL[a.kind] || esc(a.kind)
@@ -93,6 +93,78 @@
       .join("");
     applyMeterWidths(body);
     state.alerts.forEach((a) => delete a.__fresh);
+    body.querySelectorAll("tr[data-index]").forEach((tr) => {
+      tr.addEventListener("click", () => toggleDetail(tr, rows[Number(tr.dataset.index)]));
+    });
+  }
+
+  const COMPONENT_LABEL = {
+    deviation: "Abweichung", breadth: "Marktbreite", speed: "Tempo",
+    history: "Historie", live: "Live", liquidity: "Liquidität",
+    quality: "Datenqualität", freshness: "Aktualität",
+  };
+  const MODEL_LABEL = {
+    median: "Median", margin_removed: "margenbereinigt", weighted_consensus: "Konsens",
+  };
+
+  /* Herleitung eines Alarms: gegen welche Preise verglichen wurde, was die
+     drei Modelle sagten und welche Signale den Error-Score getragen haben.
+     Ohne das muss man dem Ergebnis blind vertrauen. */
+  function toggleDetail(row, alert) {
+    const existing = row.nextElementSibling;
+    if (existing && existing.classList.contains("row--detail")) {
+      existing.remove();
+      return;
+    }
+    document.querySelectorAll(".row--detail").forEach((el) => el.remove());
+    if (!alert) return;
+
+    const refs = Object.entries(alert.references || {}).sort((a, b) => a[1] - b[1]);
+    const models = Object.entries(alert.fair_models || {}).filter(([, v]) => v);
+    const comps = Object.entries(alert.score_components || {}).sort((a, b) => b[1] - a[1]);
+
+    const block = (title, inner) =>
+      inner ? `<div class="detail__block"><h4>${title}</h4>${inner}</div>` : "";
+
+    // Bewegungsmeldungen haben keine faire Quote und damit keine Referenzen -
+    // dort ist die Bewegung selbst die Information.
+    const movement =
+      alert.kind === "odds_move"
+        ? `<div class="row"><span class="dim">Vorher</span><span class="mono">${fmtOdds(
+            alert.previous_odds
+          )}</span></div>
+           <div class="row"><span class="dim">Jetzt</span><span class="mono">${fmtOdds(
+             alert.odds
+           )}</span></div>
+           <div class="row"><span class="dim">Änderung</span><span class="mono ${
+             alert.deviation_percent >= 0 ? "pos" : "neg"
+           }">${fmtPct(alert.deviation_percent)}</span></div>`
+        : "";
+
+    const tr = document.createElement("tr");
+    tr.className = "row--detail";
+    tr.innerHTML = `<td colspan="10"><div class="detail">
+      ${block("Bewegung", movement)}
+      ${block("Verglichen mit", refs.length
+        ? `<div class="chips">${refs
+            .map(([n, p]) => `<span class="chip-static">${esc(n)} <b>${p.toFixed(2)}</b></span>`)
+            .join("")}</div>`
+        : "")}
+      ${block("Faire Quote je Modell", models.length
+        ? `<div class="chips">${models
+            .map(([k, v]) => `<span class="chip-static">${esc(MODEL_LABEL[k] || k)} <b>${v.toFixed(2)}</b></span>`)
+            .join("")}</div>`
+        : "")}
+      ${block("Signale des Error-Scores", comps.length
+        ? comps.map(([k, v]) => `<div class="row">
+              <span class="dim">${esc(COMPONENT_LABEL[k] || k)}</span>
+              <span class="mono">${v.toFixed(1)}</span></div>`).join("")
+        : "")}
+      ${block("Hinweise", (alert.notes || []).length
+        ? `<ul class="notes">${alert.notes.map((n) => `<li>${esc(n)}</li>`).join("")}</ul>`
+        : "")}
+    </div></td>`;
+    row.after(tr);
   }
 
   /* Balkenbreiten per CSSOM setzen statt über style="…".
@@ -250,6 +322,36 @@
     }
   }
 
+  /* Jede verworfene Quote hat einen Grund. Ohne diese Anzeige sieht ein
+     korrekt arbeitendes, aber zu streng eingestelltes System identisch aus
+     wie ein kaputtes. */
+  function renderSuppressed(stats) {
+    const rows = stats.suppressed || [];
+    const list = $("suppressed-list");
+    $("suppressed-total").textContent = (stats.suppressed_total || 0).toLocaleString("de-DE");
+    if (!rows.length) {
+      list.innerHTML = '<li class="empty">Noch nichts verworfen</li>';
+      return;
+    }
+    const max = Math.max(...rows.map((r) => r.count));
+    list.innerHTML = rows
+      .slice(0, 8)
+      .map(
+        (r) => `<li>
+          <div class="row">
+            <span>${esc(r.label)}</span>
+            <span class="mono dim">${r.count.toLocaleString("de-DE")}</span>
+          </div>
+          <div class="meter"><i class="warn" data-width="${Math.round((r.count / max) * 100)}"></i></div>
+        </li>`
+      )
+      .join("");
+    // Ohne Zeitbezug sagt eine Zahl wie "79.302" nichts aus.
+    list.innerHTML +=
+      '<li><span class="event-sub">Zähler seit Scanner-Start, Rücksetzung nach 48 h</span></li>';
+    applyMeterWidths(list);
+  }
+
   function renderSystem(health, stats) {
     const list = $("system-list");
     const items = (health.components || []).map(
@@ -323,6 +425,10 @@
         previous_odds: raw.previous_odds,
         provider: raw.provider,
         detected_at: raw.detected_at,
+        notes: raw.notes || [],
+        fair_models: raw.fair_models || {},
+        score_components: raw.score_components || {},
+        references: raw.references || {},
       };
     }
     return { ...raw, detected_at: raw.detected_at };
@@ -358,6 +464,7 @@
       renderEvents();
       renderProviders(providers);
       updateDemoBanner(providers);
+      renderSuppressed(stats);
       renderSystem(health, stats);
 
       if (!state.alerts.length && alerts.length) {

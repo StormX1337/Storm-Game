@@ -399,6 +399,13 @@ class Alert:
     speed_percent_per_second: float | None = None
     previous_odds: float | None = None
     notes: list[str] = field(default_factory=list)
+    #: Ergebnis der drei Fair-Odds-Modelle - macht die Referenz nachprüfbar.
+    fair_models: dict[str, float | None] = field(default_factory=dict)
+    #: Punkte je Signal des Error-Scores.
+    score_components: dict[str, float] = field(default_factory=dict)
+    #: Die verglichenen Quoten: Buchmacher -> Preis. Damit lässt sich der
+    #: Alarm ohne Blick in die Datenbank überprüfen.
+    references: dict[str, float] = field(default_factory=dict)
 
     @property
     def detected_at_text(self) -> str:
@@ -427,6 +434,9 @@ class Alert:
             "speed_percent_per_second": self.speed_percent_per_second,
             "previous_odds": self.previous_odds,
             "notes": list(self.notes),
+            "fair_models": dict(self.fair_models),
+            "score_components": dict(self.score_components),
+            "references": dict(self.references),
         }
 
     @classmethod
@@ -451,4 +461,7 @@ class Alert:
             speed_percent_per_second=data.get("speed_percent_per_second"),
             previous_odds=data.get("previous_odds"),
             notes=list(data.get("notes", [])),
+            fair_models=dict(data.get("fair_models") or {}),
+            score_components=dict(data.get("score_components") or {}),
+            references=dict(data.get("references") or {}),
         )
