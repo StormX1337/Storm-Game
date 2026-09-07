@@ -10,7 +10,12 @@ import pytest
 from backend.core.backoff import ExponentialBackoff
 from backend.core.config import Settings
 from backend.models.enums import EventStatus, MarketType, ProviderStatus, Sport
-from backend.providers.base import OddsProvider, ProviderAuthError, ProviderHealth
+from backend.providers.base import (
+    OddsProvider,
+    ProviderAuthError,
+    ProviderError,
+    ProviderHealth,
+)
 from backend.providers.betfair_exchange import BetfairExchangeProvider, map_market_type
 from backend.providers.mock_provider import MockProvider
 from backend.providers.registry import build_providers, describe_providers, missing_credentials
@@ -411,8 +416,10 @@ class TestTheOddsApi:
             await provider._discover_sports()
         await provider._client.aclose()
 
-    async def test_other_discovery_errors_stay_tolerated(self):
-        """Ein Netzwerkschluckauf soll den Start nicht verhindern."""
+    async def test_network_errors_surface_instead_of_an_empty_schedule(self):
+        """Ohne Sport-Keys kann der Adapter nichts abfragen. Ein stiller Start
+        mit null Wettbewerben wäre eine Dauerstörung ohne Hinweis - der
+        Supervisor soll stattdessen mit Backoff neu verbinden."""
 
         def handler(request: httpx.Request) -> httpx.Response:
             return httpx.Response(503, json={"message": "kurz weg"})
@@ -421,7 +428,22 @@ class TestTheOddsApi:
         provider._client = httpx.AsyncClient(
             transport=httpx.MockTransport(handler), base_url="https://example.invalid"
         )
-        assert await provider._discover_sports() == []
+        with pytest.raises(ProviderError):
+            await provider._discover_sports()
+        await provider._client.aclose()
+
+    async def test_connection_problems_are_provider_errors_not_stacktraces(self):
+        """Proxy/DNS/TLS-Fehler sollen klassifiziert ankommen."""
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            raise httpx.ConnectError("Verbindung abgelehnt")
+
+        provider = TheOddsApiProvider(api_key="test")
+        provider._client = httpx.AsyncClient(
+            transport=httpx.MockTransport(handler), base_url="https://example.invalid"
+        )
+        with pytest.raises(ProviderError, match="nicht erreichbar"):
+            await provider._get("/sports", {})
         await provider._client.aclose()
 
     async def test_rate_limit_header_is_tracked(self):

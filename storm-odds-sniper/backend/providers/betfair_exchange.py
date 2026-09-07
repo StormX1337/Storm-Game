@@ -189,7 +189,10 @@ class BetfairExchangeProvider(OddsProvider):
             "Content-Type": "application/x-www-form-urlencoded",
             "Accept": "application/json",
         }
-        response = await self._client.post(self.identity_url, data=payload, headers=headers)
+        try:
+            response = await self._client.post(self.identity_url, data=payload, headers=headers)
+        except httpx.HTTPError as exc:
+            raise ProviderError(f"Betfair-Login nicht erreichbar: {exc}") from exc
         if response.status_code >= 400:
             raise ProviderAuthError(f"Betfair-Login fehlgeschlagen: HTTP {response.status_code}")
         data = response.json()
@@ -241,7 +244,10 @@ class BetfairExchangeProvider(OddsProvider):
             "X-Authentication": self._session_token,
             "Content-Type": "application/json",
         }
-        response = await self._client.post(self.api_url, json=body, headers=headers)
+        try:
+            response = await self._client.post(self.api_url, json=body, headers=headers)
+        except httpx.HTTPError as exc:
+            raise ProviderError(f"Betfair nicht erreichbar: {exc}") from exc
         if response.status_code == 429:
             raise ProviderRateLimited("Betfair: zu viele Anfragen (429)")
         if response.status_code >= 400:

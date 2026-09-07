@@ -165,7 +165,13 @@ class TheOddsApiProvider(OddsProvider):
         if self._client is None:
             raise ProviderError("Client nicht verbunden")
         params = {**params, "apiKey": self._api_key}
-        response = await self._client.get(path, params=params)
+        try:
+            response = await self._client.get(path, params=params)
+        except httpx.HTTPError as exc:
+            # Netz, DNS, TLS, Proxy: als Providerfehler klassifizieren, damit
+            # Supervisor und Einrichtungshilfe eine verständliche Meldung
+            # bekommen statt eines Stacktrace.
+            raise ProviderError(f"The Odds API nicht erreichbar: {exc}") from exc
 
         remaining = response.headers.get("x-requests-remaining")
         if remaining is not None:
@@ -189,15 +195,15 @@ class TheOddsApiProvider(OddsProvider):
         return data if isinstance(data, list) else []
 
     async def _discover_sports(self) -> list[str]:
-        try:
-            sports = await self._get("/sports", {"all": "false"})
-        except ProviderAuthError:
-            # Ein ungültiger Key darf nicht als "keine Wettbewerbe gefunden"
-            # enden - sonst sucht man den Fehler beim Spielplan statt beim Key.
-            raise
-        except ProviderError as exc:
-            log.warning("sport-discovery fehlgeschlagen", error=str(exc))
-            return []
+        """Laufende Fußball-/Tennis-Wettbewerbe ermitteln.
+
+        Fehler werden bewusst **nicht** verschluckt. Ohne Sport-Keys hat der
+        Adapter nichts abzufragen - er wäre dauerhaft nutzlos. Ein Fehler
+        lässt den Supervisor stattdessen mit Backoff erneut verbinden, und
+        die Einrichtungshilfe zeigt die wahre Ursache statt "keine
+        Wettbewerbe gefunden - kommt in Spielpausen vor".
+        """
+        sports = await self._get("/sports", {"all": "false"})
         keys = [
             item["key"]
             for item in sports

@@ -27,6 +27,25 @@ from backend.providers.the_odds_api import TheOddsApiProvider, sport_from_key  #
 OK, FAIL, INFO = "[ OK ]", "[FEHL]", "[    ]"
 
 
+def explain_network_error(message: str) -> str:
+    """Netzwerkprobleme in eine Handlungsanweisung übersetzen."""
+    lowered = message.lower()
+    if "proxy" in lowered or "403" in lowered:
+        return (
+            "       Der Zugriff wird von einem Proxy oder einer Firewall blockiert.\n"
+            "       api.the-odds-api.com muss ausgehend erreichbar sein. Test:\n"
+            "         curl -sS 'https://api.the-odds-api.com/v4/sports?apiKey=DEIN_KEY'"
+        )
+    if "timed out" in lowered or "timeout" in lowered:
+        return "       Zeitüberschreitung - Netzwerkverbindung oder DNS prüfen."
+    if "name or service not known" in lowered or "getaddrinfo" in lowered:
+        return "       DNS-Auflösung fehlgeschlagen - Namensauflösung im Container prüfen."
+    return (
+        "       Erreichbarkeit prüfen:\n"
+        "         curl -sS 'https://api.the-odds-api.com/v4/sports?apiKey=DEIN_KEY'"
+    )
+
+
 def human_interval(seconds: float) -> str:
     if seconds < 90:
         return f"{seconds:.0f} Sekunden"
@@ -57,6 +76,12 @@ async def check_the_odds_api(args: argparse.Namespace) -> int:
         return 1
     except ProviderError as exc:
         print(f"{FAIL} Verbindung fehlgeschlagen: {exc}")
+        print(explain_network_error(str(exc)))
+        await provider.disconnect()
+        return 1
+    except Exception as exc:  # noqa: BLE001 - der Anwender braucht keinen Stacktrace
+        print(f"{FAIL} Unerwarteter Fehler: {type(exc).__name__}: {exc}")
+        print(explain_network_error(str(exc)))
         await provider.disconnect()
         return 1
 
@@ -82,6 +107,7 @@ async def check_the_odds_api(args: argparse.Namespace) -> int:
         quotes = await provider.get_odds()
     except ProviderError as exc:
         print(f"{FAIL} Abruf fehlgeschlagen: {exc}")
+        print(explain_network_error(str(exc)))
         await provider.disconnect()
         return 1
 
