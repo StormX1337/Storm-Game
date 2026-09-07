@@ -23,11 +23,23 @@ async def run() -> None:
     settings = get_settings()
     configure_logging(settings.log_level, settings.log_json)
 
+    stop = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        with contextlib.suppress(NotImplementedError):
+            loop.add_signal_handler(sig, stop.set)
+
     if not settings.telegram_bot_token:
-        log.error(
-            "TELEGRAM_BOT_TOKEN fehlt - der Telegram-Worker beendet sich. "
-            "Scanner, API und Dashboard laufen davon unabhängig weiter."
+        log.warning(
+            "TELEGRAM_BOT_TOKEN fehlt - es werden keine Benachrichtigungen "
+            "verschickt. Scanner, API und Dashboard laufen unabhängig weiter. "
+            "Token in die .env eintragen und 'docker compose up -d' erneut "
+            "ausführen."
         )
+        # Bewusst warten statt beenden: der Container läuft mit
+        # restart:unless-stopped, und das startet auch bei Exit-Code 0 neu -
+        # ein sofortiges Ende wäre eine endlose Neustartschleife.
+        await stop.wait()
         return
 
     state = RedisState(
@@ -46,12 +58,6 @@ async def run() -> None:
         repository = Repository(get_session_factory(settings))
     else:
         log.warning("datenbank nicht erreichbar - nur der Standard-Chat bekommt Alarme")
-
-    stop = asyncio.Event()
-    loop = asyncio.get_running_loop()
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        with contextlib.suppress(NotImplementedError):
-            loop.add_signal_handler(sig, stop.set)
 
     bot_task = asyncio.create_task(run_bot(settings, state, repository), name="telegram-bot")
     stop_task = asyncio.create_task(stop.wait(), name="stop-signal")

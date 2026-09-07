@@ -266,26 +266,30 @@ deshalb bewusst das Präfix `Mock`.
 ### The Odds API — echte Quoten, API-Key nötig
 
 1. Key holen: <https://the-odds-api.com> (kostenloses Einstiegskontingent)
-2. Key prüfen, **bevor** du umstellst:
+2. Key prüfen und übernehmen:
 
 ```bash
-python scripts/setup_provider.py the_odds_api --key DEIN_KEY
+./scripts/setup-provider.sh the_odds_api --key DEIN_KEY --write
+docker compose up -d
 ```
 
 Das Skript sagt dir in einem Durchlauf, ob der Key gültig ist, welche
 Wettbewerbe gerade laufen, wie viele Buchmacher tatsächlich zurückkommen,
-wie viel Kontingent übrig ist und welchen Takt es hergibt. Mit `--write`
-trägt es die passenden Werte direkt in die `.env` ein:
+wie viel Kontingent übrig ist und welchen Takt es hergibt. Ohne `--write`
+ändert es nichts und zeigt nur das Ergebnis.
+
+> Der Wrapper wählt selbst den passenden Weg: läuft Docker, startet er im
+> API-Container (dort sind alle Abhängigkeiten installiert), sonst nutzt er
+> `.venv` oder `python3`. **Auf einem frischen Server hat das
+> System-Python die Abhängigkeiten nicht** — ein direktes
+> `python3 scripts/setup_provider.py` scheitert dort an fehlenden Modulen.
+> Und `python` gibt es auf Ubuntu gar nicht, nur `python3`.
+
+Explizit im Container, falls du den Wrapper umgehen willst:
 
 ```bash
-python scripts/setup_provider.py the_odds_api --key DEIN_KEY --write
-docker compose up -d
-```
-
-Im Container:
-
-```bash
-docker compose exec api python /app/scripts/setup_provider.py the_odds_api --key DEIN_KEY
+docker compose run --rm --user root -v "$PWD/.env:/app/.env" \
+  api python /app/scripts/setup_provider.py the_odds_api --key DEIN_KEY --write
 ```
 
 Manuell entspricht das:
@@ -946,7 +950,12 @@ storm-odds-sniper/
 │   └── tests/                pytest
 ├── frontend/src/             Dashboard (HTML, CSS, JS)
 ├── docker/nginx/             nginx-Konfiguration
-├── scripts/                  Healthchecks, Rauchtest, Dev-Helfer
+├── scripts/
+│   ├── setup-provider.sh     echte Datenquelle prüfen und übernehmen
+│   ├── setup_provider.py     die eigentliche Prüflogik
+│   ├── smoke_test.py         Rauchtest der laufenden Installation
+│   ├── healthcheck_*.py      Container-Healthchecks
+│   └── dev.sh                lokale Entwicklung
 ├── docs/                     Architektur, Provider, Entscheidungen
 ├── docker-compose.yml
 ├── Dockerfile
