@@ -569,10 +569,38 @@ export class ServerService {
       throw new AppError(409, ErrorCode.SERVER_NOT_INSTALLED, busyMessage(server.status));
     }
 
-    await this.app.agents.request(server.node, `/api/v1/servers/${server.uuid}/power`, {
-      method: 'POST',
-      body: { action },
-    });
+    // A node that has no container for this server is a state the panel can
+    // repair, not one a customer should be told about.
+    //
+    // The container is created by pushing the spec, and every path that skips
+    // or undoes that leaves the row saying OFFLINE while the node has nothing:
+    // a spec push that failed when the server was created — a bad allocation
+    // was enough — an install whose failure was discarded, a node rebuilt from
+    // its backup directory, an operator who cleaned up containers by hand. In
+    // every one of them the panel is holding the spec that would fix it, and
+    // what it did instead was hand the customer "That server has no container
+    // on this node" and stop.
+    //
+    // So: push the spec and try once more. Only on a start, because stopping
+    // or killing something that does not exist is already the desired state,
+    // and only once, so a node that cannot create the container reports that
+    // rather than looping.
+    try {
+      await this.sendPowerToNode(server, action);
+    } catch (error) {
+      const missing =
+        error instanceof AppError &&
+        error.code === ErrorCode.SERVER_NOT_FOUND &&
+        (action === 'start' || action === 'restart');
+      if (!missing) throw error;
+
+      this.app.log.warn(
+        { serverId, node: server.node.name },
+        'no container on the node; re-applying the spec before starting',
+      );
+      await this.syncToNode(serverId);
+      await this.sendPowerToNode(server, action);
+    }
 
     const optimistic =
       action === 'start' || action === 'restart'
@@ -582,6 +610,14 @@ export class ServerService {
           : ServerStatus.STOPPING;
 
     await this.updateStatus(server.id, optimistic);
+  }
+
+  /** One power request to the node, with nothing around it. */
+  private async sendPowerToNode(server: ServerWithRelations, action: PowerAction): Promise<void> {
+    await this.app.agents.request(server.node, `/api/v1/servers/${server.uuid}/power`, {
+      method: 'POST',
+      body: { action },
+    });
   }
 
   async updateStatus(serverId: string, status: ServerStatus): Promise<void> {
