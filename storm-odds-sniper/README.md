@@ -265,23 +265,74 @@ deshalb bewusst das Präfix `Mock`.
 
 ### The Odds API — echte Quoten, API-Key nötig
 
-Registrierung: <https://the-odds-api.com> (kostenloses Einstiegskontingent).
+1. Key holen: <https://the-odds-api.com> (kostenloses Einstiegskontingent)
+2. Key prüfen, **bevor** du umstellst:
+
+```bash
+python scripts/setup_provider.py the_odds_api --key DEIN_KEY
+```
+
+Das Skript sagt dir in einem Durchlauf, ob der Key gültig ist, welche
+Wettbewerbe gerade laufen, wie viele Buchmacher tatsächlich zurückkommen,
+wie viel Kontingent übrig ist und welchen Takt es hergibt. Mit `--write`
+trägt es die passenden Werte direkt in die `.env` ein:
+
+```bash
+python scripts/setup_provider.py the_odds_api --key DEIN_KEY --write
+docker compose up -d
+```
+
+Im Container:
+
+```bash
+docker compose exec api python /app/scripts/setup_provider.py the_odds_api --key DEIN_KEY
+```
+
+Manuell entspricht das:
 
 ```env
 PROVIDERS=the_odds_api
 ODDS_API_KEY=dein_key
 ODDS_API_REGIONS=eu,uk
-ODDS_API_MARKETS=h2h,spreads,totals
-ODDS_API_POLL_INTERVAL=20
+ODDS_API_MARKETS=h2h,totals
+ODDS_API_POLL_INTERVAL=60
+ODDS_API_PACE_TO_QUOTA=true
+MIN_BOOKMAKERS=3
+MAX_ODDS_AGE_SECONDS=600
 ```
 
-⚠️ **Kontingent beachten.** Jede Quotenabfrage kostet
-`Anzahl Märkte × Anzahl Regionen` Credits. Mit 3 Märkten und 2 Regionen kostet
-ein Abruf 6 Credits; bei 20 Sekunden Takt sind das über 25 000 Credits pro Tag.
-Das kostenlose Kontingent (500 Credits/Monat) reicht damit **nicht für den
-Live-Betrieb** — es reicht zum Ausprobieren und für Pre-Match-Scans mit langem
-Intervall. Der Adapter liest den Header `x-requests-remaining` und pausiert
-selbstständig, bevor das Kontingent aufgebraucht ist.
+#### ⚠️ Was das kostenlose Kontingent wirklich hergibt
+
+Ein Abruf kostet `Märkte × Regionen` Credits, und es wird **je Wettbewerb
+einmal** abgefragt:
+
+| Konfiguration | Credits/Durchlauf | 500 Credits reichen für |
+|---|---|---|
+| 4 Wettbewerbe × 2 Märkte × 2 Regionen | 16 | ~31 Durchläufe |
+| 2 Wettbewerbe × 1 Markt × 1 Region | 2 | ~250 Durchläufe |
+| 1 Wettbewerb × 1 Markt × 1 Region | 1 | ~500 Durchläufe |
+
+Selbst im günstigsten Fall sind das etwa **17 Abrufe pro Tag** — für
+Live-Erkennung, die Sekunden zählt, ist das nicht genug. **Das kostenlose
+Kontingent ist zum Ausprobieren da, nicht für den Dauerbetrieb.** Für echtes
+Live-Scanning braucht es einen bezahlten Tarif oder ein Betfair-Konto.
+
+Damit das Kontingent nicht in der ersten halben Stunde verglüht, drosselt sich
+der Adapter selbst: er liest `x-requests-remaining` aus jeder Antwort und
+wählt den Takt so, dass der Rest bis Monatsende reicht
+(`ODDS_API_PACE_TO_QUOTA=true`). `ODDS_API_POLL_INTERVAL` ist dabei nur die
+Untergrenze. Unterhalb von `ODDS_API_MIN_REMAINING` pausiert er ganz.
+
+#### Wichtig beim Umstieg von der Simulation
+
+Zwei Standardwerte sind auf die Simulation zugeschnitten und müssen mit
+gepollten Quellen angepasst werden, sonst entsteht **kein einziger Alarm**:
+
+- `MAX_ODDS_AGE_SECONDS=10` — bei einem Poll-Takt von Minuten gelten sonst
+  alle Quoten sofort als veraltet. Faustregel: mindestens das Doppelte des
+  Takts.
+- `MIN_BOOKMAKERS=3` — echte Quellen liefern je Markt oft weniger Buchmacher
+  als die Simulation. Wie viele es bei dir sind, sagt das Setup-Skript.
 
 Diese Quelle liefert **keine** Spielminute, keine Karten und keine
 Tennis-Punktdetails. Diese Felder bleiben leer — sie werden nicht geschätzt.

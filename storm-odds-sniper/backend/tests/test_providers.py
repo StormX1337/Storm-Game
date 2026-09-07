@@ -396,6 +396,34 @@ class TestTheOddsApi:
             await provider._get("/sports", {})
         await provider._client.aclose()
 
+    async def test_invalid_key_surfaces_instead_of_looking_like_an_empty_schedule(self):
+        """Sonst meldet der Adapter "keine Wettbewerbe" und man sucht den
+        Fehler beim Spielplan statt beim Key."""
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(401, json={"message": "invalid key"})
+
+        provider = TheOddsApiProvider(api_key="falsch")
+        provider._client = httpx.AsyncClient(
+            transport=httpx.MockTransport(handler), base_url="https://example.invalid"
+        )
+        with pytest.raises(ProviderAuthError):
+            await provider._discover_sports()
+        await provider._client.aclose()
+
+    async def test_other_discovery_errors_stay_tolerated(self):
+        """Ein Netzwerkschluckauf soll den Start nicht verhindern."""
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(503, json={"message": "kurz weg"})
+
+        provider = TheOddsApiProvider(api_key="test")
+        provider._client = httpx.AsyncClient(
+            transport=httpx.MockTransport(handler), base_url="https://example.invalid"
+        )
+        assert await provider._discover_sports() == []
+        await provider._client.aclose()
+
     async def test_rate_limit_header_is_tracked(self):
         provider = TheOddsApiProvider(api_key="test")
 

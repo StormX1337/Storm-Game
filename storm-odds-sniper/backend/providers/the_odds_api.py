@@ -101,6 +101,9 @@ class TheOddsApiProvider(OddsProvider):
         use_scores: bool = True,
         scores_interval: float = 30.0,
         min_remaining: int = 5,
+        pace_to_quota: bool = True,
+        quota_reserve: int = 20,
+        max_discovered_sports: int = 4,
         timeout: float = 10.0,
     ) -> None:
         super().__init__()
@@ -116,6 +119,9 @@ class TheOddsApiProvider(OddsProvider):
         self.use_scores = use_scores
         self.scores_interval = scores_interval
         self.min_remaining = min_remaining
+        self.pace_to_quota = pace_to_quota
+        self.quota_reserve = quota_reserve
+        self.max_discovered_sports = max_discovered_sports
         self.timeout = timeout
 
         self._client: httpx.AsyncClient | None = None
@@ -185,6 +191,10 @@ class TheOddsApiProvider(OddsProvider):
     async def _discover_sports(self) -> list[str]:
         try:
             sports = await self._get("/sports", {"all": "false"})
+        except ProviderAuthError:
+            # Ein ungültiger Key darf nicht als "keine Wettbewerbe gefunden"
+            # enden - sonst sucht man den Fehler beim Spielplan statt beim Key.
+            raise
         except ProviderError as exc:
             log.warning("sport-discovery fehlgeschlagen", error=str(exc))
             return []
@@ -193,7 +203,50 @@ class TheOddsApiProvider(OddsProvider):
             for item in sports
             if isinstance(item, dict) and sport_from_key(item.get("key", "")) is not None
         ]
-        return keys[:12]  # Kontingent schonen
+        return keys[: self.max_discovered_sports]  # Kontingent schonen
+
+    # -------------------------------------------------------------- Takt
+    def credits_per_cycle(self) -> int:
+        """Credits, die ein vollständiger Durchlauf kostet.
+
+        Die API rechnet je Anfrage ``Märkte x Regionen``; ein Durchlauf fragt
+        jeden Sport-Key einmal ab. Der Scores-Endpunkt kostet mit ``daysFrom``
+        zwei Credits je Sport-Key.
+        """
+        sports = max(1, len(self.sport_keys))
+        markets = max(1, len(self.markets))
+        regions = max(1, len([r for r in self.regions.split(",") if r.strip()]))
+        return sports * markets * regions
+
+    @staticmethod
+    def _seconds_until_month_end(now: datetime | None = None) -> float:
+        """Restzeit bis zum Monatswechsel.
+
+        Näherung: das Kontingent setzt sich am Abrechnungstag zurück, den die
+        API nicht mitteilt. Der Monatswechsel ist die konservative Annahme.
+        """
+        now = now or datetime.now(UTC)
+        if now.month == 12:
+            nxt = now.replace(
+                year=now.year + 1, month=1, day=1, hour=0, minute=0, second=0, microsecond=0
+            )
+        else:
+            nxt = now.replace(month=now.month + 1, day=1, hour=0, minute=0, second=0, microsecond=0)
+        return max(60.0, (nxt - now).total_seconds())
+
+    def next_poll_delay(self) -> float:
+        """Takt so wählen, dass das Restkontingent bis Monatsende reicht.
+
+        Ohne diese Drosselung ist ein kostenloses Kontingent (500 Credits)
+        mit den Standardeinstellungen in einer halben Stunde aufgebraucht.
+        """
+        if not self.pace_to_quota or self.health.rate_limit_remaining is None:
+            return self.poll_interval
+        usable = self.health.rate_limit_remaining - self.quota_reserve
+        if usable <= 0:
+            return max(self.poll_interval, 3600.0)
+        needed = self.credits_per_cycle() * self._seconds_until_month_end() / usable
+        return max(self.poll_interval, needed)
 
     # ------------------------------------------------------------- Mapping
     def _market_key(self, sport: Sport, raw_market: str, line: float | None) -> MarketKey | None:
@@ -332,7 +385,7 @@ class TheOddsApiProvider(OddsProvider):
     async def _fetch_all(self) -> tuple[list[EventSnapshot], list[OddsQuote]]:
         """Ein HTTP-Durchlauf über alle Sport-Keys, durch einen Cache entkoppelt."""
         async with self._fetch_lock:
-            if now_ts() - self._cache_ts < self.poll_interval * 0.5:
+            if now_ts() - self._cache_ts < self.next_poll_delay() * 0.5:
                 return self._cached_events, self._cached_quotes
             events, quotes = await self._fetch_uncached()
             self._cache_ts = now_ts()

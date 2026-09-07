@@ -57,7 +57,10 @@ class Settings(BaseSettings):
     odds_api_key: str = ""
     odds_api_base_url: str = "https://api.the-odds-api.com/v4"
     odds_api_regions: str = "eu,uk"
-    odds_api_sports: str = "soccer_germany_bundesliga,soccer_epl,tennis_atp_aus_open_singles"
+    #: Leer = die aktuell laufenden Fußball-/Tennis-Wettbewerbe werden über
+    #: /v4/sports ermittelt. Feste Keys veralten (z. B. gilt ein Australian-
+    #: Open-Key nur im Januar), deshalb ist die Ermittlung der Standard.
+    odds_api_sports: str = ""
     odds_api_markets: str = "h2h,spreads,totals"
     odds_api_poll_interval: float = 20.0
     odds_api_odds_format: str = "decimal"
@@ -65,6 +68,13 @@ class Settings(BaseSettings):
     odds_api_scores_interval: float = 30.0
     #: Unterhalb dieses Restkontingents pausiert der Provider (Quota-Schutz).
     odds_api_min_remaining: int = 5
+    #: Takt automatisch so wählen, dass das Restkontingent bis Monatsende
+    #: reicht. Ohne das ist ein Gratiskontingent in einer halben Stunde weg.
+    odds_api_pace_to_quota: bool = True
+    odds_api_quota_reserve: int = 20
+    #: Wie viele laufende Wettbewerbe maximal abgefragt werden. Jeder Key
+    #: kostet pro Durchlauf eigene Credits.
+    odds_api_max_discovered_sports: int = 4
 
     # Betfair Exchange (https://developer.betfair.com) - App-Key + Session nötig.
     betfair_app_key: str = ""

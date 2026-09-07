@@ -92,6 +92,9 @@ def _make_the_odds_api(settings: Settings) -> OddsProvider:
         use_scores=settings.odds_api_use_scores,
         scores_interval=settings.odds_api_scores_interval,
         min_remaining=settings.odds_api_min_remaining,
+        pace_to_quota=settings.odds_api_pace_to_quota,
+        quota_reserve=settings.odds_api_quota_reserve,
+        max_discovered_sports=settings.odds_api_max_discovered_sports,
     )
 
 

@@ -163,6 +163,30 @@ class ScannerEngine:
             providers=[p.name for p in self.providers],
             workers=self.settings.scanner_workers,
         )
+        self._warn_about_self_defeating_config()
+
+    def _warn_about_self_defeating_config(self) -> None:
+        """Konfigurationen melden, die garantiert nie einen Alarm erzeugen.
+
+        Der häufigste Fall beim Umstieg von der Simulation auf eine gepollte
+        Quelle: der Poll-Takt liegt über dem erlaubten Quotenalter. Dann ist
+        jede Quote schon beim Eintreffen "veraltet" und der Scanner schweigt -
+        ohne erkennbaren Grund.
+        """
+        limit = self.settings.max_odds_age_seconds
+        for provider in self.providers:
+            if provider.supports_streaming:
+                continue
+            interval = provider.next_poll_delay()
+            if interval > limit:
+                log.warning(
+                    "KONFIGURATION: es kann kein Alarm entstehen - Poll-Takt "
+                    "über dem erlaubten Quotenalter",
+                    provider=provider.name,
+                    poll_interval_seconds=round(interval, 1),
+                    max_odds_age_seconds=limit,
+                    empfehlung=f"MAX_ODDS_AGE_SECONDS auf mindestens {int(interval * 2)} setzen",
+                )
 
     async def stop(self) -> None:
         self._stopped.set()

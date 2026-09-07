@@ -477,3 +477,57 @@ class TestEngineLifecycle:
             assert len(await redis_state.all_event_ids()) == 4
         finally:
             await engine.stop()
+
+
+class TestConfigurationWarnings:
+    """Stumme Fehlkonfigurationen sollen sich melden statt einfach zu schweigen."""
+
+    def _capture(self, engine) -> str:
+        import io
+        from contextlib import redirect_stdout
+
+        from backend.core.logging import configure_logging
+
+        configure_logging("WARNING", json_logs=True)
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            engine._warn_about_self_defeating_config()
+        return buffer.getvalue()
+
+    async def test_slow_polling_with_a_short_age_limit_is_flagged(self, redis_state):
+        """Poll-Takt über dem Quotenalter = garantiert nie ein Alarm."""
+        from backend.providers.the_odds_api import TheOddsApiProvider
+
+        engine = ScannerEngine(
+            scanner_settings(max_odds_age_seconds=10.0),
+            state=redis_state,
+            repository=None,
+            providers=[TheOddsApiProvider(api_key="x", poll_interval=300.0)],
+        )
+        output = self._capture(engine)
+        assert "kein Alarm entstehen" in output
+        assert "the_odds_api" in output
+        assert "600" in output  # empfohlener Wert = doppelter Takt
+
+    async def test_matching_configuration_stays_quiet(self, redis_state):
+        from backend.providers.the_odds_api import TheOddsApiProvider
+
+        engine = ScannerEngine(
+            scanner_settings(max_odds_age_seconds=600.0),
+            state=redis_state,
+            repository=None,
+            providers=[TheOddsApiProvider(api_key="x", poll_interval=60.0)],
+        )
+        assert "kein Alarm" not in self._capture(engine)
+
+    async def test_streaming_providers_are_never_flagged(self, redis_state):
+        """Push-Provider haben keinen Poll-Takt, der zu langsam sein könnte."""
+        from backend.providers.mock_provider import MockProvider
+
+        engine = ScannerEngine(
+            scanner_settings(max_odds_age_seconds=1.0),
+            state=redis_state,
+            repository=None,
+            providers=[MockProvider(events=2, seed=1)],
+        )
+        assert "kein Alarm" not in self._capture(engine)

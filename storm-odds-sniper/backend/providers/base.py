@@ -91,6 +91,7 @@ class OddsProvider(ABC):
     #: True, wenn der Adapter ``stream()`` selbst mit Push bedient.
     supports_streaming: bool = False
     #: Poll-Takt der Standard-``stream()``-Implementierung in Sekunden.
+    #: Untergrenze - ``next_poll_delay()`` darf ihn nach oben anpassen.
     poll_interval: float = 5.0
     #: Sportarten, die dieser Adapter liefern kann (nur informativ).
     sports: tuple[str, ...] = ()
@@ -123,6 +124,14 @@ class OddsProvider(ABC):
         """
 
     # -------------------------------------------------------------- Stream
+    def next_poll_delay(self) -> float:
+        """Wartezeit bis zum nächsten Poll.
+
+        Standard ist der feste ``poll_interval``. Adapter mit begrenztem
+        Kontingent überschreiben das und drosseln sich selbst.
+        """
+        return self.poll_interval
+
     async def stream(self) -> AsyncIterator[ProviderMessage]:
         """Nachrichtenstrom des Providers.
 
@@ -141,7 +150,7 @@ class OddsProvider(ABC):
             elapsed = now_ts() - started
             try:
                 await asyncio.wait_for(
-                    self._closing.wait(), timeout=max(0.0, self.poll_interval - elapsed)
+                    self._closing.wait(), timeout=max(0.0, self.next_poll_delay() - elapsed)
                 )
             except TimeoutError:
                 continue
