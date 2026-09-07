@@ -100,6 +100,8 @@ class ProviderStatus(StrEnum):
     CONNECTING = "connecting"
     CONNECTED = "connected"
     DEGRADED = "degraded"
+    #: Bewusst angehalten (z. B. Kontingent aufgebraucht) - kein Fehler.
+    PAUSED = "paused"
     ERROR = "error"
     DISABLED = "disabled"
 

@@ -191,11 +191,19 @@
       list.innerHTML = '<li class="empty">Keine Provider konfiguriert</li>';
       return;
     }
+    // "paused" ist kein Fehler, sondern eine gewollte Pause (z. B. Kontingent
+    // aufgebraucht) - deshalb gelb statt rot.
+    const DOT = { connected: "dot--on", paused: "dot--warn", degraded: "dot--warn" };
+
     list.innerHTML = providers
       .map((p) => {
-        const dot = p.healthy ? "dot--on" : "dot--off";
+        const dot = p.healthy ? "dot--on" : DOT[p.status] || "dot--off";
         const missing = (p.missing_credentials || []).length
           ? `<div class="event-sub">Fehlt: ${esc(p.missing_credentials.join(", "))}</div>`
+          : "";
+        // Der Provider weiß selbst am besten, warum er nicht liefert.
+        const detail = p.detail
+          ? `<div class="event-sub">${esc(p.detail)}</div>`
           : "";
         return `<li>
           <div class="row">
@@ -207,7 +215,7 @@
             <span class="event-sub mono">${
               p.rate_limit_remaining != null ? "Kontingent " + p.rate_limit_remaining : ""
             }${p.latency_ms != null ? " · " + p.latency_ms + " ms" : ""}</span>
-          </div>${missing}
+          </div>${detail}${missing}
         </li>`;
       })
       .join("");

@@ -52,6 +52,8 @@ a:hover { text-decoration: underline; }
 .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
 .dot--on { background: var(--good); box-shadow: 0 0 0 3px rgba(52, 211, 153, .15); }
 .dot--off { background: var(--bad); box-shadow: 0 0 0 3px rgba(248, 113, 113, .15); }
+/* Gewollte Pause (Kontingent aufgebraucht) - kein Defekt, deshalb nicht rot. */
+.dot--warn { background: var(--warn); box-shadow: 0 0 0 3px rgba(251, 191, 36, .15); }
 
 /* ---------------------------------------------------------- Demo-Banner */
 /* Ohne diesen Hinweis halten Nutzer die simulierten Spiele für echt - das

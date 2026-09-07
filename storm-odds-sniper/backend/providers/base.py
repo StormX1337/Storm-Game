@@ -182,6 +182,16 @@ class OddsProvider(ABC):
         self.health.quotes += quotes
         self.health.last_message_at = now_ts()
 
+    def mark_paused(self, detail: str) -> None:
+        """Gewollte Pause - zählt nicht als Fehler.
+
+        Ein aufgebrauchtes Kontingent ist kein Defekt. Würde es als Fehler
+        gezählt, stünde die Quelle rot im Dashboard und der Fehlerzähler
+        liefe hoch, obwohl alles wie vorgesehen funktioniert.
+        """
+        self.health.status = ProviderStatus.PAUSED
+        self.health.detail = detail
+
     def mark_error(self, detail: str) -> None:
         self.health.errors += 1
         self.health.status = ProviderStatus.ERROR

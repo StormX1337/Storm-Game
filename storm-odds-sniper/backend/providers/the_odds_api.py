@@ -23,7 +23,7 @@ Adapter pausiert selbstständig, bevor das Kontingent aufgebraucht ist.
 from __future__ import annotations
 
 import asyncio
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -405,14 +405,22 @@ class TheOddsApiProvider(OddsProvider):
             self.health.rate_limit_remaining is not None
             and self.health.rate_limit_remaining <= self.min_remaining
         ):
-            self._paused_until = now_ts() + 3600
-            self.mark_error(
-                f"Kontingent fast aufgebraucht ({self.health.rate_limit_remaining}) - "
-                "Abruf für 1h pausiert"
+            # Bis zum Monatswechsel pausieren, nicht nur eine Stunde: das
+            # Kontingent kommt erst dann zurück, und jeder Wiederholungsversuch
+            # würde die letzten Credits verbrauchen.
+            seconds_left = self._seconds_until_month_end()
+            self._paused_until = now_ts() + seconds_left
+            resumes = datetime.now(UTC) + timedelta(seconds=seconds_left)
+            self.mark_paused(
+                f"Kontingent aufgebraucht ({self.health.rate_limit_remaining} übrig). "
+                f"Es setzt sich zum Monatswechsel zurück, geplante Fortsetzung "
+                f"{resumes:%d.%m. %H:%M} UTC. Fällt dein Abrechnungstag früher, "
+                "hilft ein Neustart des Scanners."
             )
             log.warning(
-                "kontingent fast aufgebraucht - pausiere",
+                "kontingent aufgebraucht - pausiere bis zum Monatswechsel",
                 remaining=self.health.rate_limit_remaining,
+                resumes_at=resumes.isoformat(timespec="minutes"),
             )
             return [], []
 

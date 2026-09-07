@@ -9,6 +9,7 @@ import pytest
 
 from backend.core.backoff import ExponentialBackoff
 from backend.core.config import Settings
+from backend.models.domain import now_ts
 from backend.models.enums import EventStatus, MarketType, ProviderStatus, Sport
 from backend.providers.base import (
     OddsProvider,
@@ -619,3 +620,55 @@ class TestHealth:
 
     def test_unconnected_is_not_healthy(self):
         assert ProviderHealth(name="x").healthy is False
+
+
+class TestQuotaExhaustion:
+    """Ein aufgebrauchtes Kontingent ist kein Defekt, sondern eine Pause."""
+
+    def _provider(self) -> TheOddsApiProvider:
+        return TheOddsApiProvider(
+            api_key="test", sport_keys=["soccer_epl"], markets=["h2h"], regions="eu"
+        )
+
+    async def test_exhausted_quota_pauses_without_counting_an_error(self):
+        provider = self._provider()
+        provider.health.rate_limit_remaining = 2
+        events, quotes = await provider._fetch_uncached()
+        assert (events, quotes) == ([], [])
+        assert provider.health.status is ProviderStatus.PAUSED
+        assert provider.health.errors == 0, "eine gewollte Pause ist kein Fehler"
+
+    async def test_the_reason_is_recorded_for_the_dashboard(self):
+        provider = self._provider()
+        provider.health.rate_limit_remaining = 2
+        await provider._fetch_uncached()
+        detail = provider.health.detail
+        assert "Kontingent aufgebraucht" in detail
+        assert "Monatswechsel" in detail
+        assert "2 übrig" in detail
+
+    async def test_it_waits_for_the_reset_not_an_hour(self):
+        """Stündliche Wiederholungen würden die letzten Credits verbrauchen."""
+        provider = self._provider()
+        provider.health.rate_limit_remaining = 2
+        await provider._fetch_uncached()
+        remaining_pause = provider._paused_until - now_ts()
+        assert remaining_pause > 3600, "kürzer als eine Stunde wäre sinnlos"
+        assert remaining_pause <= provider._seconds_until_month_end() + 1
+
+    async def test_a_healthy_quota_does_not_pause(self):
+        provider = self._provider()
+        provider.health.rate_limit_remaining = 400
+        provider._client = httpx.AsyncClient(
+            transport=httpx.MockTransport(lambda r: httpx.Response(200, json=[])),
+            base_url="https://example.invalid",
+        )
+        await provider._fetch_uncached()
+        assert provider.health.status is not ProviderStatus.PAUSED
+        await provider._client.aclose()
+
+    def test_paused_is_not_healthy(self):
+        provider = self._provider()
+        provider.mark_paused("Kontingent aufgebraucht")
+        assert provider.health.healthy is False
+        assert provider.health.to_json()["status"] == "paused"
