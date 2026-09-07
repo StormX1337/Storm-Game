@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Storm Odds Sniper</title>
+  <meta name="description" content="Live-Dashboard für Quotenanalyse, Value und Fixed-Odds-Fehler." />
+  <link rel="stylesheet" href="./styles.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🚨</text></svg>" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">🚨</span>
+      <div>
+        <h1>Storm Odds Sniper</h1>
+        <p class="tagline">Quotenanalyse · Fußball &amp; Tennis · nur Analyse, keine Wettabgabe</p>
+      </div>
+    </div>
+    <div class="conn">
+      <span id="conn-dot" class="dot dot--off" aria-hidden="true"></span>
+      <span id="conn-text">Verbinde…</span>
+      <span class="sep">·</span>
+      <span id="clock">--:--:--</span>
+    </div>
+  </header>
+
+  <section class="kpis" aria-label="Kennzahlen">
+    <article class="kpi"><span class="kpi__label">Live-Events</span><strong id="kpi-live">–</strong></article>
+    <article class="kpi"><span class="kpi__label">Beobachtet</span><strong id="kpi-tracked">–</strong></article>
+    <article class="kpi"><span class="kpi__label">Alarme 24h</span><strong id="kpi-alerts">–</strong></article>
+    <article class="kpi"><span class="kpi__label">Ø Value</span><strong id="kpi-value">–</strong></article>
+    <article class="kpi"><span class="kpi__label">Buchmacher</span><strong id="kpi-books">–</strong></article>
+    <article class="kpi"><span class="kpi__label">Provider aktiv</span><strong id="kpi-providers">–</strong></article>
+  </section>
+
+  <main class="grid">
+    <section class="card card--wide">
+      <header class="card__head">
+        <h2>Alarme</h2>
+        <div class="filters" role="group" aria-label="Alarm-Filter">
+          <button class="chip chip--on" data-filter="all">Alle</button>
+          <button class="chip" data-filter="fixed_error">🎯 Fixed Error</button>
+          <button class="chip" data-filter="value">💎 Value</button>
+          <button class="chip" data-filter="odds_move">📈 Bewegung</button>
+          <button class="chip" data-filter="football">⚽ Fußball</button>
+          <button class="chip" data-filter="tennis">🎾 Tennis</button>
+        </div>
+      </header>
+      <div class="table-wrap">
+        <table class="table" id="alerts-table">
+          <thead>
+            <tr>
+              <th>Zeit</th><th>Sport</th><th>Event</th><th>Markt</th><th>Buchmacher</th>
+              <th class="num">Quote</th><th class="num">Fair</th><th class="num">Value</th>
+              <th class="num">Conf.</th><th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="alerts-body">
+            <tr class="empty"><td colspan="10">Warte auf Alarme…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <header class="card__head"><h2>Live-Events</h2><span class="badge" id="live-count">0</span></header>
+      <ul class="list" id="live-list"><li class="empty">Keine laufenden Events</li></ul>
+    </section>
+
+    <section class="card">
+      <header class="card__head"><h2>Quotenbewegungen</h2></header>
+      <ul class="list list--dense" id="moves-list"><li class="empty">Noch keine Bewegungen</li></ul>
+    </section>
+
+    <section class="card">
+      <header class="card__head"><h2>Datenquellen</h2></header>
+      <ul class="list" id="providers-list"><li class="empty">Lade…</li></ul>
+    </section>
+
+    <section class="card">
+      <header class="card__head"><h2>Buchmacher</h2><span class="badge" id="books-count">0</span></header>
+      <ul class="list list--dense" id="books-list"><li class="empty">Noch keine Daten</li></ul>
+    </section>
+
+    <section class="card">
+      <header class="card__head"><h2>Systemstatus</h2></header>
+      <ul class="list" id="system-list"><li class="empty">Lade…</li></ul>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <span>Storm Odds Sniper</span>
+    <span class="sep">·</span>
+    <a href="/docs" target="_blank" rel="noopener">API-Dokumentation</a>
+    <span class="sep">·</span>
+    <span>Reines Analysewerkzeug — es werden keine Wetten platziert.</span>
+  </footer>
+
+  <script src="./app.js"></script>
+</body>
+</html>

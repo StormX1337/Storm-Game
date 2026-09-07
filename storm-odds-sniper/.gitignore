@@ -1,0 +1,26 @@
+# Storm Odds Sniper - lokale Artefakte
+
+# Umgebung / Secrets
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+build/
+dist/
+
+# Test- und Lint-Caches
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Laufzeitdaten
+data/
+*.log

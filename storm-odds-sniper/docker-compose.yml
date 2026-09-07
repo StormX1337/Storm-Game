@@ -1,0 +1,209 @@
+# Storm Odds Sniper - vollständiger Stack.
+#
+#   docker compose up -d --build
+#
+# Sicherheitsleitlinie: PostgreSQL und Redis veröffentlichen **keine** Ports
+# auf dem Host. Erreichbar ist nur das Dashboard (8080) und - optional und
+# nur auf 127.0.0.1 - die API (8000).
+
+name: storm-odds-sniper
+
+x-python-env: &python-env
+  ENVIRONMENT: ${ENVIRONMENT:-production}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  LOG_JSON: ${LOG_JSON:-true}
+  POSTGRES_HOST: postgres
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: ${POSTGRES_DB:-storm}
+  POSTGRES_USER: ${POSTGRES_USER:-storm}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD muss in .env gesetzt sein}
+  REDIS_URL: redis://redis:6379/0
+  PROVIDERS: ${PROVIDERS:-mock}
+  ODDS_API_KEY: ${ODDS_API_KEY:-}
+  ODDS_API_REGIONS: ${ODDS_API_REGIONS:-eu,uk}
+  ODDS_API_SPORTS: ${ODDS_API_SPORTS:-}
+  ODDS_API_MARKETS: ${ODDS_API_MARKETS:-h2h,spreads,totals}
+  ODDS_API_POLL_INTERVAL: ${ODDS_API_POLL_INTERVAL:-20}
+  BETFAIR_APP_KEY: ${BETFAIR_APP_KEY:-}
+  BETFAIR_USERNAME: ${BETFAIR_USERNAME:-}
+  BETFAIR_PASSWORD: ${BETFAIR_PASSWORD:-}
+  BETFAIR_CERT_FILE: ${BETFAIR_CERT_FILE:-}
+  BETFAIR_KEY_FILE: ${BETFAIR_KEY_FILE:-}
+  MIN_VALUE_PERCENT: ${MIN_VALUE_PERCENT:-10}
+  MIN_OUTLIER_PERCENT: ${MIN_OUTLIER_PERCENT:-15}
+  MIN_BOOKMAKERS: ${MIN_BOOKMAKERS:-3}
+  MIN_ODDS: ${MIN_ODDS:-1.50}
+  MAX_ODDS_AGE_SECONDS: ${MAX_ODDS_AGE_SECONDS:-10}
+  ALERT_COOLDOWN_SECONDS: ${ALERT_COOLDOWN_SECONDS:-60}
+  MIN_CONFIDENCE: ${MIN_CONFIDENCE:-60}
+  MIN_ERROR_SCORE: ${MIN_ERROR_SCORE:-60}
+  SCAN_LIVE: ${SCAN_LIVE:-true}
+  SCAN_PREMATCH: ${SCAN_PREMATCH:-true}
+  SPORTS_ENABLED: ${SPORTS_ENABLED:-football,tennis}
+  API_CORS_ORIGINS: ${API_CORS_ORIGINS:-http://localhost:8080}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-storm}
+      POSTGRES_USER: ${POSTGRES_USER:-storm}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD muss in .env gesetzt sein}
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    # Bewusst kein "ports:" - die Datenbank ist nur im Compose-Netz erreichbar.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-storm} -d ${POSTGRES_DB:-storm}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks: [storm]
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory ${REDIS_MAXMEMORY:-512mb}
+      --maxmemory-policy allkeys-lru
+      --save ""
+    volumes:
+      - redis-data:/data
+    # Ebenfalls kein "ports:".
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    networks: [storm]
+
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: storm-odds-sniper:latest
+    restart: "no"
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      <<: *python-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [storm]
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: storm-odds-sniper:latest
+    restart: unless-stopped
+    command: ["python", "-m", "backend.api"]
+    environment:
+      <<: *python-env
+      API_HOST: "0.0.0.0"
+      API_PORT: "8000"
+      API_DOCS_ENABLED: ${API_DOCS_ENABLED:-true}
+      API_RATE_LIMIT_PER_MINUTE: ${API_RATE_LIMIT_PER_MINUTE:-240}
+    ports:
+      # Nur lokal - von außen erreichbar ist ausschließlich das Dashboard.
+      - "127.0.0.1:${API_PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "/app/scripts/healthcheck_http.py", "http://127.0.0.1:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks: [storm]
+
+  scanner:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: storm-odds-sniper:latest
+    restart: unless-stopped
+    command: ["python", "-m", "backend.scanner"]
+    environment:
+      <<: *python-env
+      SCANNER_WORKERS: ${SCANNER_WORKERS:-4}
+      MOCK_TICK_INTERVAL: ${MOCK_TICK_INTERVAL:-0.35}
+      MOCK_EVENTS: ${MOCK_EVENTS:-8}
+      MOCK_BOOKMAKERS: ${MOCK_BOOKMAKERS:-7}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "/app/scripts/healthcheck_scanner.py"]
+      interval: 20s
+      timeout: 8s
+      retries: 4
+      start_period: 30s
+    networks: [storm]
+
+  telegram-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: storm-odds-sniper:latest
+    restart: unless-stopped
+    command: ["python", "-m", "backend.telegram"]
+    environment:
+      <<: *python-env
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      TELEGRAM_ADMIN_IDS: ${TELEGRAM_ADMIN_IDS:-}
+      TELEGRAM_SEND_MOVES: ${TELEGRAM_SEND_MOVES:-false}
+    depends_on:
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os,socket,urllib.parse; u=urllib.parse.urlparse(os.getenv('REDIS_URL','redis://redis:6379/0')); socket.create_connection((u.hostname,u.port or 6379),timeout=3).close()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks: [storm]
+
+  frontend:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    volumes:
+      - ./frontend/src:/usr/share/nginx/html:ro
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "${DASHBOARD_PORT:-8080}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/healthz"]
+      interval: 20s
+      timeout: 4s
+      retries: 4
+      start_period: 10s
+    networks: [storm]
+
+volumes:
+  postgres-data:
+  redis-data:
+
+networks:
+  storm:
+    driver: bridge

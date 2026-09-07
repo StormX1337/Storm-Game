@@ -1,0 +1,368 @@
+"""Befehle und Callback-Buttons des Telegram-Bots."""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime, timedelta
+
+from telegram import Update
+from telegram.constants import ParseMode
+from telegram.ext import (
+    Application,
+    CallbackQueryHandler,
+    CommandHandler,
+    ContextTypes,
+)
+
+from backend.core.logging import get_logger
+from backend.database.repository import Repository
+from backend.models.domain import Alert
+from backend.services.redis_state import RedisState
+from backend.telegram import formatting as fmt
+from backend.telegram.keyboards import (
+    back_to_menu,
+    main_menu,
+    markets_menu,
+    settings_menu,
+    sports_menu,
+)
+
+log = get_logger("telegram")
+
+ALL_SPORTS = ["football", "tennis"]
+
+#: Grenzen, damit Nutzer sich nicht selbst aussperren oder fluten.
+BOUNDS = {
+    "min_value_percent": (0.0, 200.0),
+    "min_outlier_percent": (0.0, 200.0),
+    "min_odds": (1.01, 50.0),
+    "max_odds": (1.10, 1000.0),
+    "min_bookmakers": (1, 30),
+    "min_confidence": (0, 100),
+    "cooldown_seconds": (10, 3600),
+}
+
+
+def _repo(context: ContextTypes.DEFAULT_TYPE) -> Repository | None:
+    return context.application.bot_data.get("repository")
+
+
+def _state(context: ContextTypes.DEFAULT_TYPE) -> RedisState | None:
+    return context.application.bot_data.get("state")
+
+
+async def _user_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    repo = _repo(context)
+    user = update.effective_user
+    if repo is None or user is None:
+        return None, None
+    admins = context.application.bot_data.get("admin_ids", set())
+    return await repo.get_or_create_user(
+        user.id,
+        username=user.username,
+        first_name=user.first_name,
+        is_admin=user.id in admins,
+    )
+
+
+async def _reply(update: Update, text: str, markup=None) -> None:
+    if update.callback_query is not None:
+        await update.callback_query.answer()
+        try:
+            await update.callback_query.edit_message_text(
+                text, parse_mode=ParseMode.HTML, reply_markup=markup
+            )
+            return
+        except Exception as exc:  # noqa: BLE001 - z. B. "message is not modified"
+            log.debug("nachricht nicht editierbar - sende neu", error=str(exc))
+        await update.callback_query.message.reply_text(
+            text, parse_mode=ParseMode.HTML, reply_markup=markup
+        )
+        return
+    if update.effective_message is not None:
+        await update.effective_message.reply_text(
+            text, parse_mode=ParseMode.HTML, reply_markup=markup
+        )
+
+
+# ------------------------------------------------------------------ Befehle
+
+
+async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await _user_settings(update, context)
+    await _reply(update, fmt.START_TEXT, main_menu())
+
+
+async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await _reply(update, fmt.HELP_TEXT, main_menu())
+
+
+async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    state = _state(context)
+    repo = _repo(context)
+    providers: list[dict] = []
+    counters = {"tracked_events": 0, "live_events": 0}
+    stats: dict = {}
+    if state is not None:
+        try:
+            providers = await state.get_provider_health()
+            counters = await state.counters()
+        except Exception as exc:  # noqa: BLE001
+            log.warning("status: redis nicht erreichbar", error=str(exc))
+    if repo is not None:
+        try:
+            stats = await repo.stats()
+        except Exception as exc:  # noqa: BLE001
+            log.warning("status: datenbank nicht erreichbar", error=str(exc))
+
+    _, settings_row = await _user_settings(update, context)
+    paused = bool(settings_row.paused) if settings_row is not None else False
+    await _reply(
+        update,
+        fmt.format_status(providers=providers, counters=counters, stats=stats, paused=paused),
+        back_to_menu(),
+    )
+
+
+async def cmd_settings(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    _, settings_row = await _user_settings(update, context)
+    if settings_row is None:
+        await _reply(update, "⚠️ Datenbank nicht verfügbar - Einstellungen gerade nicht änderbar.")
+        return
+    await _reply(update, fmt.format_settings(settings_row), settings_menu(settings_row))
+
+
+async def cmd_sports(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    _, settings_row = await _user_settings(update, context)
+    if settings_row is None:
+        await _reply(update, "⚠️ Datenbank nicht verfügbar.")
+        return
+    active = settings_row.sports or []
+    await _reply(
+        update,
+        "🏟 <b>Sportarten</b>\n\nWähle, wofür du Alarme bekommst:",
+        sports_menu(active),
+    )
+
+
+async def cmd_live(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    state = _state(context)
+    if state is None:
+        await _reply(update, "⚠️ Redis nicht verfügbar.")
+        return
+    events = await state.get_events(await state.live_event_ids())
+    if not events:
+        await _reply(update, "🔴 <b>Live</b>\n\nAktuell keine laufenden Events.", back_to_menu())
+        return
+    events.sort(key=lambda e: e.sport.value)
+    lines = ["🔴 <b>Live-Events</b>", ""]
+    for event in events[:20]:
+        lines.append(fmt.format_event_line(event))
+    if len(events) > 20:
+        lines.append(f"\n… und {len(events) - 20} weitere")
+    await _reply(update, "\n".join(lines), back_to_menu())
+
+
+async def _send_alert_list(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, *, kind: str | None, title: str
+) -> None:
+    repo = _repo(context)
+    if repo is None:
+        await _reply(update, "⚠️ Datenbank nicht verfügbar.")
+        return
+    since = datetime.now(UTC) - timedelta(hours=6)
+    rows = await repo.list_alerts(limit=10, kind=kind, since=since)
+    if not rows:
+        await _reply(
+            update, f"{title}\n\nIn den letzten 6 Stunden nichts gefunden.", back_to_menu()
+        )
+        return
+    lines = [title, ""]
+    for row in rows:
+        payload = row.payload or {}
+        try:
+            lines.append(fmt.format_alert_short(Alert.from_json(payload)))
+        except Exception:  # noqa: BLE001 - defensiv gegen alte Payload-Formate
+            lines.append(
+                f"• {fmt.esc(row.market_label)} · {fmt.esc(row.bookmaker)} · "
+                f"{row.odds:.2f} ({row.value_percent:+.1f}%)"
+            )
+        lines.append("")
+    await _reply(update, "\n".join(lines), back_to_menu())
+
+
+async def cmd_value(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await _send_alert_list(update, context, kind="value", title="💎 <b>Value-Alarme</b>")
+
+
+async def cmd_alerts(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await _send_alert_list(update, context, kind=None, title="🚨 <b>Letzte Alarme</b>")
+
+
+async def cmd_pause(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    repo = _repo(context)
+    user = update.effective_user
+    if repo is None or user is None:
+        await _reply(update, "⚠️ Datenbank nicht verfügbar.")
+        return
+    await _user_settings(update, context)
+    await repo.update_user_settings(user.id, paused=True)
+    await _reply(update, "⏸ Benachrichtigungen pausiert. Mit /resume geht es weiter.")
+
+
+async def cmd_resume(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    repo = _repo(context)
+    user = update.effective_user
+    if repo is None or user is None:
+        await _reply(update, "⚠️ Datenbank nicht verfügbar.")
+        return
+    await _user_settings(update, context)
+    await repo.update_user_settings(user.id, paused=False)
+    await _reply(update, "▶️ Benachrichtigungen wieder aktiv.")
+
+
+# ---------------------------------------------------------------- Callbacks
+
+
+async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if query is None or not query.data:
+        return
+    data = query.data
+    repo = _repo(context)
+    user = update.effective_user
+
+    if data == "noop":
+        await query.answer()
+        return
+
+    if data.startswith("view:"):
+        target = data.split(":", 1)[1]
+        handlers = {
+            "menu": cmd_start,
+            "settings": cmd_settings,
+            "status": cmd_status,
+            "live": cmd_live,
+            "value": cmd_value,
+            "sports": cmd_sports,
+        }
+        if target == "prematch":
+            await _prematch_view(update, context)
+            return
+        if target == "fixed_error":
+            await _send_alert_list(
+                update, context, kind="fixed_error", title="🎯 <b>Fixed-Odds-Fehler</b>"
+            )
+            return
+        if target == "markets":
+            _, settings_row = await _user_settings(update, context)
+            await _reply(
+                update,
+                "📋 <b>Märkte</b>\n\nOhne Auswahl gelten alle Märkte.",
+                markets_menu(settings_row.markets if settings_row else None),
+            )
+            return
+        handler = handlers.get(target)
+        if handler is not None:
+            await handler(update, context)
+        return
+
+    if repo is None or user is None:
+        await query.answer("Datenbank nicht verfügbar", show_alert=True)
+        return
+    _, settings_row = await _user_settings(update, context)
+    if settings_row is None:
+        await query.answer("Datenbank nicht verfügbar", show_alert=True)
+        return
+
+    if data.startswith("set:"):
+        _, field, raw_delta = data.split(":", 2)
+        low, high = BOUNDS.get(field, (0, 10_000))
+        current = getattr(settings_row, field, 0)
+        delta = float(raw_delta)
+        new_value = current + delta
+        new_value = max(low, min(high, new_value))
+        if isinstance(current, int):
+            new_value = int(round(new_value))
+        await repo.update_user_settings(user.id, **{field: new_value})
+
+    elif data.startswith("toggle:"):
+        field = data.split(":", 1)[1]
+        await repo.update_user_settings(user.id, **{field: not getattr(settings_row, field)})
+
+    elif data.startswith("sport:"):
+        sport = data.split(":", 1)[1]
+        active = list(settings_row.sports or [])
+        if sport in active:
+            active.remove(sport)
+        else:
+            active.append(sport)
+        await repo.update_user_settings(user.id, sports=active)
+        _, refreshed = await _user_settings(update, context)
+        await _reply(
+            update,
+            "🏟 <b>Sportarten</b>\n\nWähle, wofür du Alarme bekommst:",
+            sports_menu(refreshed.sports or []),
+        )
+        return
+
+    elif data.startswith("market:"):
+        market = data.split(":", 1)[1]
+        if market == "__all__":
+            await repo.update_user_settings(user.id, markets=[])
+        else:
+            active = list(settings_row.markets or [])
+            if market in active:
+                active.remove(market)
+            else:
+                active.append(market)
+            await repo.update_user_settings(user.id, markets=active)
+        _, refreshed = await _user_settings(update, context)
+        await _reply(
+            update,
+            "📋 <b>Märkte</b>\n\nOhne Auswahl gelten alle Märkte.",
+            markets_menu(refreshed.markets),
+        )
+        return
+
+    _, refreshed = await _user_settings(update, context)
+    await _reply(update, fmt.format_settings(refreshed), settings_menu(refreshed))
+
+
+async def _prematch_view(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    state = _state(context)
+    if state is None:
+        await _reply(update, "⚠️ Redis nicht verfügbar.")
+        return
+    events = await state.get_events(await state.all_event_ids())
+    upcoming = [e for e in events if e.status.value == "PRE_MATCH"]
+    if not upcoming:
+        await _reply(update, "🟢 <b>Pre-Match</b>\n\nKeine anstehenden Events.", back_to_menu())
+        return
+    upcoming.sort(key=lambda e: e.start_time or datetime.max.replace(tzinfo=UTC))
+    lines = ["🟢 <b>Anstehende Events</b>", ""]
+    for event in upcoming[:20]:
+        when = event.start_time.strftime("%d.%m. %H:%M") if event.start_time else "?"
+        lines.append(
+            f"{fmt.SPORT_ICON.get(event.sport, '🏟')} <b>{fmt.esc(event.home)}</b> vs "
+            f"<b>{fmt.esc(event.away)}</b> — {when}"
+        )
+    await _reply(update, "\n".join(lines), back_to_menu())
+
+
+async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    log.error("telegram-handler fehlgeschlagen", error=str(context.error))
+
+
+def register(application: Application) -> None:
+    application.add_handler(CommandHandler("start", cmd_start))
+    application.add_handler(CommandHandler("help", cmd_help))
+    application.add_handler(CommandHandler("status", cmd_status))
+    application.add_handler(CommandHandler("settings", cmd_settings))
+    application.add_handler(CommandHandler("sports", cmd_sports))
+    application.add_handler(CommandHandler("live", cmd_live))
+    application.add_handler(CommandHandler("value", cmd_value))
+    application.add_handler(CommandHandler("alerts", cmd_alerts))
+    application.add_handler(CommandHandler("pause", cmd_pause))
+    application.add_handler(CommandHandler("resume", cmd_resume))
+    application.add_handler(CallbackQueryHandler(on_callback))
+    application.add_error_handler(on_error)

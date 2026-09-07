@@ -1,0 +1,736 @@
+"""Scanner-Engine: der Low-Latency-Pfad.
+
+Ablauf einer Nachricht::
+
+    Provider -> Supervisor -> Queue -> Worker
+                                        ├─ Event normalisieren (kanonische ID)
+                                        ├─ Quote in Redis (nur bei Änderung!)
+                                        ├─ Marktbuch laden (1 Roundtrip/Markt)
+                                        ├─ Value Engine + Error-Detector
+                                        ├─ Filter (Stale/Cooldown/Duplikat)
+                                        └─ Alarm -> Pub/Sub + DB-Queue
+
+Drei Prinzipien:
+
+1. **Nur Änderungen kosten Arbeit.** Ein unveränderter Preis endet nach dem
+   Vergleich im Prozess-Cache - keine Analyse, kein Schreibvorgang.
+2. **Die Datenbank blockiert nie.** Ein eigener Writer-Task schreibt gebündelt.
+3. **Ein Markt wird pro Nachricht einmal geladen**, nicht einmal pro Quote.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import contextlib
+from dataclasses import dataclass
+
+from backend.core.config import Settings, get_settings
+from backend.core.filters import (
+    AlertGate,
+    FilterThresholds,
+    check_error_signal,
+    check_quote,
+    check_value_signal,
+    fingerprint,
+)
+from backend.core.logging import get_logger
+from backend.core.metrics import (
+    ALERTS_EMITTED,
+    ALERTS_SUPPRESSED,
+    ANALYSIS_LATENCY,
+    LIVE_EVENTS,
+    PIPELINE_LATENCY,
+    QUEUE_DEPTH,
+    QUOTES_CHANGED,
+    QUOTES_DROPPED,
+    TRACKED_EVENTS,
+)
+from backend.core.normalization import EventMatcher, flip_market, flip_selection
+from backend.core.outlier import OutlierConfig, score_outlier
+from backend.core.value_engine import (
+    EngineConfig,
+    MarketBook,
+    ValueEngine,
+    deviation_percent,
+    value_percent,
+)
+from backend.database.repository import Repository
+from backend.models.domain import (
+    Alert,
+    EventSnapshot,
+    MarketKey,
+    OddsChange,
+    OddsQuote,
+    ProviderMessage,
+    now_ts,
+)
+from backend.models.enums import AlertKind, EventStatus, Sport
+from backend.providers.base import OddsProvider
+from backend.scanner.supervisor import ProviderSupervisor
+from backend.services.redis_state import RedisState
+
+log = get_logger("scanner")
+
+
+@dataclass(slots=True)
+class EventBinding:
+    """Zuordnung einer Provider-Event-ID zur kanonischen ID."""
+
+    event_id: str
+    swapped: bool
+
+
+def thresholds_from_settings(settings: Settings) -> FilterThresholds:
+    sports = frozenset(Sport(s) for s in settings.enabled_sports if s in {sp.value for sp in Sport})
+    return FilterThresholds(
+        min_value_percent=settings.min_value_percent,
+        min_outlier_percent=settings.min_outlier_percent,
+        min_bookmakers=settings.min_bookmakers,
+        min_odds=settings.min_odds,
+        max_odds=settings.max_odds,
+        max_odds_age_seconds=settings.max_odds_age_seconds,
+        alert_cooldown_seconds=settings.alert_cooldown_seconds,
+        min_confidence=settings.min_confidence,
+        min_error_score=settings.min_error_score,
+        scan_live=settings.scan_live,
+        scan_prematch=settings.scan_prematch,
+        sports=sports or frozenset(Sport),
+    )
+
+
+class ScannerEngine:
+    """Verbindet Provider, Redis, Datenbank und Analyse."""
+
+    def __init__(
+        self,
+        settings: Settings | None = None,
+        *,
+        state: RedisState,
+        repository: Repository | None = None,
+        providers: list[OddsProvider] | None = None,
+    ) -> None:
+        self.settings = settings or get_settings()
+        self.state = state
+        self.repository = repository
+        self.providers = providers or []
+
+        self.thresholds = thresholds_from_settings(self.settings)
+        self.value_engine = ValueEngine(
+            EngineConfig(
+                max_quote_age=self.settings.max_odds_age_seconds,
+                min_bookmakers=self.settings.min_bookmakers,
+            )
+        )
+        self.outlier_config = OutlierConfig(
+            min_deviation_percent=self.settings.min_outlier_percent,
+            max_quote_age=self.settings.max_odds_age_seconds,
+        )
+        self.gate = AlertGate(state, self.thresholds)
+        self.matcher = EventMatcher(threshold=self.settings.event_match_threshold)
+
+        self._queue: asyncio.Queue[ProviderMessage] = asyncio.Queue(
+            maxsize=self.settings.scanner_queue_size
+        )
+        self._db_queue: asyncio.Queue[tuple[str, object]] = asyncio.Queue(maxsize=50_000)
+        self._bindings: dict[tuple[str, str], EventBinding] = {}
+        self._events: dict[str, EventSnapshot] = {}
+        self._supervisors: list[ProviderSupervisor] = []
+        self._tasks: list[asyncio.Task] = []
+        self._stopped = asyncio.Event()
+        self._snapshot_counter = 0
+        #: Letzter beobachteter Markt-Median je Quotenzeile (Preis, Zeitpunkt).
+        self._line_medians: dict[str, tuple[float, float]] = {}
+        self.stats = {"messages": 0, "quotes": 0, "changes": 0, "alerts": 0, "dropped": 0}
+
+    # ------------------------------------------------------------- Lifecycle
+    async def start(self) -> None:
+        self._stopped.clear()
+        for provider in self.providers:
+            supervisor = ProviderSupervisor(provider, self._enqueue)
+            self._supervisors.append(supervisor)
+            self._tasks.append(supervisor.start())
+
+        for index in range(max(1, self.settings.scanner_workers)):
+            self._tasks.append(
+                asyncio.create_task(self._worker(index), name=f"scan-worker-{index}")
+            )
+        self._tasks.append(asyncio.create_task(self._db_writer(), name="db-writer"))
+        self._tasks.append(asyncio.create_task(self._health_loop(), name="health"))
+        if self.repository is not None:
+            self._tasks.append(asyncio.create_task(self._maintenance_loop(), name="maintenance"))
+        log.info(
+            "scanner gestartet",
+            providers=[p.name for p in self.providers],
+            workers=self.settings.scanner_workers,
+        )
+
+    async def stop(self) -> None:
+        self._stopped.set()
+        for supervisor in self._supervisors:
+            await supervisor.stop()
+        for task in self._tasks:
+            task.cancel()
+        for task in self._tasks:
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await task
+        self._tasks.clear()
+        self._supervisors.clear()
+        await self._flush_db(final=True)
+        log.info("scanner gestoppt", **{k: v for k, v in self.stats.items()})
+
+    async def _enqueue(self, message: ProviderMessage) -> None:
+        try:
+            self._queue.put_nowait(message)
+        except asyncio.QueueFull:
+            # Rückstau: lieber die älteste Nachricht verwerfen als die
+            # aktuellsten Preise zu verzögern.
+            with contextlib.suppress(asyncio.QueueEmpty):
+                self._queue.get_nowait()
+                self._queue.task_done()
+            with contextlib.suppress(asyncio.QueueFull):
+                self._queue.put_nowait(message)
+            QUOTES_DROPPED.labels("queue_full").inc(len(message.quotes))
+            self.stats["dropped"] += len(message.quotes)
+        QUEUE_DEPTH.set(self._queue.qsize())
+
+    # ---------------------------------------------------------------- Worker
+    async def _worker(self, index: int) -> None:
+        while not self._stopped.is_set():
+            try:
+                message = await self._queue.get()
+            except asyncio.CancelledError:
+                raise
+            try:
+                await self.handle_message(message)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # noqa: BLE001 - ein Worker darf nie sterben
+                log.error("worker-fehler", worker=index, error=str(exc), exc_info=True)
+            finally:
+                self._queue.task_done()
+                QUEUE_DEPTH.set(self._queue.qsize())
+
+    # ------------------------------------------------------- Nachrichtenpfad
+    async def handle_message(self, message: ProviderMessage) -> list[Alert]:
+        """Eine Providernachricht vollständig verarbeiten."""
+        started = now_ts()
+        self.stats["messages"] += 1
+
+        for snapshot in message.events:
+            await self._ingest_event(snapshot)
+
+        touched: dict[tuple[str, str], list[OddsChange]] = {}
+        for raw_quote in message.quotes:
+            self.stats["quotes"] += 1
+            quote = self._normalize_quote(raw_quote, message.provider)
+            if quote is None:
+                QUOTES_DROPPED.labels("unknown_event").inc()
+                continue
+            change = await self.state.apply_quote(quote)
+            if change is None:
+                continue
+            QUOTES_CHANGED.labels(message.provider).inc()
+            self.stats["changes"] += 1
+            touched.setdefault((quote.event_id, quote.market.key), []).append(change)
+            await self._queue_db("change", change)
+
+        alerts: list[Alert] = []
+        for (event_id, market_key), changes in touched.items():
+            alerts.extend(await self._analyze_market(event_id, market_key, changes))
+
+        PIPELINE_LATENCY.observe(max(0.0, now_ts() - started))
+        return alerts
+
+    async def _ingest_event(self, snapshot: EventSnapshot) -> None:
+        """Provider-Event auf die kanonische ID abbilden und Zustand pflegen."""
+        cache_key = (snapshot.provider, snapshot.provider_event_id)
+        binding = self._bindings.get(cache_key)
+        if binding is None:
+            try:
+                result = self.matcher.match(
+                    snapshot.sport,
+                    snapshot.home,
+                    snapshot.away,
+                    snapshot.start_time,
+                    provider=snapshot.provider,
+                )
+            except ValueError as exc:
+                log.debug("event nicht normalisierbar", error=str(exc), home=snapshot.home)
+                return
+            binding = EventBinding(event_id=result.event_id, swapped=result.swapped)
+            self._bindings[cache_key] = binding
+            if result.created:
+                log.debug(
+                    "neues event",
+                    event_ref=result.event_id,
+                    sport=snapshot.sport.value,
+                    title=snapshot.title,
+                )
+
+        if binding.swapped:
+            snapshot = _swap_orientation(snapshot)
+        snapshot.event_id = binding.event_id
+
+        previous = self._events.get(binding.event_id)
+        self._events[binding.event_id] = snapshot
+
+        if previous is None or previous.status is not snapshot.status:
+            if snapshot.status is EventStatus.LIVE:
+                log.info(
+                    "event ist LIVE",
+                    event_ref=snapshot.event_id,
+                    sport=snapshot.sport.value,
+                    title=snapshot.title,
+                )
+        await self.state.set_event(snapshot)
+        await self._queue_db("event", snapshot)
+
+        if previous is None or _event_changed(previous, snapshot):
+            await self.state.publish(self.settings.channel_events, snapshot.to_json())
+
+    def _normalize_quote(self, quote: OddsQuote, provider: str) -> OddsQuote | None:
+        binding = self._bindings.get((provider, quote.event_id))
+        if binding is None:
+            return None
+        if binding.swapped:
+            quote.selection = flip_selection(quote.selection)
+            quote.market = flip_market(quote.market)
+        quote.event_id = binding.event_id
+        return quote
+
+    # -------------------------------------------------------------- Analyse
+    async def _analyze_market(
+        self, event_id: str, market_key: str, changes: list[OddsChange]
+    ) -> list[Alert]:
+        event = self._events.get(event_id)
+        if event is None:
+            event = await self.state.get_event(event_id)
+        if event is None:
+            return []
+
+        started = now_ts()
+        quotes = await self.state.get_market(event_id, market_key)
+        if not quotes:
+            return []
+        book = MarketBook(event_id=event_id, market=MarketKey.parse(market_key))
+        for quote in quotes:
+            book.add(quote)
+
+        alerts: list[Alert] = []
+        reference = now_ts()
+        by_selection: dict[str, list[OddsChange]] = {}
+        for change in changes:
+            by_selection.setdefault(change.quote.selection.key, []).append(change)
+
+        for selection_key, selection_changes in by_selection.items():
+            drift = self._market_drift(event_id, market_key, selection_key, book, reference)
+            for change in self._candidates(book, selection_key, selection_changes, drift):
+                alert = await self._evaluate(book, change, event, reference, drift)
+                if alert is not None:
+                    alerts.append(alert)
+            for change in selection_changes:
+                move_alert = await self._evaluate_movement(change, event)
+                if move_alert is not None:
+                    alerts.append(move_alert)
+
+        ANALYSIS_LATENCY.observe(max(0.0, now_ts() - started))
+        return alerts
+
+    def _candidates(
+        self,
+        book: MarketBook,
+        selection_key: str,
+        changes: list[OddsChange],
+        drift: float | None,
+    ) -> list[OddsChange]:
+        """Welche Quoten dieser Zeile werden geprüft?
+
+        Normalerweise nur die geänderten. Bewegt sich aber der Markt, sind
+        gerade die **nicht** geänderten Bücher interessant - eine vergessene
+        Quote meldet sich nie von selbst. Sie bekommen einen synthetischen
+        ``OddsChange`` ohne Vorpreis.
+        """
+        candidates = list(changes)
+        if drift is None or abs(drift) < self.settings.market_drift_suppress_percent:
+            return candidates
+        changed = {c.quote.bookmaker for c in changes}
+        for bookmaker, quote in book.quotes.get(selection_key, {}).items():
+            if bookmaker not in changed:
+                candidates.append(OddsChange(quote=quote, previous_price=None, previous_ts=None))
+        return candidates
+
+    def _market_drift(
+        self,
+        event_id: str,
+        market_key: str,
+        selection_key: str,
+        book: MarketBook,
+        reference: float,
+    ) -> float | None:
+        """Bewegung des Markt-Medians dieser Quotenzeile in Prozent.
+
+        Positiv = der ganze Markt zieht nach oben. Genau dann ist eine hohe
+        Einzelquote meist kein Fehlpreis, sondern nur ein schnelleres Buch.
+        """
+        quotes = book.usable(
+            selection_key,
+            exclude=None,
+            reference=reference,
+            max_age=self.settings.max_odds_age_seconds,
+        )
+        if len(quotes) < 2:
+            return None
+        prices = sorted(q.price for q in quotes)
+        middle = len(prices) // 2
+        median = prices[middle] if len(prices) % 2 else (prices[middle - 1] + prices[middle]) / 2.0
+        line_key = f"{event_id}|{market_key}|{selection_key}"
+        previous = self._line_medians.get(line_key)
+        self._line_medians[line_key] = (median, reference)
+        if previous is None:
+            return None
+        prev_median, prev_ts = previous
+        if prev_median <= 0 or reference - prev_ts > self.settings.market_drift_window:
+            return None
+        return (median / prev_median - 1.0) * 100.0
+
+    async def _evaluate(
+        self,
+        book: MarketBook,
+        change: OddsChange,
+        event: EventSnapshot,
+        reference: float,
+        market_drift: float | None = None,
+    ) -> Alert | None:
+        quote = change.quote
+        decision = check_quote(quote, event, self.thresholds, reference=reference)
+        if not decision.passed:
+            ALERTS_SUPPRESSED.labels(decision.reason.split("_")[0]).inc()
+            return None
+
+        # Der ganze Markt zieht nach oben: dann ist die hohe Quote in aller
+        # Regel die *aktuellere*, und die Referenz hinkt hinterher. Melden
+        # würde hier systematisch Fehlalarme erzeugen.
+        if market_drift is not None and market_drift >= self.settings.market_drift_suppress_percent:
+            ALERTS_SUPPRESSED.labels("market_drift").inc()
+            return None
+
+        # Dieses Buch springt kräftig, der Markt hat noch nicht bestätigt:
+        # dann *führt* es die Bewegung an (Tor, Rote Karte, Verletzung) und ist
+        # das aktuellste Buch - nicht das falsche. Der Fehlpreis ist immer der
+        # Nachzügler, nie der Vorreiter.
+        own_jump = abs(change.delta_percent) if change.delta_percent is not None else 0.0
+        if own_jump >= self.settings.market_shock_percent and (
+            market_drift is None or abs(market_drift) < own_jump / 2.0
+        ):
+            ALERTS_SUPPRESSED.labels("market_leader").inc()
+            return None
+
+        is_live = event.status is EventStatus.LIVE
+        fair = self.value_engine.fair_odds(
+            book,
+            quote.selection.key,
+            exclude_bookmaker=quote.bookmaker,
+            reference=reference,
+            is_live=is_live,
+        )
+        if fair is None:
+            ALERTS_SUPPRESSED.labels("no_fair_odds").inc()
+            return None
+        if (
+            fair.fair_probability > self.settings.max_fair_probability
+            or fair.fair_odds > self.thresholds.max_odds
+        ):
+            # Praktisch entschiedener Markt bzw. extremer Außenseiter jenseits
+            # des Quotenbands - dort ist jede Value-Angabe Modellrauschen.
+            ALERTS_SUPPRESSED.labels("extreme_probability").inc()
+            return None
+
+        value = value_percent(quote.price, fair.fair_probability)
+        deviation = deviation_percent(quote.price, fair.fair_odds)
+        exchange_refs = sum(
+            1
+            for bm, q in book.quotes.get(quote.selection.key, {}).items()
+            if q.is_exchange and bm != quote.bookmaker
+        )
+        outlier = score_outlier(
+            odds=quote.price,
+            fair_odds=fair.fair_odds,
+            bookmaker_count=fair.bookmaker_count,
+            confidence=fair.confidence,
+            quote_age=quote.age(reference),
+            is_live=is_live,
+            config=self.outlier_config,
+            speed_percent_per_second=change.speed_percent_per_second,
+            previous_price=change.previous_price,
+            # Fällt der Markt, während dieses Buch oben steht, ist genau das
+            # das Muster einer vergessenen Quote -> als Signal weiterreichen.
+            market_drift_percent=market_drift if (market_drift or 0) < 0 else None,
+            liquidity=quote.liquidity,
+            exchange_references=exchange_refs,
+        )
+
+        error_ok = check_error_signal(
+            deviation_percent=deviation,
+            bookmaker_count=fair.bookmaker_count,
+            error_score=outlier.error_score,
+            confidence=fair.confidence,
+            thresholds=self.thresholds,
+        )
+        value_ok = check_value_signal(
+            value_percent=value,
+            bookmaker_count=fair.bookmaker_count,
+            confidence=fair.confidence,
+            thresholds=self.thresholds,
+        )
+        if error_ok.passed:
+            kind = AlertKind.FIXED_ERROR
+        elif value_ok.passed:
+            kind = AlertKind.VALUE
+        else:
+            ALERTS_SUPPRESSED.labels((error_ok.reason or value_ok.reason).split("_")[0]).inc()
+            return None
+
+        alert = Alert(
+            kind=kind,
+            event=event,
+            market=quote.market,
+            selection=quote.selection,
+            bookmaker=quote.bookmaker,
+            odds=quote.price,
+            fair_odds=fair.fair_odds,
+            value_percent=value,
+            deviation_percent=deviation,
+            confidence=fair.confidence,
+            error_score=outlier.error_score,
+            bookmaker_count=fair.bookmaker_count,
+            provider=quote.provider,
+            odds_age=quote.age(reference),
+            speed_percent_per_second=change.speed_percent_per_second,
+            previous_odds=change.previous_price,
+            notes=[*fair.notes, *outlier.reasons],
+        )
+        alert.fingerprint = fingerprint(alert)
+        return await self._emit(alert)
+
+    async def _evaluate_movement(self, change: OddsChange, event: EventSnapshot) -> Alert | None:
+        """Reine Bewegungsmeldung - unabhängig von Value."""
+        if not self.settings.move_alerts_enabled:
+            return None
+        delta = change.delta_percent
+        elapsed = change.elapsed
+        if delta is None or elapsed is None:
+            return None
+        if (
+            abs(delta) < self.settings.move_alert_percent
+            or elapsed > self.settings.move_alert_window
+        ):
+            return None
+
+        quote = change.quote
+        # Dieselbe Quotenprüfung wie bei Value/Error: Quotenband, Alter,
+        # Suspendierung, Sportart. Ohne sie melden praktisch entschiedene
+        # Märkte absurde Sprünge (1.04 -> 200.00).
+        if not check_quote(quote, event, self.thresholds).passed:
+            return None
+        if change.previous_price is not None and not (
+            self.thresholds.min_odds <= change.previous_price <= self.thresholds.max_odds
+        ):
+            return None
+
+        alert = Alert(
+            kind=AlertKind.ODDS_MOVE,
+            event=event,
+            market=quote.market,
+            selection=quote.selection,
+            bookmaker=quote.bookmaker,
+            odds=quote.price,
+            fair_odds=change.previous_price or quote.price,
+            value_percent=0.0,
+            deviation_percent=delta,
+            confidence=0,
+            error_score=0,
+            bookmaker_count=0,
+            provider=quote.provider,
+            odds_age=quote.age(),
+            speed_percent_per_second=change.speed_percent_per_second,
+            previous_odds=change.previous_price,
+            notes=[f"Bewegung {delta:+.1f}% in {elapsed:.1f}s"],
+        )
+        alert.fingerprint = fingerprint(alert)
+        gate = AlertGate(
+            self.state,
+            self.thresholds.with_overrides(
+                alert_cooldown_seconds=self.settings.move_alert_cooldown
+            ),
+        )
+        allowed = await gate.allow(alert)
+        if not allowed.passed:
+            ALERTS_SUPPRESSED.labels(allowed.reason).inc()
+            return None
+        return await self._publish(alert)
+
+    async def _emit(self, alert: Alert) -> Alert | None:
+        allowed = await self.gate.allow(alert)
+        if not allowed.passed:
+            ALERTS_SUPPRESSED.labels(allowed.reason).inc()
+            return None
+        return await self._publish(alert)
+
+    async def _publish(self, alert: Alert) -> Alert:
+        self.stats["alerts"] += 1
+        ALERTS_EMITTED.labels(alert.kind.value, alert.event.sport.value).inc()
+        await self.state.publish_alert(alert)
+        await self._queue_db("alert", alert)
+        log.info(
+            "ALERT",
+            kind=alert.kind.value,
+            status=alert.event.status.value,
+            title=alert.event.title,
+            market=alert.market.label,
+            selection=alert.selection.display,
+            bookmaker=alert.bookmaker,
+            odds=round(alert.odds, 2),
+            fair=round(alert.fair_odds, 2),
+            value=f"{alert.value_percent:+.1f}%",
+            confidence=alert.confidence,
+            error_score=alert.error_score,
+        )
+        return alert
+
+    # ------------------------------------------------------------ DB-Writer
+    async def _queue_db(self, kind: str, payload: object) -> None:
+        if self.repository is None:
+            return
+        with contextlib.suppress(asyncio.QueueFull):
+            self._db_queue.put_nowait((kind, payload))
+
+    async def _db_writer(self) -> None:
+        if self.repository is None:
+            return
+        while not self._stopped.is_set():
+            try:
+                await asyncio.sleep(self.settings.db_writer_interval)
+                await self._flush_db()
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # noqa: BLE001 - Writer darf nie sterben
+                log.error("db-writer fehlgeschlagen", error=str(exc))
+
+    async def _flush_db(self, *, final: bool = False) -> None:
+        if self.repository is None:
+            return
+        events: dict[str, EventSnapshot] = {}
+        changes: list[OddsChange] = []
+        alerts: list[Alert] = []
+        limit = self.settings.db_writer_batch if not final else 100_000
+        while len(changes) + len(alerts) + len(events) < limit:
+            try:
+                kind, payload = self._db_queue.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+            if kind == "event":
+                events[payload.event_id] = payload  # type: ignore[union-attr]
+            elif kind == "change":
+                changes.append(payload)  # type: ignore[arg-type]
+            elif kind == "alert":
+                alerts.append(payload)  # type: ignore[arg-type]
+            self._db_queue.task_done()
+
+        if not events and not changes and not alerts:
+            return
+
+        self._snapshot_counter += 1
+        store_snapshots = (
+            self.settings.snapshot_persist_every > 0
+            and self._snapshot_counter % self.settings.snapshot_persist_every == 0
+        )
+        try:
+            await self.repository.write_batch(
+                events=list(events.values()),
+                changes=changes,
+                alerts=alerts,
+                store_snapshots=store_snapshots,
+            )
+        except Exception as exc:  # noqa: BLE001 - DB-Ausfall darf den Scanner nicht stoppen
+            log.error(
+                "batch-schreiben fehlgeschlagen",
+                error=str(exc),
+                events=len(events),
+                changes=len(changes),
+                alerts=len(alerts),
+            )
+
+    # ----------------------------------------------------------- Health/Pflege
+    async def _health_loop(self) -> None:
+        while not self._stopped.is_set():
+            try:
+                await asyncio.sleep(self.settings.provider_health_interval)
+                for provider in self.providers:
+                    payload = provider.health.to_json()
+                    await self.state.set_provider_health(provider.name, payload)
+                    if self.repository is not None:
+                        await self.repository.upsert_provider_health(provider.health)
+                counters = await self.state.counters()
+                LIVE_EVENTS.set(counters["live_events"])
+                TRACKED_EVENTS.set(counters["tracked_events"])
+                self.state.prune_local_cache()
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # noqa: BLE001 - Health darf nie stoppen
+                log.warning("health-loop fehlgeschlagen", error=str(exc))
+
+    async def _maintenance_loop(self) -> None:
+        while not self._stopped.is_set():
+            try:
+                await asyncio.sleep(self.settings.maintenance_interval_seconds)
+                assert self.repository is not None
+                removed = await self.repository.prune(
+                    snapshot_days=self.settings.retention_snapshot_days,
+                    alert_days=self.settings.retention_alert_days,
+                )
+                log.info("aufräumen abgeschlossen", **removed)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # noqa: BLE001
+                log.warning("aufräumen fehlgeschlagen", error=str(exc))
+
+
+# ------------------------------------------------------------------ Helfer
+
+
+def _swap_orientation(snapshot: EventSnapshot) -> EventSnapshot:
+    """Heim/Auswärts eines Providers an die kanonische Reihenfolge angleichen."""
+    snapshot.home, snapshot.away = snapshot.away, snapshot.home
+    if snapshot.score is not None:
+        snapshot.score.home, snapshot.score.away = snapshot.score.away, snapshot.score.home
+    if snapshot.football is not None:
+        snapshot.football.home_red_cards, snapshot.football.away_red_cards = (
+            snapshot.football.away_red_cards,
+            snapshot.football.home_red_cards,
+        )
+    if snapshot.tennis is not None:
+        t = snapshot.tennis
+        t.sets_home, t.sets_away = t.sets_away, t.sets_home
+        t.games_home, t.games_away = t.games_away, t.games_home
+        t.points_home, t.points_away = t.points_away, t.points_home
+        if t.server in ("home", "away"):
+            t.server = "away" if t.server == "home" else "home"
+    return snapshot
+
+
+def _event_changed(previous: EventSnapshot, current: EventSnapshot) -> bool:
+    """Nur relevante Änderungen ins Dashboard pushen."""
+    if previous.status is not current.status:
+        return True
+    prev_score = previous.score.as_text() if previous.score else None
+    curr_score = current.score.as_text() if current.score else None
+    if prev_score != curr_score:
+        return True
+    if previous.football and current.football:
+        return previous.football.minute != current.football.minute
+    if previous.tennis and current.tennis:
+        return (
+            previous.tennis.games_text() != current.tennis.games_text()
+            or previous.tennis.points_text() != current.tennis.points_text()
+        )
+    return False
