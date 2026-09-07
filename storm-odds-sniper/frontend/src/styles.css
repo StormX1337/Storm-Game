@@ -53,6 +53,24 @@ a:hover { text-decoration: underline; }
 .dot--on { background: var(--good); box-shadow: 0 0 0 3px rgba(52, 211, 153, .15); }
 .dot--off { background: var(--bad); box-shadow: 0 0 0 3px rgba(248, 113, 113, .15); }
 
+/* ---------------------------------------------------------- Demo-Banner */
+/* Ohne diesen Hinweis halten Nutzer die simulierten Spiele für echt - das
+   Präfix "Mock" allein ist als Warnung zu leise. */
+.banner {
+  display: flex; gap: 10px; flex-wrap: wrap; align-items: baseline;
+  margin: 16px 20px 0; padding: 11px 14px;
+  background: rgba(251, 191, 36, .1);
+  border: 1px solid rgba(251, 191, 36, .45);
+  border-left: 4px solid var(--warn);
+  border-radius: var(--radius);
+  color: #f4e4bd; font-size: 13px; line-height: 1.55;
+}
+.banner strong { color: var(--warn); }
+.banner code {
+  font-family: var(--mono); font-size: 12px;
+  background: rgba(0, 0, 0, .35); padding: 1px 5px; border-radius: 4px;
+}
+
 /* ------------------------------------------------------------------ KPIs */
 .kpis {
   display: grid; gap: 12px; padding: 16px 20px 0;

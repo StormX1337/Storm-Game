@@ -12,6 +12,17 @@ deutlich abweicht — inklusive Bewertung, wie belastbar das Signal ist.
 > werden nur Quellen genutzt, deren automatisierter Abruf ausdrücklich erlaubt
 > ist. Kein CAPTCHA-, Cloudflare- oder Anti-Bot-Bypass.
 
+> ### 🧪 Nach der Installation laufen erfundene Daten
+>
+> Ohne Konfiguration startet das System mit dem **MockProvider** — einer
+> Simulation. Spiele wie „Mock München vs Mock Dortmund" **existieren nicht**;
+> das Präfix `Mock` kennzeichnet sie. Das ist Absicht: so lässt sich alles
+> ausprobieren, bevor Zugangsdaten hinterlegt sind. Dashboard und Telegram
+> weisen darauf hin, solange simuliert wird.
+>
+> Für echte Quoten `PROVIDERS` in der `.env` umstellen →
+> [Abschnitt 9](#9-datenquellen-konfigurieren).
+
 ---
 
 ## Inhalt

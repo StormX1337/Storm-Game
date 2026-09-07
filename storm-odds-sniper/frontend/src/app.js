@@ -206,6 +206,13 @@
       .join("");
   }
 
+  /* Warnen, solange simulierte Daten im Spiel sind. Ohne diesen Hinweis
+     halten Nutzer die erfundenen Partien für echte Spiele. */
+  function updateDemoBanner(providers) {
+    const simulating = providers.some((p) => p.kind === "mock" && p.healthy);
+    $("demo-banner").hidden = !simulating;
+  }
+
   function renderSystem(health, stats) {
     const list = $("system-list");
     const items = (health.components || []).map(
@@ -312,6 +319,7 @@
       state.events = new Map(events.map((e) => [e.event_id, e]));
       renderEvents();
       renderProviders(providers);
+      updateDemoBanner(providers);
       renderSystem(health, stats);
 
       if (!state.alerts.length && alerts.length) {

@@ -26,6 +26,16 @@ KIND_TITLE = {
 }
 KIND_ICON = {AlertKind.FIXED_ERROR: "🎯", AlertKind.VALUE: "💎", AlertKind.ODDS_MOVE: "📈"}
 
+#: Provider, deren Daten erfunden sind. Alarme daraus werden deutlich
+#: gekennzeichnet - sonst suchen Nutzer nach Spielen, die es nicht gibt.
+SIMULATED_PROVIDERS = frozenset({"mock"})
+
+SIMULATION_NOTE = "🧪 <b>SIMULATION</b> — dieses Spiel und diese Quoten sind <b>erfunden</b>."
+
+
+def is_simulated(provider: str) -> bool:
+    return (provider or "").lower() in SIMULATED_PROVIDERS
+
 
 def esc(text: object) -> str:
     return escape(str(text), quote=False)
@@ -98,8 +108,10 @@ def format_alert(alert: Alert, *, compact: bool = False) -> str:
     status_icon = STATUS_ICON.get(event.status, "⚪")
     sport_name = "FOOTBALL" if event.sport is Sport.FOOTBALL else "TENNIS"
 
-    lines = [
-        "🚨 <b>STORM ODDS SNIPER</b>",
+    lines = ["🚨 <b>STORM ODDS SNIPER</b>"]
+    if is_simulated(alert.provider):
+        lines += [SIMULATION_NOTE, ""]
+    lines += [
         f"{status_icon} <b>{event.status.value}</b> — {sport_name}",
         f"{KIND_TITLE.get(alert.kind, '')}",
         "",
@@ -157,8 +169,9 @@ def format_alert_short(alert: Alert) -> str:
     """Einzeiler für Listen (/alerts, /value)."""
     icon = KIND_ICON.get(alert.kind, "•")
     status = STATUS_ICON.get(alert.event.status, "")
+    sim = "🧪" if is_simulated(alert.provider) else ""
     return (
-        f"{icon}{status} <b>{esc(alert.event.home)}</b> vs <b>{esc(alert.event.away)}</b>\n"
+        f"{icon}{status}{sim} <b>{esc(alert.event.home)}</b> vs <b>{esc(alert.event.away)}</b>\n"
         f"    {esc(alert.market.label)} · {esc(alert.selection.display)} · "
         f"{esc(alert.bookmaker)}\n"
         f"    <code>{alert.odds:.2f}</code> (fair <code>{alert.fair_odds:.2f}</code>) · "
@@ -169,7 +182,8 @@ def format_alert_short(alert: Alert) -> str:
 def format_event_line(event: EventSnapshot) -> str:
     """Eine Zeile je Event für /live."""
     icon = SPORT_ICON.get(event.sport, "🏟")
-    parts = [f"{icon} <b>{esc(event.home)}</b> vs <b>{esc(event.away)}</b>"]
+    sim = "🧪 " if is_simulated(event.provider) else ""
+    parts = [f"{sim}{icon} <b>{esc(event.home)}</b> vs <b>{esc(event.away)}</b>"]
     context = event_context(event)
     detail = " · ".join(
         line.split(" ", 1)[1].replace("<b>", "").replace("</b>", "") for line in context[:3]
@@ -234,6 +248,13 @@ def format_status(
         if provider.get("rate_limit_remaining") is not None:
             line += f" · Kontingent {provider['rate_limit_remaining']}"
         lines.append(line)
+    if any(is_simulated(p.get("name", "")) and p.get("healthy") for p in providers):
+        lines += [
+            "",
+            "🧪 <b>Achtung:</b> Es laufen <b>simulierte</b> Daten. Die gemeldeten "
+            "Spiele und Quoten sind erfunden. Für echte Daten <code>PROVIDERS</code> "
+            "in der <code>.env</code> umstellen.",
+        ]
     lines += ["", f"🔔 Benachrichtigungen: <b>{'pausiert' if paused else 'aktiv'}</b>"]
     return "\n".join(lines)
 

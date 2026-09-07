@@ -92,6 +92,54 @@ class TestFootballFormatting:
         assert "keine automatische Wettabgabe" in fmt.format_alert(football_alert())
 
 
+class TestSimulationMarking:
+    """Ohne deutliche Kennzeichnung suchen Nutzer nach Spielen, die es
+    nicht gibt - genau das ist in der Praxis passiert."""
+
+    def test_mock_alerts_are_marked(self):
+        text = fmt.format_alert(football_alert(provider="mock"))
+        assert "SIMULATION" in text
+        assert "erfunden" in text
+
+    def test_real_providers_are_not_marked(self):
+        for provider in ("the_odds_api", "betfair", ""):
+            text = fmt.format_alert(football_alert(provider=provider))
+            assert "SIMULATION" not in text, provider
+
+    def test_short_format_carries_a_marker(self):
+        assert "🧪" in fmt.format_alert_short(football_alert(provider="mock"))
+        assert "🧪" not in fmt.format_alert_short(football_alert(provider="betfair"))
+
+    def test_event_line_carries_a_marker(self):
+        event = make_event()
+        event.provider = "mock"
+        assert "🧪" in fmt.format_event_line(event)
+        event.provider = "betfair"
+        assert "🧪" not in fmt.format_event_line(event)
+
+    def test_status_warns_about_simulated_data(self):
+        text = fmt.format_status(
+            providers=[{"name": "mock", "status": "connected", "healthy": True}],
+            counters={},
+            stats={},
+            paused=False,
+        )
+        assert "simulierte" in text
+        real = fmt.format_status(
+            providers=[{"name": "betfair", "status": "connected", "healthy": True}],
+            counters={},
+            stats={},
+            paused=False,
+        )
+        assert "simulierte" not in real
+
+    def test_is_simulated_helper(self):
+        assert fmt.is_simulated("mock") is True
+        assert fmt.is_simulated("MOCK") is True
+        assert fmt.is_simulated("the_odds_api") is False
+        assert fmt.is_simulated("") is False
+
+
 class TestTennisFormatting:
     def test_contains_tennis_details(self):
         text = fmt.format_alert(tennis_alert())
