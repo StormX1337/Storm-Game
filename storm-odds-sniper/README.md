@@ -944,6 +944,28 @@ docker compose logs scanner | grep -i nachkontrolle | tail
 | Log: `urteile ohne zugehörigen alarm verworfen` | Der DB-Writer kommt nicht hinterher. `DB_WRITER_BATCH` erhöhen oder `SNAPSHOT_PERSIST_EVERY` reduzieren. |
 | `FOLLOWUP_ENABLED=false` | Die Nachkontrolle ist abgeschaltet. |
 
+### `The "apr1" variable is not set` beim Start
+
+```
+WARN[0000] The "apr1" variable is not set. Defaulting to a blank string.
+WARN[0000] The "frYtsx1F" variable is not set. Defaulting to a blank string.
+```
+
+In der `.env` steht ein Hash mit einfachen `$`. Docker Compose hält die für
+Variablennamen und ersetzt sie durch nichts — vom Passwort-Hash bleibt
+`admin:` übrig, und **jede korrekte Anmeldung wird mit 401 abgewiesen.**
+
+Reparatur:
+
+```bash
+./scripts/set-dashboard-password.sh
+docker compose up -d
+```
+
+Das Skript schreibt die `$` verdoppelt und prüft anschließend nach. Ab dieser
+Version verweigert der nginx-Container den Start, wenn ihn ein kaputter Wert
+erreicht — statt ein Dashboard auszuliefern, an dem sich niemand anmelden kann.
+
 ### Telegram-Bot antwortet nicht
 
 ```bash
@@ -1056,6 +1078,24 @@ Container-Healthcheck kein Passwort kennt.
 
 Ohne `DASHBOARD_AUTH` bleibt alles offen — das ist der Auslieferungszustand
 und ändert sich bei einem Update nicht von selbst.
+
+**Wer die Zeile von Hand einträgt, muss jedes `$` verdoppeln.** Docker Compose
+liest `$NAME` in der `.env` als Variable, und ein `apr1`-Hash besteht fast nur
+aus solchen Stellen:
+
+```env
+# falsch - davon bleibt beim Start nur "admin:" übrig
+DASHBOARD_AUTH=admin:$apr1$frYtsx1F$gU557er1Q0RlYieQT4Y461
+
+# richtig
+DASHBOARD_AUTH=admin:$$apr1$$frYtsx1F$$gU557er1Q0RlYieQT4Y461
+```
+
+Das Skript erledigt das selbst und prüft danach mit `docker compose config`
+nach, ob der Hash den Weg unbeschadet überstanden hat. Kommt trotzdem ein
+unbrauchbarer Wert im Container an, **startet nginx nicht** und schreibt in
+den Log, was zu tun ist — ein Dashboard, das sich für geschützt hält und es
+nicht ist, wäre der schlechtere Ausgang.
 
 Zusätzlich für den Internetbetrieb: einen TLS-Reverse-Proxy davorsetzen
 (Basic Auth ohne HTTPS überträgt das Passwort im Klartext) und

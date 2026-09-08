@@ -74,6 +74,59 @@ class TestEntrypoint:
         assert (tmp_path / ".htpasswd").read_text().strip() == raw
 
 
+class TestDollarZeichen:
+    """Docker Compose ersetzt in der .env jedes ``$NAME`` durch eine Variable.
+    Ein apr1-Hash besteht fast nur aus solchen Stellen und verschwand dadurch
+    spurlos - übrig blieb ``benutzer:``, und jede korrekte Anmeldung endete
+    mit 401, ohne erkennbaren Grund."""
+
+    HASH = "$apr1$frYtsx1F$gU557er1Q0RlYieQT4Y461"
+
+    def test_doubled_dollars_are_restored(self, tmp_path):
+        """So kommt der Wert an, wenn er die Interpolation umgangen hat."""
+        doubled = self.HASH.replace("$", "$$")
+        result = run_entrypoint(tmp_path, f"admin:{doubled}")
+        assert result.returncode == 0
+        assert (tmp_path / ".htpasswd").read_text().strip() == f"admin:{self.HASH}"
+
+    def test_single_dollars_pass_through_unchanged(self, tmp_path):
+        """Und so, wenn Compose sie korrekt aufgelöst hat."""
+        result = run_entrypoint(tmp_path, f"admin:{self.HASH}")
+        assert result.returncode == 0
+        assert (tmp_path / ".htpasswd").read_text().strip() == f"admin:{self.HASH}"
+
+    def test_a_lost_hash_stops_the_container(self, tmp_path):
+        """Genau der Wert, den Compose ohne Verdopplung erzeugt hat."""
+        result = run_entrypoint(tmp_path, "admin:")
+        assert result.returncode != 0
+        assert "Hash fehlt" in result.stderr
+        assert "verdoppelt" in result.stderr
+        assert not (tmp_path / ".htpasswd").exists()
+
+    def test_something_that_is_not_a_hash_stops_the_container(self, tmp_path):
+        """Ein Klartextpasswort in der .env würde nginx nie akzeptieren."""
+        result = run_entrypoint(tmp_path, "admin:klartext")
+        assert result.returncode != 0
+        assert "sieht nicht wie ein Hash aus" in result.stderr
+
+    def test_the_sha_fallback_is_accepted(self, tmp_path):
+        """Das {SHA}-Format enthält kein $ und braucht keine Verdopplung."""
+        result = run_entrypoint(tmp_path, "admin:{SHA}W6ph5Mm5Pz8GgiULbPgzG37mj9g=")
+        assert result.returncode == 0
+        assert "{SHA}" in (tmp_path / ".htpasswd").read_text()
+
+    def test_an_empty_username_is_rejected(self, tmp_path):
+        result = run_entrypoint(tmp_path, f":{self.HASH}")
+        assert result.returncode != 0
+        assert "Benutzername" in result.stderr
+
+    def test_failing_closed_leaves_no_password_file(self, tmp_path):
+        """Kein halb geschriebener Zustand: lieber gar nicht starten."""
+        run_entrypoint(tmp_path, "admin:")
+        assert not (tmp_path / ".htpasswd").exists()
+        assert not (tmp_path / "dashboard-auth.conf").exists()
+
+
 @pytest.mark.skipif(not shutil.which("openssl"), reason="openssl nicht verfügbar")
 class TestPasswordSetter:
     def _run(self, root: Path, *args: str) -> subprocess.CompletedProcess:
@@ -124,3 +177,118 @@ class TestPasswordSetter:
         root = self._prepare(tmp_path)
         result = self._run(root, "admin", "")
         assert result.returncode != 0
+
+    def test_dollars_are_doubled_for_compose(self, tmp_path):
+        """Ohne Verdopplung frisst die Compose-Interpolation den halben Hash."""
+        root = self._prepare(tmp_path)
+        assert self._run(root, "admin", "geheim").returncode == 0
+        line = next(
+            row
+            for row in (root / ".env").read_text().splitlines()
+            if row.startswith("DASHBOARD_AUTH=")
+        )
+        assert "$$apr1$$" in line, line
+        assert "$apr1$" not in line.replace("$$", ""), "einfaches $ übrig geblieben"
+
+    def test_the_written_value_survives_unescaping(self, tmp_path):
+        """Was der Container zurückverwandelt, muss der echte Hash sein."""
+        root = self._prepare(tmp_path)
+        self._run(root, "admin", "geheim")
+        line = next(
+            row
+            for row in (root / ".env").read_text().splitlines()
+            if row.startswith("DASHBOARD_AUTH=")
+        )
+        value = line.split("=", 1)[1].replace("$$", "$")
+        user, _, hashed = value.partition(":")
+        assert user == "admin"
+        assert hashed.startswith("$apr1$")
+        assert hashed.count("$") == 3, hashed
+
+    def test_the_end_to_end_round_trip_through_the_entrypoint(self, tmp_path):
+        """Skript schreibt -> Compose löst auf -> Container schreibt .htpasswd.
+
+        Die Compose-Stufe wird hier nachgebildet (``$$`` wird zu ``$``); dass
+        Compose sich so verhält, prüft ``TestComposeInterpolation``.
+        """
+        root = self._prepare(tmp_path)
+        self._run(root, "admin", "geheim")
+        line = next(
+            row
+            for row in (root / ".env").read_text().splitlines()
+            if row.startswith("DASHBOARD_AUTH=")
+        )
+        interpolated = line.split("=", 1)[1].replace("$$", "$")
+
+        target = tmp_path / "nginx"
+        target.mkdir()
+        result = run_entrypoint(target, interpolated)
+        assert result.returncode == 0, result.stderr
+        written = (target / ".htpasswd").read_text().strip()
+        assert written == interpolated
+        assert written.startswith("admin:$apr1$")
+
+
+@pytest.mark.skipif(
+    not shutil.which("docker") or not shutil.which("openssl"),
+    reason="docker oder openssl nicht verfügbar",
+)
+class TestComposeInterpolation:
+    """Die Annahme, auf der alles steht: Compose macht aus ``$$`` ein ``$``.
+
+    Ohne diesen Test wäre das eine Behauptung - und genau eine solche
+    ungeprüfte Annahme war die Ursache des Fehlers.
+    """
+
+    def _config(self, root: Path) -> subprocess.CompletedProcess:
+        docker = shutil.which("docker") or "docker"
+        return subprocess.run(  # noqa: S603 - fester Aufruf
+            [docker, "compose", "config"],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    def _prepare(self, tmp_path: Path, auth_line: str) -> Path:
+        shutil.copy(REPO / "docker-compose.yml", tmp_path / "docker-compose.yml")
+        (tmp_path / ".env").write_text("POSTGRES_PASSWORD=x\n" + auth_line + "\n")
+        return tmp_path
+
+    def test_unescaped_dollars_are_eaten(self, tmp_path):
+        """Der ursprüngliche Fehler, als Test festgehalten."""
+        root = self._prepare(tmp_path, "DASHBOARD_AUTH=admin:$apr1$frYtsx1F$gU557er1Q0Rl")
+        result = self._config(root)
+        if result.returncode != 0:
+            pytest.skip(f"docker compose nicht nutzbar: {result.stderr[:120]}")
+        assert "variable is not set" in result.stderr
+        assert "apr1" not in result.stdout
+
+    def test_escaped_dollars_survive(self, tmp_path):
+        root = self._prepare(tmp_path, "DASHBOARD_AUTH=admin:$$apr1$$frYtsx1F$$gU557er1Q0Rl")
+        result = self._config(root)
+        if result.returncode != 0:
+            pytest.skip(f"docker compose nicht nutzbar: {result.stderr[:120]}")
+        assert "variable is not set" not in result.stderr
+        # config gibt eine Compose-Datei aus, dort steht ein literales $ als $$.
+        line = next(row for row in result.stdout.splitlines() if "DASHBOARD_AUTH:" in row)
+        assert "apr1" in line
+
+    def test_the_setter_output_produces_no_warnings(self, tmp_path):
+        """Der eigentliche Beweis: Skript schreiben lassen, Compose fragen."""
+        (tmp_path / "scripts").mkdir()
+        shutil.copy(SETTER, tmp_path / "scripts" / SETTER.name)
+        shutil.copy(REPO / "docker-compose.yml", tmp_path / "docker-compose.yml")
+        (tmp_path / ".env").write_text("POSTGRES_PASSWORD=x\n")
+        written = subprocess.run(  # noqa: S603 - festes Skript aus dem Repo
+            ["/bin/sh", str(tmp_path / "scripts" / SETTER.name), "admin", "geheim"],
+            cwd=tmp_path,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert written.returncode == 0, written.stderr
+        result = self._config(tmp_path)
+        if result.returncode != 0:
+            pytest.skip(f"docker compose nicht nutzbar: {result.stderr[:120]}")
+        assert "variable is not set" not in result.stderr

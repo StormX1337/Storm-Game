@@ -52,14 +52,49 @@ fi
 
 [ -f .env ] || cp .env.example .env
 
+# Docker Compose ersetzt in der .env jedes $NAME durch eine Variable. Ein
+# apr1-Hash ($apr1$salt$hash) besteht fast nur aus solchen Stellen und würde
+# dabei spurlos verschwinden - übrig bliebe "benutzer:", und jede korrekte
+# Anmeldung endete mit 401. Verdoppelte $ sind Compose' Schreibweise für ein
+# literales $; der Container macht daraus wieder einfache.
+ESCAPED=$(printf '%s:%s' "$USER_NAME" "$HASH" | sed 's/\$/$$/g')
+
 # Vorhandene Zeile ersetzen, sonst anhängen.
 if grep -q '^DASHBOARD_AUTH=' .env; then
     TMP=$(mktemp)
     grep -v '^DASHBOARD_AUTH=' .env > "$TMP"
-    mv "$TMP" .env
+    cat "$TMP" > .env
+    rm -f "$TMP"
 fi
-printf 'DASHBOARD_AUTH=%s:%s\n' "$USER_NAME" "$HASH" >> .env
+printf 'DASHBOARD_AUTH=%s\n' "$ESCAPED" >> .env
 chmod 600 .env 2>/dev/null || true
 
 echo "Zugangsschutz gesetzt für '$USER_NAME' (Verfahren: $METHOD)."
+
+# Gegenprobe statt Hoffnung: überlebt der Hash den Weg durch Compose? Genau
+# hier ging es vorher schief - der Hash verschwand spurlos, und die einzige
+# Spur war eine Warnung, die niemand mit dem Login in Verbindung brachte.
+#
+# "docker compose config" gibt eine Compose-Datei aus, dort steht ein
+# literales $ wieder als $$. Für den Vergleich wird deshalb zurückgesetzt.
+if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+    RESOLVED=$(docker compose config 2>/dev/null \
+        | grep -m1 'DASHBOARD_AUTH:' | sed 's/^ *DASHBOARD_AUTH: *//')
+    # Compose setzt je nach Wert Anführungszeichen - die gehören nicht zum Hash.
+    RESOLVED=${RESOLVED#\'}; RESOLVED=${RESOLVED%\'}
+    RESOLVED=${RESOLVED#\"}; RESOLVED=${RESOLVED%\"}
+    RESOLVED=$(printf '%s' "$RESOLVED" | sed 's/\$\$/$/g')
+    if [ -z "$RESOLVED" ]; then
+        echo "Hinweis: Gegenprobe übersprungen (docker compose config lieferte nichts)."
+    elif [ "$RESOLVED" = "$USER_NAME:$HASH" ]; then
+        echo "Gegenprobe: Compose reicht den Hash unverändert durch. ✓"
+    else
+        echo "FEHLER: Compose macht aus dem Wert '$RESOLVED'." >&2
+        echo "Erwartet war '$USER_NAME:$HASH'." >&2
+        echo "So würde der Zugangsschutz jede korrekte Anmeldung abweisen -" >&2
+        echo "die .env wurde geschrieben, aber bitte nicht so starten." >&2
+        exit 1
+    fi
+fi
+
 echo "Aktivieren mit:  docker compose up -d"

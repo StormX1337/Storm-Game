@@ -16,16 +16,44 @@ if [ -z "${DASHBOARD_AUTH:-}" ]; then
     exit 0
 fi
 
-case "$DASHBOARD_AUTH" in
+# Docker Compose ersetzt in der .env jedes $NAME durch eine Variable. Ein
+# apr1-Hash besteht fast nur aus solchen Stellen ($apr1$salt$hash), deshalb
+# steht er dort verdoppelt ($$) und kommt hier einfach an. Erreicht uns doch
+# einmal die verdoppelte Form (etwa über env_file statt Interpolation), wird
+# sie hier zurückgesetzt - ein echter Hash enthält nie zwei $ am Stück.
+AUTH=$(printf '%s' "$DASHBOARD_AUTH" | sed 's/\$\$/$/g')
+
+USER_PART="${AUTH%%:*}"
+HASH_PART="${AUTH#*:}"
+
+fail() {
+    echo "[dashboard-auth] FEHLER: $1" >&2
+    echo "[dashboard-auth] nginx startet nicht - ein Dashboard, das sich für" >&2
+    echo "[dashboard-auth] geschützt hält, es aber nicht ist, wäre schlimmer." >&2
+    echo "[dashboard-auth] Reparieren mit: ./scripts/set-dashboard-password.sh" >&2
+    exit 1
+}
+
+case "$AUTH" in
     *:*) ;;
-    *)
-        echo "[dashboard-auth] FEHLER: DASHBOARD_AUTH muss 'benutzer:hash' sein." >&2
-        echo "[dashboard-auth] Erzeugen mit: ./scripts/set-dashboard-password.sh" >&2
-        exit 1
-        ;;
+    *) fail "DASHBOARD_AUTH muss 'benutzer:hash' sein, ist aber '$AUTH'." ;;
 esac
 
-printf '%s\n' "$DASHBOARD_AUTH" > "$HTPASSWD"
+[ -n "$USER_PART" ] || fail "kein Benutzername vor dem Doppelpunkt."
+
+# Der häufigste Fehler: der Hash ist unterwegs verloren gegangen, weil die
+# $-Zeichen in der .env nicht verdoppelt waren. Dann steht hier "benutzer:"
+# und jede korrekte Anmeldung würde mit 401 abgewiesen - ohne erkennbaren
+# Grund. Deshalb wird die Form geprüft, nicht nur der Doppelpunkt.
+[ -n "$HASH_PART" ] || fail \
+    "der Hash fehlt. Meist sind in der .env die \$-Zeichen nicht verdoppelt; Compose warnt dann beim Start mit 'The \"apr1\" variable is not set'."
+
+case "$HASH_PART" in
+    '$'*|'{SHA}'*) ;;
+    *) fail "'$HASH_PART' sieht nicht wie ein Hash aus (erwartet: \$apr1\$..., \$2y\$... oder {SHA}...)." ;;
+esac
+
+printf '%s:%s\n' "$USER_PART" "$HASH_PART" > "$HTPASSWD"
 # 644, nicht 600: nginx liest die Datei im Worker-Prozess, und der läuft
 # unprivilegiert. Mit 600 antwortet der Server auf jede korrekte Anmeldung
 # mit 500 statt 200. Die Datei enthält nur den Hash, nicht das Passwort.
@@ -36,4 +64,4 @@ auth_basic "Storm Odds Sniper";
 auth_basic_user_file $HTPASSWD;
 CONF
 
-echo "[dashboard-auth] Basic Auth aktiv für Benutzer '${DASHBOARD_AUTH%%:*}'."
+echo "[dashboard-auth] Basic Auth aktiv für Benutzer '$USER_PART'."
