@@ -205,9 +205,16 @@ services:
   frontend:
     image: nginx:1.27-alpine
     restart: unless-stopped
+    environment:
+      # Leer = Dashboard offen erreichbar (bisheriges Verhalten).
+      # Gesetzt = Basic Auth für Dashboard, API und WebSocket.
+      # Erzeugen mit: ./scripts/set-dashboard-password.sh
+      DASHBOARD_AUTH: ${DASHBOARD_AUTH:-}
     volumes:
       - ./frontend/src:/usr/share/nginx/html:ro
       - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      # Läuft vor nginx und erzeugt daraus die Zugangsschutz-Konfiguration.
+      - ./docker/nginx/10-dashboard-auth.sh:/docker-entrypoint.d/10-dashboard-auth.sh:ro
     ports:
       - "${DASHBOARD_PORT:-8080}:80"
     depends_on:

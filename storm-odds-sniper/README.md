@@ -917,11 +917,32 @@ gunzip -c backup-2026-09-07.sql.gz | docker compose exec -T postgres psql -U sto
 | Rate-Limiting | pro IP und Minute, Health-Endpunkte ausgenommen |
 | Eingaben | Pydantic-Validierung an jedem Endpunkt |
 | CSP | streng, keine externen Skripte oder Schriften |
+| Dashboard | optionaler Zugangsschutz über `DASHBOARD_AUTH` |
 | Telegram-Token | nur im Backend, niemals im Frontend |
 | Wettabgabe | technisch nicht vorhanden |
 
-Für den Betrieb über das Internet zusätzlich einen TLS-Reverse-Proxy
-davorsetzen und `API_CORS_ORIGINS` auf die echte Domain setzen.
+### Dashboard aus dem Internet erreichbar?
+
+Dann **unbedingt** ein Passwort setzen — sonst sieht jeder mit der Adresse
+alle Alarme, Events und Systemdaten:
+
+```bash
+./scripts/set-dashboard-password.sh
+docker compose up -d
+```
+
+Das Skript fragt Benutzername und Passwort ab, erzeugt daraus einen Hash
+(`apr1`, gesalzen) und trägt ihn als `DASHBOARD_AUTH` in die `.env` ein. Das
+Klartextpasswort wird nirgends gespeichert. Ab dann sind Dashboard, API,
+WebSocket und `/docs` geschützt; nur `/healthz` bleibt offen, weil der
+Container-Healthcheck kein Passwort kennt.
+
+Ohne `DASHBOARD_AUTH` bleibt alles offen — das ist der Auslieferungszustand
+und ändert sich bei einem Update nicht von selbst.
+
+Zusätzlich für den Internetbetrieb: einen TLS-Reverse-Proxy davorsetzen
+(Basic Auth ohne HTTPS überträgt das Passwort im Klartext) und
+`API_CORS_ORIGINS` auf die echte Domain setzen.
 
 ---
 
@@ -975,6 +996,7 @@ storm-odds-sniper/
 ├── frontend/src/             Dashboard (HTML, CSS, JS)
 ├── docker/nginx/             nginx-Konfiguration
 ├── scripts/
+│   ├── set-dashboard-password.sh  Zugangsschutz fürs Dashboard
 │   ├── setup-provider.sh     echte Datenquelle prüfen und übernehmen
 │   ├── setup_provider.py     die eigentliche Prüflogik
 │   ├── smoke_test.py         Rauchtest der laufenden Installation
@@ -1043,8 +1065,9 @@ einen Bruchteil eines B-Trees.
   Skalierung müssten die Provider auf Instanzen aufgeteilt werden.
 - Der Prozess-Cache für die Änderungserkennung ist prozesslokal: nach einem
   Neustart des Scanners hat die erste Quote je Zeile keinen Vorpreis.
-- Das Dashboard hat keine Authentifizierung. Es gehört hinter einen
-  Reverse-Proxy mit Zugangsschutz, wenn es öffentlich erreichbar ist.
+- Das Dashboard ist **im Auslieferungszustand ungeschützt**. Für den Betrieb
+  im Internet `./scripts/set-dashboard-password.sh` ausführen — und zusätzlich
+  TLS davorsetzen, weil Basic Auth das Passwort sonst im Klartext überträgt.
 
 **In dieser Umgebung nicht ausgeführt**
 
