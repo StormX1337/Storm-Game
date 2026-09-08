@@ -205,13 +205,31 @@ gegen Namen mit Bindestrich.
 
 | API | intern |
 |---|---|
-| `betTypeID=ml` | 1X2 (Fußball) bzw. Match Winner (Tennis) |
+| `betTypeID=ml3way` | **1X2** (nur Fußball) |
+| `betTypeID=ml` | Draw No Bet (Fußball) bzw. Match Winner (Tennis) |
 | `betTypeID=sp` | Handicap bzw. Game Handicap |
 | `betTypeID=ou` | Over/Under bzw. Over/Under Games |
+| `betTypeID=yn` + `statID` „both teams … score" | Both Teams To Score |
+| `sideID` `home+draw` / `away+draw` / `home+away` | Doppelte Chance (eigener Markt) |
 | `periodID` `game`/`reg` | Vollzeit |
-| `periodID` `h1`/`h2` | Halbzeiten |
-| `periodID` `set1`…`set5` | Tennissätze |
-| `sideID` `home`/`away`/`draw`/`over`/`under` | Selektion |
+| `periodID` `1h`/`2h`/`h1`/`h2` | Halbzeiten |
+| `periodID` `1s`…`5s` | Tennissätze (nur Tennis) |
+| `sideID` `home`/`away`/`draw`/`over`/`under`/`yes`/`no` | Selektion |
+
+> **`ml` und `ml3way` dürfen niemals denselben Marktschlüssel bekommen.** Eine
+> Zweiwegquote ist ohne die Unentschieden-Möglichkeit systematisch kürzer als
+> eine Dreiwegquote. Landeten beide im selben Buch, verglichen die Modelle
+> Äpfel mit Birnen und meldeten am laufenden Band Fehlpreise, die keine sind.
+> Deshalb ist Zweiweg im Fußball **Draw No Bet** und hat einen eigenen
+> Schlüssel. Dasselbe gilt für die Doppelte Chance: kombinierte Seiten sind
+> ein eigener Markt, keine Selektion des Dreiwegbuchs.
+
+**Ja/Nein-Märkte (`yn`)** sind ein Sammelbecken – im echten Lauf kamen über
+2000 davon in einem einzigen Abruf. Übernommen wird nur, was sich selbst
+benennt: eine `statID`, die „both teams" und „score" enthält, ist Both Teams
+To Score. Alles andere (Spielerwetten, Sonderwetten) wird übersprungen und mit
+`statID` und Marktnamen gezählt – so lässt sich ein fehlender Markt belegen
+statt raten.
 
 **Was übersprungen wird** (bewusst, statt geraten): Spielerwetten
 (`sideID` = eine playerID), unbekannte Marktarten, unbekannte Abschnitte

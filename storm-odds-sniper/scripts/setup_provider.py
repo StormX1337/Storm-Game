@@ -284,8 +284,19 @@ async def check_sportsgameodds(args: argparse.Namespace) -> int:
     print(f"{OK} {len(quotes)} verwertbare Quoten.")
     if provider.skipped:
         print(f"{INFO} Übersprungen (bewusst, nichts wird geraten):")
-        for reason, count in provider.skipped.most_common(6):
-            print(f"         {reason}: {count}")
+        for reason, count in provider.skipped.most_common(8):
+            sample = provider.skipped_samples.get(reason, {})
+            detail = ""
+            if sample.get("statID") or sample.get("marketName"):
+                detail = (
+                    f"   Beispiel: statID={sample.get('statID') or '?'}"
+                    f" · {sample.get('marketName') or 'ohne Namen'}"
+                )
+            print(f"         {reason}: {count}{detail}")
+        print(
+            "       Ist darunter ein Markt, den du brauchst? Schick diese Zeilen -\n"
+            "       aus statID und Name lässt sich die Zuordnung belegen statt raten."
+        )
 
     if quotes:
         print()

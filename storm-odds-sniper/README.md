@@ -375,12 +375,17 @@ Der Unterschied zu The Odds API: diese Quelle kennt einen **Live-Filter**
 Aufruf. Für Live-Erkennung ist das die günstigere Bauform — ein Abruf statt
 einer pro Region und Markt.
 
-Unterstützt werden Moneyline (1X2 bzw. Match Winner), Spread/Handicap und
-Over/Under, jeweils für Vollzeit, Halbzeiten und Tennissätze.
+Unterstützt werden 1X2, Draw No Bet, Doppelte Chance, Both Teams To Score,
+Handicap und Over/Under (Fußball) sowie Match Winner, Game Handicap und
+Over/Under Games (Tennis) — jeweils für Vollzeit, Halbzeiten und Tennissätze.
 
-**Wichtig zum Quotenformat:** die API liefert Quoten als Zeichenkette im
-amerikanischen Format (`"-110"`, `"+150"`); der Adapter rechnet sie in
-Dezimalquoten um. Genau deshalb zeigt das Einrichtungsskript Rohwert und
+Was übersprungen wird, zählt das Einrichtungsskript mit `statID` und
+Marktnamen auf. Fehlt dir dort etwas, schick die Zeilen — aus dem Namen lässt
+sich die Zuordnung belegen, statt sie zu raten.
+
+**Quotenformat:** die API liefert Quoten als Zeichenkette im amerikanischen
+Format (`"-110"`, `"+150"`); der Adapter rechnet sie in Dezimalquoten um. Das
+ist **gegen echte Daten bestätigt** (`+1775 → 18.75`, `-3476 → 1.029`). Genau deshalb zeigt das Einrichtungsskript Rohwert und
 umgerechneten Wert nebeneinander:
 
 ```
@@ -1372,19 +1377,16 @@ einen Bruchteil eines B-Trees.
   im Internet `./scripts/set-dashboard-password.sh` ausführen — und zusätzlich
   TLS davorsetzen, weil Basic Auth das Passwort sonst im Klartext überträgt.
 
-**SportsGameOdds ohne echtes Konto gebaut**
+**SportsGameOdds: was am echten Konto bestätigt ist**
 
 Das Schema stammt aus der offiziellen, aus der OpenAPI-Spezifikation
-generierten SDK — Feldnamen und Parameter sind damit belegt, nicht geraten.
-Geprüft wurde der Adapter gegen einen schemagetreuen Testserver: Scanner,
-Erkennung, Alarme und Dashboard laufen damit durch.
+generierten SDK. Am laufenden Konto bestätigt sind inzwischen: Key und
+Verbindung, die **Quotenumrechnung** (amerikanisch → dezimal, geprüft an
+zehn echten Werten) und die Marktarten `ml`, `ml3way`, `sp`, `ou`, `yn`, `eo`.
 
-**Nicht geprüft ist ein echter Aufruf gegen die API** (kein Konto vorhanden).
-Offen bleibt vor allem das Quotenformat: dass `"-110"` amerikanisch gemeint
-ist, geht aus Beispielen hervor, nicht aus der Spezifikation. Der erste Lauf
-mit deinem Key beantwortet das — dafür zeigt
-`./scripts/setup-provider.sh sportsgameodds --key … --live` Rohwert und
-Umrechnung nebeneinander.
+Nicht abgedeckt sind Ja/Nein-Märkte außer Both Teams To Score sowie
+Gerade/Ungerade — beide werden übersprungen und gezählt. Was dir dort fehlt,
+lässt sich am ausgegebenen Marktnamen belegen und nachrüsten.
 
 **In dieser Umgebung nicht ausgeführt**
 

@@ -75,7 +75,35 @@ from backend.providers.base import (
 log = get_logger("provider.sportsgameodds")
 
 #: ``betTypeID`` -> Marktart. Nur belegte Werte; alles andere wird verworfen.
-BET_TYPES: dict[str, str] = {"ml": "moneyline", "sp": "spread", "ou": "total"}
+#: ``betTypeID`` -> interne Marktart.
+#:
+#: ``ml`` ist zweiweg, ``ml3way`` dreiweg. Beide dürfen im Fußball **nicht**
+#: auf denselben Marktschlüssel zeigen: eine Zweiwegquote ist ohne die
+#: Unentschieden-Möglichkeit systematisch kürzer als eine Dreiwegquote. Landen
+#: sie im selben Buch, vergleicht die Engine Äpfel mit Birnen und meldet am
+#: laufenden Band Fehlpreise, die keine sind.
+BET_TYPES: dict[str, str] = {
+    "ml": "moneyline",
+    "ml3way": "moneyline3",
+    "sp": "spread",
+    "ou": "total",
+    # "yn" (ja/nein) wird nur zugeordnet, wenn die statID den Markt selbst
+    # benennt - siehe BTTS_STAT unten. "eo" (gerade/ungerade) ist kein Markt
+    # dieses Projekts. Alles Übrige wird übersprungen und gezählt.
+    "yn": "yesno",
+}
+
+
+def _is_btts(stat_id: str) -> bool:
+    """Ist diese statID eindeutig "Beide Teams treffen"?
+
+    Nicht geraten, sondern am selbstbeschreibenden Namen erkannt: nur wenn
+    "bothteams" und "score" darin vorkommen. Schreibweise (camelCase,
+    Unterstriche) spielt keine Rolle, andere Ja/Nein-Märkte fallen durch.
+    """
+    normalized = "".join(ch for ch in stat_id.lower() if ch.isalnum())
+    return "bothteams" in normalized and "score" in normalized
+
 
 #: ``periodID`` -> Abschnitt. Unbekannte Abschnitte werden übersprungen, damit
 #: ein Viertel nicht versehentlich als Vollzeit gewertet wird.
@@ -87,6 +115,16 @@ PERIODS: dict[str, Period] = {
     "h2": Period.SECOND_HALF,
     "1h": Period.FIRST_HALF,
     "2h": Period.SECOND_HALF,
+}
+
+#: Satzabschnitte - nur für Tennis. Im Fußball gibt es keine Sätze, dort wäre
+#: ein solcher Abschnitt ein Missverständnis und wird übersprungen.
+TENNIS_PERIODS: dict[str, Period] = {
+    "1s": Period.SET_1,
+    "2s": Period.SET_2,
+    "3s": Period.SET_3,
+    "4s": Period.SET_4,
+    "5s": Period.SET_5,
     "set1": Period.SET_1,
     "set2": Period.SET_2,
     "set3": Period.SET_3,
@@ -103,7 +141,24 @@ SIDES: dict[str, SelectionCode] = {
     "under": SelectionCode.UNDER,
     "yes": SelectionCode.YES,
     "no": SelectionCode.NO,
+    # Doppelte Chance - in den echten Daten als kombinierte Seite geliefert.
+    "home+draw": SelectionCode.HOME_OR_DRAW,
+    "away+draw": SelectionCode.AWAY_OR_DRAW,
+    "draw+home": SelectionCode.HOME_OR_DRAW,
+    "draw+away": SelectionCode.AWAY_OR_DRAW,
+    "home+away": SelectionCode.HOME_OR_AWAY,
+    "away+home": SelectionCode.HOME_OR_AWAY,
 }
+
+#: Kombinierte Seiten bilden die Doppelte Chance - ein eigener Markt, nicht
+#: eine Selektion des Dreiwegmarktes.
+DOUBLE_CHANCE_SIDES = frozenset(
+    {
+        SelectionCode.HOME_OR_DRAW,
+        SelectionCode.AWAY_OR_DRAW,
+        SelectionCode.HOME_OR_AWAY,
+    }
+)
 
 #: ``sportID`` -> unsere Sportart. Andere Sportarten sind nicht Teil dieses
 #: Projekts und werden verworfen.
@@ -207,9 +262,28 @@ class SportsGameOddsProvider(OddsProvider):
         self._fetch_lock = asyncio.Lock()
         #: Was verworfen wurde und warum. Sichtbar statt still verschluckt.
         self.skipped: Counter[str] = Counter()
+        #: Je Grund ein Beispielmarkt - macht unbekannte Marktarten zuordenbar.
+        self.skipped_samples: dict[str, dict[str, str]] = {}
         #: Rohantwort der letzten Seite - nur für die Einrichtungshilfe, damit
         #: sich das Quotenformat gegen die Anzeige des Buchmachers prüfen lässt.
         self.last_raw_events: list[dict[str, Any]] = []
+
+    def _skip(self, reason: str, market: dict[str, Any]) -> None:
+        """Übersprungenen Markt zählen und ein Beispiel merken.
+
+        Der Zähler allein sagt nur *dass* etwas fehlt. Erst ``statID`` und
+        ``marketName`` verraten, **welcher** Markt sich dahinter verbirgt -
+        ohne sie lässt sich eine neue Marktart nicht zuordnen, ohne zu raten.
+        """
+        self.skipped[reason] += 1
+        if reason not in self.skipped_samples:
+            self.skipped_samples[reason] = {
+                "statID": str(market.get("statID") or ""),
+                "periodID": str(market.get("periodID") or ""),
+                "betTypeID": str(market.get("betTypeID") or ""),
+                "sideID": str(market.get("sideID") or ""),
+                "marketName": str(market.get("marketName") or ""),
+            }
 
     # ------------------------------------------------------- Drosselung
     def requests_per_cycle(self) -> int:
@@ -400,6 +474,9 @@ class SportsGameOddsProvider(OddsProvider):
             SelectionCode.HOME: home,
             SelectionCode.AWAY: away,
             SelectionCode.DRAW: "Unentschieden",
+            SelectionCode.HOME_OR_DRAW: f"{home} oder Unentschieden",
+            SelectionCode.AWAY_OR_DRAW: f"{away} oder Unentschieden",
+            SelectionCode.HOME_OR_AWAY: f"{home} oder {away}",
             SelectionCode.OVER: "Over",
             SelectionCode.UNDER: "Under",
             SelectionCode.YES: "Ja",
@@ -412,21 +489,61 @@ class SportsGameOddsProvider(OddsProvider):
         """Marktart, Linie und Selektion aus den Einzelfeldern ableiten."""
         bet_type = BET_TYPES.get(str(market.get("betTypeID") or "").lower())
         if bet_type is None:
-            self.skipped[f"bet_type:{market.get('betTypeID')}"] += 1
+            self._skip(f"bet_type:{market.get('betTypeID')}", market)
             return None
-        period = PERIODS.get(str(market.get("periodID") or "").lower())
+        period_id = str(market.get("periodID") or "").lower()
+        period = PERIODS.get(period_id)
+        if period is None and sport is Sport.TENNIS:
+            period = TENNIS_PERIODS.get(period_id)
         if period is None:
-            self.skipped[f"periode:{market.get('periodID')}"] += 1
+            self._skip(f"periode:{market.get('periodID')}", market)
             return None
         code = SIDES.get(str(market.get("sideID") or "").lower())
         if code is None:
             # Spielerwetten und Sonderselektionen: kein Rateversuch.
-            self.skipped[f"seite:{market.get('sideID')}"] += 1
+            self._skip(f"seite:{market.get('sideID')}", market)
             return None
 
-        if bet_type == "moneyline":
+        if bet_type == "yesno":
+            # Ja/Nein deckt viele Märkte ab (Spielerwetten, Sonderwetten). Nur
+            # der eine, den die statID eindeutig benennt, wird übernommen.
+            if not _is_btts(str(market.get("statID") or "")):
+                self._skip(f"bet_type:yn:{market.get('statID')}", market)
+                return None
+            if sport is not Sport.FOOTBALL:
+                self._skip(f"btts_ausserhalb_fussball:{sport.value}", market)
+                return None
+            if code not in (SelectionCode.YES, SelectionCode.NO):
+                self._skip(f"btts_seite:{market.get('sideID')}", market)
+                return None
+            return MarketKey(type=MarketType.BTTS, line=None, period=period), Selection(
+                code=code,
+                label="Ja" if code is SelectionCode.YES else "Nein",
+                raw=str(market.get("sideID") or ""),
+            )
+
+        if code in DOUBLE_CHANCE_SIDES:
+            # Kombinierte Seiten sind ein eigener Markt. Im Dreiwegbuch wären
+            # sie systematisch kürzer und würden dort als Fehlpreis auffallen.
+            if sport is not Sport.FOOTBALL:
+                self._skip(f"doppelte_chance_ausserhalb_fussball:{sport.value}", market)
+                return None
+            market_type = MarketType.DOUBLE_CHANCE
+            line = None
+        elif bet_type == "moneyline3":
+            # Dreiweg = 1X2. Im Tennis gibt es kein Unentschieden.
+            if sport is not Sport.FOOTBALL:
+                self._skip(f"dreiweg_ausserhalb_fussball:{sport.value}", market)
+                return None
+            market_type = MarketType.MATCH_ODDS
+            line = None
+        elif bet_type == "moneyline":
+            # Zweiweg. Im Fußball ist das **nicht** 1X2: ohne das
+            # Unentschieden entspricht es Draw No Bet. Ein eigener Schlüssel
+            # ist Pflicht, sonst mischen sich Zwei- und Dreiwegpreise in einem
+            # Buch - und jede Zweiwegquote sähe wie ein Fehlpreis aus.
             market_type = (
-                MarketType.MATCH_ODDS if sport is Sport.FOOTBALL else MarketType.MATCH_WINNER
+                MarketType.DRAW_NO_BET if sport is Sport.FOOTBALL else MarketType.MATCH_WINNER
             )
             line = None
         elif bet_type == "spread":
@@ -461,7 +578,7 @@ class SportsGameOddsProvider(OddsProvider):
             if not isinstance(market, dict):
                 continue
             if market.get("cancelled"):
-                self.skipped["markt_abgesagt"] += 1
+                self._skip("markt_abgesagt", market)
                 continue
             parsed = self._market_and_selection(market, sport, home=home, away=away)
             if parsed is None:
@@ -483,7 +600,7 @@ class SportsGameOddsProvider(OddsProvider):
 
                 price = american_to_decimal(entry.get("odds"))
                 if price is None:
-                    self.skipped["quote_unlesbar"] += 1
+                    self._skip("quote_unlesbar", market)
                     continue
                 quotes.append(
                     OddsQuote(
@@ -536,6 +653,7 @@ class SportsGameOddsProvider(OddsProvider):
         quotes: list[OddsQuote] = []
         cursor: str | None = None
         self.skipped.clear()
+        self.skipped_samples.clear()
 
         for _ in range(self.max_pages):
             page_params = dict(params)

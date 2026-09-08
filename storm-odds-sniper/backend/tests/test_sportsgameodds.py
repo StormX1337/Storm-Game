@@ -162,7 +162,8 @@ class TestQuotenparsing:
         prov = with_transport(provider(), lambda r: httpx.Response(200, json=page([event()])))
         quotes = await prov.get_odds()
         assert {q.bookmaker for q in quotes} == {"bet365", "pinnacle"}
-        assert quotes[0].market.type is MarketType.MATCH_ODDS
+        # Zweiweg im Fußball ist Draw No Bet, nicht 1X2 - siehe TestZweiwegDreiweg.
+        assert quotes[0].market.type is MarketType.DRAW_NO_BET
         assert quotes[0].selection.code is SelectionCode.HOME
         assert quotes[0].price == pytest.approx(2.50)
 
@@ -418,3 +419,175 @@ class TestKeineSimulationMehr:
 
         assert set(FACTORIES) == {"the_odds_api", "sportsgameodds", "betfair"}
         assert set(PROVIDER_SPECS) == {"the_odds_api", "sportsgameodds", "betfair"}
+
+
+class TestZweiwegDreiweg:
+    """Der gefährlichste Fehler dieser Quelle: ``ml`` und ``ml3way`` im selben
+    Buch. Eine Zweiwegquote ist ohne das Unentschieden systematisch kürzer -
+    zusammen mit Dreiwegpreisen verglichen, sähe jede von ihnen wie ein
+    Fehlpreis aus, und der Scanner meldete am laufenden Band Unsinn.
+    """
+
+    def _key(self, bet_type, side, sport=Sport.FOOTBALL, period="game"):
+        prov = provider()
+        result = prov._market_and_selection(
+            {"betTypeID": bet_type, "sideID": side, "periodID": period},
+            sport,
+            home="Bayern",
+            away="Dortmund",
+        )
+        return None if result is None else result[0].key
+
+    def test_three_way_is_the_1x2_market(self):
+        assert self._key("ml3way", "home") == "1x2||full_time"
+        assert self._key("ml3way", "draw") == "1x2||full_time"
+
+    def test_two_way_football_is_draw_no_bet(self):
+        assert self._key("ml", "home") == "draw_no_bet||full_time"
+
+    def test_the_two_never_share_a_book(self):
+        assert self._key("ml", "home") != self._key("ml3way", "home")
+
+    def test_tennis_two_way_is_the_match_winner(self):
+        assert self._key("ml", "home", Sport.TENNIS) == "match_winner||full_time"
+
+    def test_tennis_has_no_three_way(self):
+        assert self._key("ml3way", "home", Sport.TENNIS) is None
+
+
+class TestDoppelteChance:
+    """``away+draw`` steht so in den echten Daten."""
+
+    def _parsed(self, side, sport=Sport.FOOTBALL):
+        prov = provider()
+        return prov._market_and_selection(
+            {"betTypeID": "ml3way", "sideID": side, "periodID": "game"},
+            sport,
+            home="Bayern",
+            away="Dortmund",
+        )
+
+    @pytest.mark.parametrize(
+        ("side", "code"),
+        [
+            ("home+draw", SelectionCode.HOME_OR_DRAW),
+            ("away+draw", SelectionCode.AWAY_OR_DRAW),
+            ("home+away", SelectionCode.HOME_OR_AWAY),
+        ],
+    )
+    def test_combined_sides_become_double_chance(self, side, code):
+        key, selection = self._parsed(side)
+        assert key.type is MarketType.DOUBLE_CHANCE
+        assert selection.code is code
+
+    def test_it_is_its_own_market_not_a_1x2_selection(self):
+        """Sonst stünde eine kurze Doppelchance neben den 1X2-Preisen."""
+        combined, _ = self._parsed("away+draw")
+        single, _ = self._parsed("home")
+        assert combined.key != single.key
+
+    def test_the_label_names_the_team(self):
+        _, selection = self._parsed("away+draw")
+        assert selection.display == "Dortmund oder Unentschieden"
+
+    def test_not_offered_outside_football(self):
+        assert self._parsed("home+draw", Sport.TENNIS) is None
+
+
+class TestTennisSaetze:
+    """``1s`` steht so in den echten Daten - im Fußball wäre es sinnlos."""
+
+    def _key(self, period, sport):
+        prov = provider()
+        result = prov._market_and_selection(
+            {"betTypeID": "ou", "sideID": "over", "periodID": period}, sport
+        )
+        return None if result is None else result[0].key
+
+    @pytest.mark.parametrize(("period", "expected"), [("1s", "set_1"), ("3s", "set_3")])
+    def test_set_periods_are_recognised_for_tennis(self, period, expected):
+        assert self._key(period, Sport.TENNIS).endswith(expected)
+
+    def test_set_periods_are_refused_for_football(self):
+        assert self._key("1s", Sport.FOOTBALL) is None
+
+
+class TestUebersprungenesIstBelegbar:
+    """Ein Zähler sagt nur *dass* etwas fehlt - für die Zuordnung braucht es
+    statID und Namen, sonst bleibt nur Raten."""
+
+    async def test_a_sample_is_kept_per_reason(self):
+        raw = event(
+            odds={
+                "x": market(
+                    betTypeID="yn",
+                    sideID="yes",
+                    statID="anytimeGoalscorer",
+                    marketName="Anytime Goalscorer",
+                )
+            }
+        )
+        prov = with_transport(provider(), lambda r: httpx.Response(200, json=page([raw])))
+        await prov.get_odds()
+        sample = prov.skipped_samples["bet_type:yn:anytimeGoalscorer"]
+        assert sample["statID"] == "anytimeGoalscorer"
+        assert sample["marketName"] == "Anytime Goalscorer"
+
+    async def test_samples_reset_between_fetches(self):
+        prov = with_transport(provider(), lambda r: httpx.Response(200, json=page([event()])))
+        await prov.get_odds()
+        assert prov.skipped_samples == {}
+
+    async def test_yes_no_markets_are_not_guessed(self):
+        """2117 solcher Märkte kamen im echten Lauf. Nur der eine, den die
+        statID selbst benennt, wird übernommen - der Rest bleibt liegen."""
+        raw = event(odds={"x": market(betTypeID="yn", sideID="yes", statID="irgendwas")})
+        prov = with_transport(provider(), lambda r: httpx.Response(200, json=page([raw])))
+        assert await prov.get_odds() == []
+
+
+class TestBeideTeamsTreffen:
+    """``yn`` ist ein Sammelbecken. Erkannt wird nur, was sich selbst benennt."""
+
+    def _parsed(self, stat_id, side="yes", sport=Sport.FOOTBALL):
+        prov = provider()
+        return prov._market_and_selection(
+            {"betTypeID": "yn", "sideID": side, "periodID": "game", "statID": stat_id},
+            sport,
+            home="Bayern",
+            away="Dortmund",
+        )
+
+    @pytest.mark.parametrize(
+        "stat_id",
+        ["bothTeamsToScore", "both_teams_to_score", "BothTeamsScore", "BOTHTEAMSTOSCORE"],
+    )
+    def test_spelling_does_not_matter(self, stat_id):
+        key, selection = self._parsed(stat_id)
+        assert key.type is MarketType.BTTS
+        assert selection.code is SelectionCode.YES
+
+    @pytest.mark.parametrize(
+        "stat_id", ["playerToScore", "firstToScore", "points", "anytimeGoalscorer"]
+    )
+    def test_other_yes_no_markets_stay_out(self, stat_id):
+        assert self._parsed(stat_id) is None
+
+    def test_no_is_the_counter_selection(self):
+        _, selection = self._parsed("bothTeamsToScore", side="no")
+        assert selection.code is SelectionCode.NO
+        assert selection.display == "Nein"
+
+    def test_not_offered_outside_football(self):
+        assert self._parsed("bothTeamsToScore", sport=Sport.TENNIS) is None
+
+    def test_an_odd_side_is_refused(self):
+        assert self._parsed("bothTeamsToScore", side="over") is None
+
+    def test_it_does_not_share_a_book_with_anything_else(self):
+        key, _ = self._parsed("bothTeamsToScore")
+        prov = provider()
+        other, _ = prov._market_and_selection(
+            {"betTypeID": "ml3way", "sideID": "home", "periodID": "game"}, Sport.FOOTBALL
+        )
+        assert key.key != other.key
