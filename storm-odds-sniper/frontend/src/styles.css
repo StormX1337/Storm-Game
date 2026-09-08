@@ -58,6 +58,11 @@ a:hover { text-decoration: underline; }
 /* ---------------------------------------------------------- Demo-Banner */
 /* Ohne diesen Hinweis halten Nutzer die simulierten Spiele für echt - das
    Präfix "Mock" allein ist als Warnung zu leise. */
+/* Ein display-Wert in einer Klasse schlägt das UA-Stylesheet für [hidden] -
+   ohne diese Regel bleibt jedes .banner sichtbar, auch wenn das Skript es
+   ausgeblendet hat. Betraf auch das Simulations-Banner. */
+[hidden] { display: none !important; }
+
 .banner {
   display: flex; gap: 10px; flex-wrap: wrap; align-items: baseline;
   margin: 16px 20px 0; padding: 11px 14px;
@@ -68,6 +73,9 @@ a:hover { text-decoration: underline; }
   color: #f4e4bd; font-size: 13px; line-height: 1.55;
 }
 .banner strong { color: var(--warn); }
+/* Versionshinweis: dieselbe Form wie das Simulationsbanner, andere Farbe. */
+.banner--warn { border-left-color: var(--bad); }
+.banner--warn strong { color: var(--bad); }
 .banner code {
   font-family: var(--mono); font-size: 12px;
   background: rgba(0, 0, 0, .35); padding: 1px 5px; border-radius: 4px;

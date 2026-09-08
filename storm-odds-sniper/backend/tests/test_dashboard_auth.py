@@ -292,3 +292,95 @@ class TestComposeInterpolation:
         if result.returncode != 0:
             pytest.skip(f"docker compose nicht nutzbar: {result.stderr[:120]}")
         assert "variable is not set" not in result.stderr
+
+
+class TestDashboardRobustheit:
+    """Das Dashboard darf nicht an einem einzelnen Endpunkt hängen.
+
+    Beobachtet: nach einem ``git pull`` ohne Neubau kannte die alte API
+    ``/alerts/scorecard`` nicht. Das eine 404 riss über ``Promise.all`` alle
+    anderen Abfragen mit - jede Kachel blieb auf "Lade...", obwohl ihre Daten
+    längst da waren.
+    """
+
+    APP = REPO / "frontend" / "src" / "app.js"
+    CSS = REPO / "frontend" / "src" / "styles.css"
+    HTML = REPO / "frontend" / "src" / "index.html"
+
+    def test_requests_are_settled_not_all_or_nothing(self):
+        source = self.APP.read_text()
+        assert "Promise.allSettled" in source
+        assert "Promise.all(" not in source, "ein Ausfall würde wieder alles mitreißen"
+
+    def test_a_missing_endpoint_is_named_in_the_page(self):
+        source = self.APP.read_text()
+        assert "reportVersionMismatch" in source
+        assert "error.status === 404" in source
+        html = self.HTML.read_text()
+        assert 'id="stale-api"' in html
+        assert "--build" in html, "der Hinweis muss den Befehl nennen, der es behebt"
+
+    def test_hidden_actually_hides(self):
+        """``.banner`` setzt display:flex und schlägt damit das UA-[hidden]."""
+        css = self.CSS.read_text()
+        assert "[hidden]" in css and "display: none !important" in css
+
+    def test_every_panel_renders_independently(self):
+        """Jeder Renderaufruf hängt an seiner eigenen Antwort."""
+        source = self.APP.read_text()
+        for guard in (
+            "if (stats) {",
+            "if (events) {",
+            "if (providers) {",
+            "if (scorecard) {",
+            "if (alerts) {",
+        ):
+            assert guard in source, guard
+
+
+class TestAbschalten:
+    """Der Zugangsschutz muss sich genauso einfach wieder entfernen lassen."""
+
+    def _prepare(self, tmp_path: Path) -> Path:
+        (tmp_path / "scripts").mkdir()
+        shutil.copy(SETTER, tmp_path / "scripts" / SETTER.name)
+        (tmp_path / ".env").write_text("PROVIDERS=mock\nPOSTGRES_PASSWORD=geheim\n")
+        return tmp_path
+
+    def _run(self, root: Path, *args: str) -> subprocess.CompletedProcess:
+        return subprocess.run(  # noqa: S603 - festes Skript aus dem Repo
+            ["/bin/sh", str(root / "scripts" / SETTER.name), *args],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    @pytest.mark.skipif(not shutil.which("openssl"), reason="openssl nicht verfügbar")
+    def test_off_clears_the_value(self, tmp_path):
+        root = self._prepare(tmp_path)
+        self._run(root, "admin", "geheim")
+        result = self._run(root, "--off")
+        assert result.returncode == 0
+        env = (root / ".env").read_text()
+        assert "DASHBOARD_AUTH=\n" in env or env.rstrip().endswith("DASHBOARD_AUTH=")
+        assert "apr1" not in env
+        assert "ABGESCHALTET" in result.stdout
+
+    def test_off_keeps_other_settings(self, tmp_path):
+        root = self._prepare(tmp_path)
+        self._run(root, "--off")
+        env = (root / ".env").read_text()
+        assert "POSTGRES_PASSWORD=geheim" in env
+        assert "PROVIDERS=mock" in env
+
+    def test_off_says_the_dashboard_is_open_again(self, tmp_path):
+        root = self._prepare(tmp_path)
+        result = self._run(root, "--off")
+        assert "erreichbar" in result.stdout
+
+    def test_off_leaves_exactly_one_line(self, tmp_path):
+        root = self._prepare(tmp_path)
+        self._run(root, "--off")
+        self._run(root, "--off")
+        assert (root / ".env").read_text().count("DASHBOARD_AUTH=") == 1

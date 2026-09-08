@@ -944,6 +944,31 @@ docker compose logs scanner | grep -i nachkontrolle | tail
 | Log: `urteile ohne zugehörigen alarm verworfen` | Der DB-Writer kommt nicht hinterher. `DB_WRITER_BATCH` erhöhen oder `SNAPSHOT_PERSIST_EVERY` reduzieren. |
 | `FOLLOWUP_ENABLED=false` | Die Nachkontrolle ist abgeschaltet. |
 
+### Dashboard bleibt auf „Lade…" nach einem Update
+
+Kacheln leer, aber oben steht „Live verbunden"? Dann läuft eine **API, die
+älter ist als das Dashboard**. Die Dashboard-Dateien liegen als Bind-Mount vor
+und sind nach `git pull` sofort neu; die API steckt im gebauten Image, und
+`docker compose up -d` **ohne `--build`** lässt das alte Image weiterlaufen.
+Sie kennt dann einen neuen Endpunkt noch nicht und antwortet mit 404.
+
+```bash
+docker compose up -d --build
+```
+
+Nach einem `git pull` ist `--build` die Regel, nicht die Ausnahme. Das
+Dashboard weist seit dieser Version selbst darauf hin (rotes Banner mit dem
+fehlenden Endpunkt) und füllt alle übrigen Kacheln trotzdem.
+
+### Zugangsschutz wieder abschalten
+
+```bash
+./scripts/set-dashboard-password.sh --off
+docker compose up -d
+```
+
+Danach ist das Dashboard wieder für jeden erreichbar, der die Adresse kennt.
+
 ### `The "apr1" variable is not set` beim Start
 
 ```
@@ -1029,6 +1054,11 @@ git pull
 docker compose up -d --build
 ```
 
+**`--build` ist Pflicht, nicht optional.** Das Dashboard liegt als Bind-Mount
+im Container und ist nach `git pull` sofort neu; die API steckt im gebauten
+Image. Ohne `--build` laufen beide in verschiedenen Ständen — das Dashboard
+fragt dann Endpunkte ab, die die alte API noch nicht kennt.
+
 Migrationen laufen beim Start automatisch. Vorher sichern:
 
 ```bash
@@ -1066,7 +1096,8 @@ Dann **unbedingt** ein Passwort setzen — sonst sieht jeder mit der Adresse
 alle Alarme, Events und Systemdaten:
 
 ```bash
-./scripts/set-dashboard-password.sh
+./scripts/set-dashboard-password.sh          # setzen
+./scripts/set-dashboard-password.sh --off    # wieder abschalten
 docker compose up -d
 ```
 

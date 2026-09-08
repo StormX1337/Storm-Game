@@ -586,21 +586,64 @@
 
   async function fetchJson(path) {
     const response = await fetch(`${API}${path}`, { headers: { accept: "application/json" } });
-    if (!response.ok) throw new Error(`${path} -> HTTP ${response.status}`);
+    if (!response.ok) {
+      const error = new Error(`${path} -> HTTP ${response.status}`);
+      error.status = response.status;
+      error.path = path;
+      throw error;
+    }
     return response.json();
   }
 
-  async function refresh() {
-    try {
-      const [health, stats, providers, events, alerts, scorecard] = await Promise.all([
-        fetchJson("/health"),
-        fetchJson("/stats"),
-        fetchJson("/health/providers"),
-        fetchJson("/events?limit=120"),
-        fetchJson("/alerts?limit=80"),
-        fetchJson("/alerts/scorecard"),
-      ]);
+  /* Meldet, dass die API älter ist als dieses Dashboard.
 
+     Passiert nach einem `git pull` ohne Neubau: das Dashboard liegt als
+     Bind-Mount vor und ist sofort neu, die API steckt im gebauten Image und
+     bleibt alt. Sie kennt dann einen Endpunkt noch nicht und antwortet mit
+     404. Ohne diesen Hinweis sieht man nur leere Kacheln. */
+  function reportVersionMismatch(paths) {
+    const banner = $("stale-api");
+    if (!paths.length) {
+      banner.hidden = true;
+      return;
+    }
+    $("stale-api-paths").textContent = paths.join(", ");
+    banner.hidden = false;
+  }
+
+  async function refresh() {
+    // Bewusst allSettled statt all: ein einzelner fehlschlagender Endpunkt
+    // darf nicht das ganze Dashboard leeren. Genau das ist passiert - eine
+    // alte API kannte /alerts/scorecard nicht, und daraufhin blieb *jede*
+    // Kachel auf "Lade...", auch die, deren Daten längst da waren.
+    const requests = {
+      health: "/health",
+      stats: "/stats",
+      providers: "/health/providers",
+      events: "/events?limit=120",
+      alerts: "/alerts?limit=80",
+      scorecard: "/alerts/scorecard",
+    };
+    const names = Object.keys(requests);
+    const settled = await Promise.allSettled(names.map((name) => fetchJson(requests[name])));
+
+    const data = {};
+    const missing = [];
+    settled.forEach((result, index) => {
+      const name = names[index];
+      if (result.status === "fulfilled") {
+        data[name] = result.value;
+        return;
+      }
+      const error = result.reason || {};
+      if (error.status === 404) missing.push(requests[name]);
+      console.warn(`Aktualisierung: ${name} fehlgeschlagen -`, error.message || error);
+    });
+    reportVersionMismatch(missing);
+
+    const { health, stats, providers, events, alerts, scorecard } = data;
+
+    if (stats) {
       $("kpi-live").textContent = stats.live_events_redis ?? stats.events_live ?? 0;
       $("kpi-tracked").textContent = stats.tracked_events_redis ?? stats.events_total ?? 0;
       $("kpi-alerts").textContent = stats.alerts_window ?? 0;
@@ -610,14 +653,21 @@
       $("kpi-providers").textContent = `${stats.providers_connected ?? 0}/${
         stats.providers_total ?? 0
       }`;
+      renderSuppressed(stats);
+    }
 
+    if (events) {
       state.events = new Map(events.map((e) => [e.event_id, e]));
       renderEvents();
+    }
+    if (providers) {
       renderProviders(providers);
       updateDemoBanner(providers);
-      renderSuppressed(stats);
+    }
+    if (health || stats) renderSystem(health || {}, stats || {});
+
+    if (scorecard) {
       renderScorecard(scorecard);
-      renderSystem(health, stats);
       // Ein Durchschnitt aus einem einzigen Alarm ist keine Kennzahl, sondern
       // ein Einzelfall. Bis genug ausgewertet ist, bleibt die Kachel leer.
       const clvKpi = $("kpi-clv");
@@ -627,7 +677,9 @@
       clvKpi.parentElement.title = enough
         ? `Abstand der gemeldeten Preise zum späteren Marktkonsens, über ${scorecard.scored} Alarme. Kein Gewinn.`
         : `Noch zu wenige ausgewertete Alarme (${scorecard.scored || 0} von ${MIN_SCORED}).`;
+    }
 
+    if (alerts) {
       mergeVerdicts(alerts);
 
       if (!state.alerts.length && alerts.length) {
@@ -645,8 +697,6 @@
         renderMoves();
         renderBookmakers();
       }
-    } catch (error) {
-      console.warn("Aktualisierung fehlgeschlagen:", error.message);
     }
   }
 

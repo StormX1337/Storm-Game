@@ -36,6 +36,17 @@
     </span>
   </div>
 
+  <div id="stale-api" class="banner banner--warn" role="status" hidden>
+    <strong>⚠️ API ist älter als das Dashboard</strong>
+    <span>
+      Diese Endpunkte kennt die laufende API noch nicht:
+      <code id="stale-api-paths"></code>.
+      Die Dashboard-Dateien liegen als Bind-Mount vor und sind nach einem
+      <code>git pull</code> sofort neu, die API steckt im gebauten Image.
+      Neu bauen mit <code>docker compose up -d --build</code>.
+    </span>
+  </div>
+
   <section class="kpis" aria-label="Kennzahlen">
     <article class="kpi"><span class="kpi__label">Live-Events</span><strong id="kpi-live">–</strong></article>
     <article class="kpi"><span class="kpi__label">Beobachtet</span><strong id="kpi-tracked">–</strong></article>

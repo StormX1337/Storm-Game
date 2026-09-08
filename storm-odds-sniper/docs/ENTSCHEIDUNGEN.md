@@ -164,6 +164,24 @@ wiederholt, nie die Bewertung: eine spätere Neubewertung würde gegen einen
 anderen Markt messen. Nach `WRITE_ATTEMPTS` Versuchen wird aufgegeben, mit
 einer Warnung im Log statt stillem Verlust.
 
+## Warum das Dashboard jede Abfrage einzeln behandelt
+
+Es hing an einem `Promise.all`. Nach einem `git pull` ohne `--build` kannte
+die alte API `/alerts/scorecard` noch nicht, antwortete mit 404 - und dieses
+eine 404 riss alle fünf anderen Abfragen mit. Sichtbar war: „Live verbunden"
+oben, darunter jede Kachel auf „Lade…". Die Daten für Datenquellen,
+Buchmacher und Systemstatus lagen fertig vor und wurden weggeworfen.
+
+Jetzt `Promise.allSettled`, jede Kachel rendert aus ihrer eigenen Antwort.
+Ein 404 auf einem bekannten Endpunkt ist zudem ein eindeutiges Zeichen für
+unterschiedlich alte Teile und wird als solches gemeldet - mit dem Befehl,
+der es behebt. Ein leeres Dashboard ohne Erklärung sieht aus wie ein kaputtes
+System; es war nur ein vergessenes `--build`.
+
+Nebenbei aufgefallen: `.banner { display: flex }` schlägt das
+`[hidden]`-Attribut des Browsers. Das Simulations-Banner ließ sich dadurch
+nie ausblenden - es fiel nur nicht auf, weil die Simulation meistens lief.
+
 ## Warum ein Cooldown *und* eine Duplikaterkennung
 
 Sie lösen verschiedene Probleme. Der Cooldown begrenzt die Frequenz je

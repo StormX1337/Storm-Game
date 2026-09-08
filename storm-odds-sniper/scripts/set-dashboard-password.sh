@@ -12,6 +12,25 @@ cd "$(dirname "$0")/.."
 USER_NAME="${1:-}"
 PASSWORD="${2:-}"
 
+# Zugangsschutz wieder abschalten. Bewusst als eigener Weg statt "einfach die
+# Zeile löschen": von Hand editiert wird die .env sonst schnell kaputt.
+case "$USER_NAME" in
+    --off|--aus|off|aus)
+        [ -f .env ] || { echo "Keine .env vorhanden - nichts zu tun."; exit 0; }
+        if grep -q '^DASHBOARD_AUTH=' .env; then
+            TMP=$(mktemp)
+            grep -v '^DASHBOARD_AUTH=' .env > "$TMP"
+            cat "$TMP" > .env
+            rm -f "$TMP"
+        fi
+        printf 'DASHBOARD_AUTH=\n' >> .env
+        echo "Zugangsschutz ABGESCHALTET."
+        echo "Das Dashboard ist danach für jeden erreichbar, der die Adresse kennt."
+        echo "Übernehmen mit:  docker compose up -d"
+        exit 0
+        ;;
+esac
+
 if [ -z "$USER_NAME" ]; then
     printf 'Benutzername [admin]: '
     read -r USER_NAME
