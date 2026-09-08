@@ -4,7 +4,7 @@
 #   ./scripts/set-dashboard-password.sh                 # fragt nach Benutzer und Passwort
 #   ./scripts/set-dashboard-password.sh admin geheim    # nicht interaktiv
 #
-# Schreibt DASHBOARD_AUTH in die .env. Danach: docker compose up -d
+# Schreibt DASHBOARD_AUTH in die .env. Danach: docker compose up -d --build
 set -eu
 
 cd "$(dirname "$0")/.."
@@ -26,7 +26,7 @@ case "$USER_NAME" in
         printf 'DASHBOARD_AUTH=\n' >> .env
         echo "Zugangsschutz ABGESCHALTET."
         echo "Das Dashboard ist danach für jeden erreichbar, der die Adresse kennt."
-        echo "Übernehmen mit:  docker compose up -d"
+        echo "Übernehmen mit:  docker compose up -d --build"
         exit 0
         ;;
 esac
@@ -116,4 +116,4 @@ if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; 
     fi
 fi
 
-echo "Aktivieren mit:  docker compose up -d"
+echo "Aktivieren mit:  docker compose up -d --build"

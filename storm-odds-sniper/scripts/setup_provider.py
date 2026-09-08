@@ -190,7 +190,7 @@ async def check_the_odds_api(args: argparse.Namespace) -> int:
     if args.write:
         written = apply_to_env(Path(args.env), env_block)
         print(f"\n{OK} {written} Zeilen in {args.env} gesetzt.")
-        print("       Jetzt: docker compose up -d")
+        print("       Jetzt: docker compose up -d --build")
     else:
         print("\n       Mit --write trägt das Skript das direkt in die .env ein.")
 

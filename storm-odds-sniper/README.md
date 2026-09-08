@@ -1046,6 +1046,28 @@ einen einzigen Alarm vergehen. Das ist der Unterschied zwischen erfundenen und
 echten Daten, kein Defekt. Was der Scanner in der Zwischenzeit tut, steht im
 Panel „Warum keine Alarme?".
 
+### `invalid choice: 'sportsgameodds'` bei der Einrichtungshilfe
+
+```
+setup_provider.py: error: argument provider: invalid choice: 'sportsgameodds'
+```
+
+Dasselbe Muster wie beim Dashboard: der Host hat den neuen Code, der Container
+das alte Image. Seit dieser Version reicht `setup-provider.sh` `backend/` und
+`scripts/` vom Host in den Container hinein — der Fehler kann so nicht mehr
+auftreten, ein `git pull` genügt:
+
+```bash
+git pull
+./scripts/setup-provider.sh sportsgameodds --key DEIN_KEY --live
+```
+
+Für die **laufenden Dienste** (Scanner, API) bleibt `--build` nötig:
+
+```bash
+docker compose up -d --build
+```
+
 ### Dashboard bleibt auf „Lade…" nach einem Update
 
 Kacheln leer, aber oben steht „Live verbunden"? Dann läuft eine **API, die

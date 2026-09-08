@@ -7,6 +7,7 @@ Logik, die entscheidet ob und wie geschützt wird, ist hier abgedeckt.
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -452,3 +453,87 @@ class TestSimulationAbschalten:
     def test_missing_providers_line_is_an_error(self, tmp_path):
         result = self._run(tmp_path, None)
         assert result.returncode != 0
+
+
+class TestWrapperNutztHostCode:
+    """``setup-provider.sh`` muss den aktuellen Code ausführen, nicht den aus
+    dem Image.
+
+    Beobachtet: nach ``git pull`` ohne ``--build`` brach die Einrichtungshilfe
+    mit ``invalid choice: 'sportsgameodds'`` ab - der neue Provider lag auf dem
+    Host, der Container lief mit dem alten Image.
+    """
+
+    WRAPPER = REPO / "scripts" / "setup-provider.sh"
+
+    def _run(self, tmp_path: Path, *args: str) -> tuple[subprocess.CompletedProcess, str]:
+        (tmp_path / "scripts").mkdir()
+        (tmp_path / "backend").mkdir()
+        shutil.copy(self.WRAPPER, tmp_path / "scripts" / self.WRAPPER.name)
+        shutil.copy(REPO / "docker-compose.yml", tmp_path / "docker-compose.yml")
+        (tmp_path / ".env").write_text("PROVIDERS=mock\n")
+
+        fake = tmp_path / "fake"
+        fake.mkdir()
+        calls = tmp_path / "calls.log"
+        (fake / "docker").write_text(
+            "#!/bin/sh\n"
+            'if [ "$1" = "info" ]; then exit 0; fi\n'
+            f'printf "%s\\n" "$*" >> "{calls}"\n'
+            "exit 0\n"
+        )
+        (fake / "docker").chmod(0o755)
+
+        env = dict(os.environ, PATH=f"{fake}:{os.environ['PATH']}")
+        result = subprocess.run(  # noqa: S603 - festes Skript aus dem Repo
+            ["/bin/sh", str(tmp_path / "scripts" / self.WRAPPER.name), *args],
+            cwd=tmp_path,
+            capture_output=True,
+            text=True,
+            env=env,
+            check=False,
+        )
+        return result, calls.read_text() if calls.exists() else ""
+
+    def test_host_code_is_mounted_over_the_image(self, tmp_path):
+        _, call = self._run(tmp_path, "sportsgameodds", "--key", "x")
+        assert "/app/backend:ro" in call, "backend/ wird nicht hineingereicht"
+        assert "/app/scripts:ro" in call, "scripts/ wird nicht hineingereicht"
+
+    def test_the_env_stays_writable(self, tmp_path):
+        """--write muss auf dem Host wirken - die .env darf nicht read-only sein."""
+        _, call = self._run(tmp_path, "the_odds_api", "--key", "x", "--write")
+        assert "/app/.env" in call
+        assert "/app/.env:ro" not in call
+
+    def test_arguments_are_passed_through(self, tmp_path):
+        _, call = self._run(tmp_path, "sportsgameodds", "--key", "GEHEIM", "--live")
+        assert "sportsgameodds" in call
+        assert "--live" in call
+        assert "GEHEIM" in call
+
+    def test_bytecode_is_not_written_into_the_readonly_mount(self, tmp_path):
+        _, call = self._run(tmp_path, "the_odds_api", "--key", "x")
+        assert "PYTHONDONTWRITEBYTECODE=1" in call
+
+
+class TestBuildHinweise:
+    """Nach einem git pull ist ``--build`` die Regel, nicht die Ausnahme.
+
+    Ein Hinweis ohne ``--build`` führt zu genau der Konstellation, die schon
+    zweimal Zeit gekostet hat: Host neu, Image alt.
+    """
+
+    @pytest.mark.parametrize(
+        "name",
+        ["setup_provider.py", "no-simulation.sh", "set-dashboard-password.sh", "setup-provider.sh"],
+    )
+    def test_no_hint_forgets_the_build_flag(self, name):
+        text = (REPO / "scripts" / name).read_text()
+        for line in text.splitlines():
+            if "docker compose up -d" in line and "--build" not in line:
+                pytest.fail(f"{name}: Hinweis ohne --build: {line.strip()}")
+
+    def test_the_readme_says_build_is_mandatory(self):
+        readme = (REPO / "README.md").read_text()
+        assert "`--build` ist Pflicht" in readme

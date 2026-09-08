@@ -240,6 +240,25 @@ einen Zähler. Liefert eine Quelle Events, aber keine einzige verwertbare
 Quote, geht der Provider mit dieser Begründung in die Health-Anzeige - denn
 sonst sieht ein Schema-Missverständnis genauso aus wie ein ruhiger Markt.
 
+## Warum die Einrichtungshilfe den Host-Code in den Container mountet
+
+Sie lief mit `docker compose run api python /app/scripts/setup_provider.py` -
+also mit dem Code aus dem **gebauten Image**. Nach einem `git pull` ohne
+`--build` kannte das Skript im Container einen neu hinzugekommenen Provider
+noch nicht und brach mit `invalid choice` ab, obwohl auf dem Host alles
+vorhanden war. Genau dieselbe Konstellation hatte kurz zuvor schon das
+Dashboard leer aussehen lassen.
+
+Der Container wird nur wegen der Abhängigkeiten benutzt (httpx & Co. fehlen
+dem System-Python). Die liegen im Image unter `/opt/venv`, der Code getrennt
+davon unter `/app`. Damit lässt sich `backend/` und `scripts/` vom Host
+darüberlegen: Abhängigkeiten aus dem Image, Code vom Host. Ein Neubau ist für
+dieses Skript damit nie wieder nötig.
+
+Für die laufenden Dienste bleibt `--build` erforderlich - dort gibt es keinen
+gleichwertigen Trick, und der Hinweis steht jetzt in jedem Skript, das zum
+Neustart auffordert.
+
 ## Warum ein Cooldown *und* eine Duplikaterkennung
 
 Sie lösen verschiedene Probleme. Der Cooldown begrenzt die Frequenz je

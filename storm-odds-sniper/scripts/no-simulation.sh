@@ -3,7 +3,7 @@
 #
 #   ./scripts/no-simulation.sh
 #
-# Entfernt "mock" aus PROVIDERS in der .env. Danach: docker compose up -d
+# Entfernt "mock" aus PROVIDERS in der .env. Danach: docker compose up -d --build
 set -eu
 
 cd "$(dirname "$0")/.."
@@ -44,4 +44,4 @@ echo "erlaubt nur wenige Abrufe am Tag. Rechne mit deutlich weniger Alarmen -"
 echo "im Zweifel tagelang keinem. Das ist kein Defekt, sondern der Unterschied"
 echo "zwischen erfundenen und echten Daten."
 echo
-echo "Übernehmen mit:  docker compose up -d"
+echo "Übernehmen mit:  docker compose up -d --build"

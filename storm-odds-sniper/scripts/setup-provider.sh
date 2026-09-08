@@ -20,8 +20,18 @@ fi
 run_in_docker() {
     # --user root: die .env auf dem Host gehört meist root, der Container
     # läuft sonst als unprivilegierter Benutzer und darf nicht schreiben.
+    #
+    # backend/ und scripts/ werden vom Host hineingereicht, damit hier immer
+    # der AKTUELLE Stand läuft. Ohne das gilt der Code aus dem gebauten Image:
+    # nach einem "git pull" ohne "--build" kannte das Skript im Container
+    # neue Provider noch nicht und brach mit "invalid choice" ab - obwohl auf
+    # dem Host alles vorhanden war. Die Abhängigkeiten liegen im Image unter
+    # /opt/venv und sind davon nicht betroffen.
     docker compose run --rm --user root \
+        -e PYTHONDONTWRITEBYTECODE=1 \
         -v "$(pwd)/.env:/app/.env" \
+        -v "$(pwd)/backend:/app/backend:ro" \
+        -v "$(pwd)/scripts:/app/scripts:ro" \
         api python /app/scripts/setup_provider.py "$@"
 }
 
@@ -43,7 +53,7 @@ fi
 echo "[i] Weder Docker noch .venv gefunden - versuche python3 …"
 if ! python3 -c "import httpx" >/dev/null 2>&1; then
     echo "Dem System-Python fehlen die Abhängigkeiten. Eine dieser Varianten:" >&2
-    echo "  docker compose up -d && ./scripts/setup-provider.sh $*" >&2
+    echo "  docker compose up -d --build && ./scripts/setup-provider.sh $*" >&2
     echo "  python3 -m venv .venv && .venv/bin/pip install -r requirements.txt" >&2
     exit 1
 fi
