@@ -18,8 +18,11 @@ MAIN_MENU = [
         InlineKeyboardButton("🎯 Fixed Error", callback_data="view:fixed_error"),
     ],
     [
-        InlineKeyboardButton("⚙️ Einstellungen", callback_data="view:settings"),
+        InlineKeyboardButton("📒 Bilanz", callback_data="view:scorecard"),
         InlineKeyboardButton("📊 Status", callback_data="view:status"),
+    ],
+    [
+        InlineKeyboardButton("⚙️ Einstellungen", callback_data="view:settings"),
     ],
 ]
 

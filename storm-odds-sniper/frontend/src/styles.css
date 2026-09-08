@@ -166,6 +166,10 @@ a:hover { text-decoration: underline; }
 .tag--fixed_error { background: rgba(251, 191, 36, .16); color: var(--warn); }
 .tag--value { background: rgba(52, 211, 153, .14); color: var(--good); }
 .tag--odds_move { background: rgba(77, 163, 255, .14); color: var(--accent); }
+/* Urteile der Nachkontrolle: gruen = belegter Fehlpreis, gelb = der Markt hat
+   sich bewegt, neutral = unentschieden. */
+.tag--good { background: rgba(52, 211, 153, .14); color: var(--good); }
+.tag--warn { background: rgba(251, 191, 36, .14); color: var(--warn); }
 
 /* ---------------------------------------------------------------- Listen */
 .list { list-style: none; margin: 0; padding: 0; max-height: 340px; overflow-y: auto; }

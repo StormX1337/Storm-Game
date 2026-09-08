@@ -10,6 +10,9 @@
   const API = window.STORM_API_BASE || "/api";
   const MAX_ALERTS = 150;
   const MAX_MOVES = 40;
+  // Unter so vielen ausgewerteten Alarmen wird kein Durchschnitt angezeigt -
+  // ein Mittelwert aus zwei Werten ist ein Zufallsergebnis.
+  const MIN_SCORED = 10;
 
   const state = {
     alerts: [],
@@ -46,6 +49,28 @@
   const SPORT_ICON = { football: "⚽", tennis: "🎾" };
   const KIND_LABEL = { fixed_error: "🎯 Fixed", value: "💎 Value", odds_move: "📈 Move" };
 
+  /* Nachkontrolle: was aus einem Alarm geworden ist. Ohne diese Spalte bleibt
+     jede Meldung eine unbelegte Behauptung. */
+  const VERDICT = {
+    corrected: { icon: "✅", short: "korrigiert", tag: "good",
+      text: "Der Buchmacher hat den Preis selbst gesenkt - der Fehlpreis war echt." },
+    vanished: { icon: "🚫", short: "gezogen", tag: "good",
+      text: "Die Quote wurde zurückgezogen oder gesperrt." },
+    market_followed: { icon: "↗️", short: "Markt folgte", tag: "warn",
+      text: "Der Markt ist zum gemeldeten Preis gestiegen - der Buchmacher war nur schneller." },
+    held: { icon: "⏸", short: "unverändert", tag: "",
+      text: "Der Preis steht noch, der Abstand zum Markt besteht weiter." },
+    reverted: { icon: "↩️", short: "zurück", tag: "warn",
+      text: "Die Bewegung ist wieder zurückgelaufen." },
+    superseded: { icon: "🔄", short: "überholt", tag: "",
+      text: "Der Spielstand hat sich geändert - ein Preisvergleich wäre sinnlos." },
+    unresolved: { icon: "❔", short: "offen", tag: "",
+      text: "Keine Folgedaten - kein Urteil möglich." },
+    // Kein Urteil, sondern dessen Abwesenheit - taucht nur in der Bilanz auf.
+    pending: { icon: "⏳", short: "offen", tag: "",
+      text: "Die Nachkontrolle steht noch aus." },
+  };
+
   /* ------------------------------------------------------------ Rendering */
 
   function alertPasses(alert) {
@@ -59,7 +84,7 @@
     const body = $("alerts-body");
     const rows = state.alerts.filter(alertPasses).slice(0, MAX_ALERTS);
     if (!rows.length) {
-      body.innerHTML = '<tr class="empty"><td colspan="10">Keine Alarme für diesen Filter.</td></tr>';
+      body.innerHTML = '<tr class="empty"><td colspan="11">Keine Alarme für diesen Filter.</td></tr>';
       return;
     }
     body.innerHTML = rows
@@ -88,6 +113,7 @@
             }" data-width="${Math.max(0, Math.min(100, a.confidence || 0))}"></i></div>
           </td>
           <td><span class="tag tag--${tag}">${esc(a.status || "?")}</span></td>
+          <td>${verdictCell(a)}</td>
         </tr>`;
       })
       .join("");
@@ -96,6 +122,17 @@
     body.querySelectorAll("tr[data-index]").forEach((tr) => {
       tr.addEventListener("click", () => toggleDetail(tr, rows[Number(tr.dataset.index)]));
     });
+  }
+
+  /* Ein Alarm ohne Urteil ist nicht "gescheitert", sondern noch nicht
+     nachkontrolliert - das muss unterscheidbar bleiben. */
+  function verdictCell(a) {
+    if (!a.verdict) return '<span class="dim" title="Nachkontrolle steht aus">⏳</span>';
+    const v = VERDICT[a.verdict] || { icon: "•", short: a.verdict, tag: "", text: "" };
+    const clv = typeof a.clv_percent === "number" ? ` ${fmtPct(a.clv_percent)}` : "";
+    return `<span class="tag tag--${v.tag || "fin"}" title="${esc(v.text)}">${v.icon} ${esc(
+      v.short
+    )}</span><div class="event-sub mono">${clv.trim()}</div>`;
   }
 
   const COMPONENT_LABEL = {
@@ -143,7 +180,7 @@
 
     const tr = document.createElement("tr");
     tr.className = "row--detail";
-    tr.innerHTML = `<td colspan="10"><div class="detail">
+    tr.innerHTML = `<td colspan="11"><div class="detail">
       ${block("Bewegung", movement)}
       ${block("Verglichen mit", refs.length
         ? `<div class="chips">${refs
@@ -159,6 +196,26 @@
         ? comps.map(([k, v]) => `<div class="row">
               <span class="dim">${esc(COMPONENT_LABEL[k] || k)}</span>
               <span class="mono">${v.toFixed(1)}</span></div>`).join("")
+        : "")}
+      ${block("Nachkontrolle", alert.verdict
+        ? `<div class="row"><span class="dim">Urteil</span><span>${
+            (VERDICT[alert.verdict] || {}).icon || ""
+          } ${esc((VERDICT[alert.verdict] || {}).text || alert.verdict)}</span></div>
+           <div class="row"><span class="dim">Preis danach</span><span class="mono">${fmtOdds(
+             alert.closing_odds
+           )}</span></div>
+           <div class="row"><span class="dim">Markt danach</span><span class="mono">${fmtOdds(
+             alert.closing_fair_odds
+           )}</span></div>
+           ${
+             // Bewegungsalarme haben keine faire Quote - eine leere CLV-Zeile
+             // wäre dort nur Rauschen.
+             typeof alert.clv_percent === "number"
+               ? `<div class="row"><span class="dim">Gegenüber dem Markt</span><span class="mono ${
+                   alert.clv_percent >= 0 ? "pos" : "neg"
+                 }">${fmtPct(alert.clv_percent)}</span></div>`
+               : ""
+           }`
         : "")}
       ${block("Hinweise", (alert.notes || []).length
         ? `<ul class="notes">${alert.notes.map((n) => `<li>${esc(n)}</li>`).join("")}</ul>`
@@ -352,6 +409,66 @@
     applyMeterWidths(list);
   }
 
+  /* Trefferbilanz: die Gegenprobe zum Alarm-Stream. Sie beantwortet die
+     einzige Frage, die nach ein paar Stunden wirklich zählt - taugen die
+     Meldungen etwas? */
+  function renderScorecard(data) {
+    const list = $("scorecard-list");
+    const rows = data.verdicts || [];
+    $("scorecard-resolved").textContent = (data.resolved || 0).toLocaleString("de-DE");
+
+    if (!data.resolved) {
+      list.innerHTML =
+        '<li class="empty">Noch keine Nachkontrolle abgeschlossen</li>' +
+        `<li><span class="event-sub">${
+          data.pending
+            ? `${data.pending} Alarme warten auf ihre Nachkontrolle.`
+            : "Sobald Alarme entstehen, werden sie einige Minuten später erneut gegen den Markt gehalten."
+        }</span></li>`;
+      return;
+    }
+
+    const head = [];
+    const scored = data.scored || 0;
+    if (data.avg_clv_percent != null && scored >= MIN_SCORED) {
+      head.push(`<li><div class="row">
+          <span>Ø gegenüber dem späteren Markt <span class="dim">(n=${scored})</span></span>
+          <span class="mono ${data.avg_clv_percent >= 0 ? "pos" : "neg"}">${fmtPct(
+        data.avg_clv_percent
+      )}</span></div></li>`);
+      if (data.beat_close_share != null) {
+        head.push(`<li><div class="row">
+            <span>Besser als der Markt</span>
+            <span class="mono dim">${data.beat_close_share.toFixed(0)} % von ${scored}</span>
+          </div></li>`);
+      }
+    } else {
+      head.push(`<li><span class="event-sub">Noch kein Durchschnitt: erst ${scored} von
+        ${MIN_SCORED} Alarmen sind mit einer Marktreferenz ausgewertet.</span></li>`);
+    }
+
+    const max = Math.max(1, ...rows.map((r) => r.count));
+    const body = rows.slice(0, 6).map((r) => {
+      const v = VERDICT[r.verdict] || { icon: "•", tag: "" };
+      return `<li>
+        <div class="row">
+          <span>${v.icon} ${esc(r.label)}</span>
+          <span class="mono dim">${r.count.toLocaleString("de-DE")}</span>
+        </div>
+        <div class="meter"><i class="${v.tag}" data-width="${Math.round(
+        (r.count / max) * 100
+      )}"></i></div>
+      </li>`;
+    });
+
+    list.innerHTML =
+      head.join("") +
+      body.join("") +
+      '<li><span class="event-sub">Der Abstand zum Markt ist <strong>kein Gewinn</strong>. ' +
+      "Er zeigt nur, dass ein Preis besser war als der Marktkonsens kurz danach.</span></li>";
+    applyMeterWidths(list);
+  }
+
   function renderSystem(health, stats) {
     const list = $("system-list");
     const items = (health.components || []).map(
@@ -429,10 +546,43 @@
         fair_models: raw.fair_models || {},
         score_components: raw.score_components || {},
         references: raw.references || {},
+        verdict: raw.verdict || null,
+        clv_percent: raw.clv_percent,
+        closing_odds: raw.closing_odds,
+        closing_fair_odds: raw.closing_fair_odds,
       };
     }
     return { ...raw, detected_at: raw.detected_at };
   }
+
+  /* Urteile entstehen Minuten nach dem Alarm. Der WebSocket liefert nur den
+     Alarm selbst, deshalb werden die nachgereichten Urteile beim Auffrischen
+     in den vorhandenen Bestand eingemischt - sonst bliebe die Spalte für
+     genau die Alarme leer, die man live mitgelesen hat. */
+  function mergeVerdicts(rows) {
+    if (!state.alerts.length || !rows.length) return;
+    const byKey = new Map();
+    rows.forEach((row) => {
+      if (row.verdict) byKey.set(alertKey(row), row);
+    });
+    if (!byKey.size) return;
+    let changed = false;
+    state.alerts.forEach((a) => {
+      if (a.verdict) return;
+      const match = byKey.get(alertKey(a));
+      if (!match) return;
+      a.verdict = match.verdict;
+      a.clv_percent = match.clv_percent;
+      a.closing_odds = match.closing_odds;
+      a.closing_fair_odds = match.closing_fair_odds;
+      changed = true;
+    });
+    if (changed) renderAlerts();
+  }
+
+  const alertKey = (a) =>
+    [a.event_id, a.market_label || a.market, a.selection_label || a.selection, a.bookmaker,
+     Math.round(Number(a.odds) * 1000)].join("|");
 
   async function fetchJson(path) {
     const response = await fetch(`${API}${path}`, { headers: { accept: "application/json" } });
@@ -442,12 +592,13 @@
 
   async function refresh() {
     try {
-      const [health, stats, providers, events, alerts] = await Promise.all([
+      const [health, stats, providers, events, alerts, scorecard] = await Promise.all([
         fetchJson("/health"),
         fetchJson("/stats"),
         fetchJson("/health/providers"),
         fetchJson("/events?limit=120"),
         fetchJson("/alerts?limit=80"),
+        fetchJson("/alerts/scorecard"),
       ]);
 
       $("kpi-live").textContent = stats.live_events_redis ?? stats.events_live ?? 0;
@@ -465,7 +616,19 @@
       renderProviders(providers);
       updateDemoBanner(providers);
       renderSuppressed(stats);
+      renderScorecard(scorecard);
       renderSystem(health, stats);
+      // Ein Durchschnitt aus einem einzigen Alarm ist keine Kennzahl, sondern
+      // ein Einzelfall. Bis genug ausgewertet ist, bleibt die Kachel leer.
+      const clvKpi = $("kpi-clv");
+      const enough = (scorecard.scored || 0) >= MIN_SCORED;
+      clvKpi.textContent =
+        enough && scorecard.avg_clv_percent != null ? fmtPct(scorecard.avg_clv_percent) : "–";
+      clvKpi.parentElement.title = enough
+        ? `Abstand der gemeldeten Preise zum späteren Marktkonsens, über ${scorecard.scored} Alarme. Kein Gewinn.`
+        : `Noch zu wenige ausgewertete Alarme (${scorecard.scored || 0} von ${MIN_SCORED}).`;
+
+      mergeVerdicts(alerts);
 
       if (!state.alerts.length && alerts.length) {
         state.alerts = alerts.map(normalizeAlert);

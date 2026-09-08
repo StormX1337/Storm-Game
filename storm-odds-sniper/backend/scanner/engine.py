@@ -39,12 +39,14 @@ from backend.core.metrics import (
     ALERTS_EMITTED,
     ALERTS_SUPPRESSED,
     ANALYSIS_LATENCY,
+    FOLLOWUPS_PENDING,
     LIVE_EVENTS,
     PIPELINE_LATENCY,
     QUEUE_DEPTH,
     QUOTES_CHANGED,
     QUOTES_DROPPED,
     TRACKED_EVENTS,
+    VERDICTS_RESOLVED,
 )
 from backend.core.normalization import EventMatcher, flip_market, flip_selection
 from backend.core.outlier import OutlierConfig, score_outlier
@@ -55,6 +57,8 @@ from backend.core.value_engine import (
     deviation_percent,
     value_percent,
 )
+from backend.core.verdict import Verdict, VerdictConfig
+from backend.core.verdict import resolve as resolve_verdict
 from backend.database.repository import Repository
 from backend.models.domain import (
     Alert,
@@ -128,6 +132,15 @@ class ScannerEngine:
         )
         self.gate = AlertGate(state, self.thresholds)
         self.matcher = EventMatcher(threshold=self.settings.event_match_threshold)
+        # Für die Nachkontrolle gilt ein großzügigeres Alter: hier wird nicht
+        # gewettet, sondern gemessen. Die Redis-TTL begrenzt die Daten ohnehin.
+        self.followup_engine = ValueEngine(
+            EngineConfig(
+                max_quote_age=float(self.settings.odds_state_ttl_seconds),
+                min_bookmakers=self.settings.min_bookmakers,
+            )
+        )
+        self.verdict_config = VerdictConfig(move_percent=self.settings.followup_move_percent)
 
         self._queue: asyncio.Queue[ProviderMessage] = asyncio.Queue(
             maxsize=self.settings.scanner_queue_size
@@ -144,7 +157,21 @@ class ScannerEngine:
         #: Unterdrückte Alarme je Grund. Wird gebündelt nach Redis geschrieben -
         #: ein Redis-Aufruf je verworfener Quote wäre im Hot-Path zu teuer.
         self._suppressed: Counter[str] = Counter()
-        self.stats = {"messages": 0, "quotes": 0, "changes": 0, "alerts": 0, "dropped": 0}
+        #: Urteile der Nachkontrolle, gebündelt wie die Unterdrückungen.
+        self._verdicts: Counter[str] = Counter()
+        #: Urteile, deren Alarm beim Schreiben noch nicht in der Datenbank
+        #: stand. Der Writer arbeitet gebündelt und kann unter Last hinter der
+        #: Nachkontrolle liegen - ohne diesen Puffer ginge das Urteil verloren.
+        #: Wert: (Ergebnis, Anzahl Versuche).
+        self._unwritten: dict[str, tuple[dict[str, object], int]] = {}
+        self.stats = {
+            "messages": 0,
+            "quotes": 0,
+            "changes": 0,
+            "alerts": 0,
+            "dropped": 0,
+            "resolved": 0,
+        }
 
     # ------------------------------------------------------------- Lifecycle
     async def start(self) -> None:
@@ -160,6 +187,8 @@ class ScannerEngine:
             )
         self._tasks.append(asyncio.create_task(self._db_writer(), name="db-writer"))
         self._tasks.append(asyncio.create_task(self._health_loop(), name="health"))
+        if self.settings.followup_enabled:
+            self._tasks.append(asyncio.create_task(self._followup_loop(), name="followup"))
         if self.repository is not None:
             self._tasks.append(asyncio.create_task(self._maintenance_loop(), name="maintenance"))
         log.info(
@@ -192,6 +221,22 @@ class ScannerEngine:
                     empfehlung=f"MAX_ODDS_AGE_SECONDS auf mindestens {int(interval * 2)} setzen",
                 )
 
+        # Die Nachkontrolle vergleicht gegen den Marktzustand in Redis. Läuft
+        # sie erst nach dessen TTL, ist der Vergleichsmarkt weg und jedes
+        # Urteil lautet "offen" - stumm und ohne erkennbaren Grund.
+        ttl = float(self.settings.odds_state_ttl_seconds)
+        if self.settings.followup_enabled and self.settings.followup_after_seconds >= ttl:
+            log.warning(
+                "KONFIGURATION: Nachkontrolle läuft nach Ablauf des Redis-Zustands - "
+                "es kann kein Urteil entstehen",
+                followup_after_seconds=self.settings.followup_after_seconds,
+                odds_state_ttl_seconds=int(ttl),
+                empfehlung=(
+                    "FOLLOWUP_AFTER_SECONDS unter ODDS_STATE_TTL_SECONDS setzen "
+                    f"(z. B. {int(ttl / 3)})"
+                ),
+            )
+
     async def stop(self) -> None:
         self._stopped.set()
         for supervisor in self._supervisors:
@@ -208,6 +253,9 @@ class ScannerEngine:
             if self._suppressed:
                 await self.state.add_suppressions(dict(self._suppressed))
                 self._suppressed.clear()
+            if self._verdicts:
+                await self.state.add_verdicts(dict(self._verdicts))
+                self._verdicts.clear()
         log.info("scanner gestoppt", **{k: v for k, v in self.stats.items()})
 
     async def _enqueue(self, message: ProviderMessage) -> None:
@@ -640,6 +688,13 @@ class ScannerEngine:
         ALERTS_EMITTED.labels(alert.kind.value, alert.event.sport.value).inc()
         await self.state.publish_alert(alert)
         await self._queue_db("alert", alert)
+        if self.settings.followup_enabled:
+            # Ein Alarm ist eine Behauptung. Hier wird vorgemerkt, sie später
+            # zu prüfen - mit Daten, die ohnehin einlaufen.
+            with contextlib.suppress(Exception):
+                await self.state.schedule_followup(
+                    alert, due_at=now_ts() + self.settings.followup_after_seconds
+                )
         log.info(
             "ALERT",
             kind=alert.kind.value,
@@ -719,6 +774,162 @@ class ScannerEngine:
                 alerts=len(alerts),
             )
 
+    # ------------------------------------------------ Nachkontrolle
+    async def _followup_loop(self) -> None:
+        """Fällige Alarme nachkontrollieren.
+
+        Läuft im eigenen Task und ist bewusst vom Hot-Path getrennt: die
+        Nachkontrolle darf niemals einen aktuellen Preis verzögern.
+        """
+        while not self._stopped.is_set():
+            try:
+                await asyncio.sleep(self.settings.followup_interval_seconds)
+                await self.run_followups()
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # noqa: BLE001 - Nachkontrolle darf nie sterben
+                log.warning("nachkontrolle fehlgeschlagen", error=str(exc))
+
+    async def run_followups(self, *, now: float | None = None) -> list[dict[str, object]]:
+        """Alle fälligen Nachkontrollen abarbeiten und die Ergebnisse schreiben."""
+        reference = now if now is not None else now_ts()
+        pending = await self.state.claim_followups(
+            now=reference, limit=self.settings.followup_batch
+        )
+        if not pending:
+            # Auch ohne neue Fälligkeiten: die aufgehobenen Urteile brauchen
+            # ihren nächsten Versuch, sonst warten sie ewig.
+            if self.repository is not None and self._unwritten:
+                await self._write_resolutions([])
+            with contextlib.suppress(Exception):
+                FOLLOWUPS_PENDING.set(await self.state.pending_followups())
+            return []
+
+        results: list[dict[str, object]] = []
+        for entry in pending:
+            try:
+                results.append(await self._resolve_followup(entry, reference))
+            except Exception as exc:  # noqa: BLE001 - ein Alarm darf den Rest nicht kippen
+                log.debug("alarm nicht auswertbar", error=str(exc))
+
+        for result in results:
+            verdict = str(result.get("verdict", ""))
+            VERDICTS_RESOLVED.labels(verdict).inc()
+            self._verdicts[verdict] += 1
+        self.stats["resolved"] += len(results)
+
+        if self.repository is not None:
+            await self._write_resolutions(results)
+        with contextlib.suppress(Exception):
+            FOLLOWUPS_PENDING.set(await self.state.pending_followups())
+        return results
+
+    #: So oft wird ein Urteil erneut zu schreiben versucht, bevor es aufgegeben
+    #: wird. Bei einem Takt von 30 s deckt das mehrere Minuten Rückstand ab.
+    WRITE_ATTEMPTS = 10
+    #: Obergrenze des Puffers - er darf bei einem dauerhaften Ausfall nicht
+    #: unbegrenzt wachsen.
+    MAX_UNWRITTEN = 20_000
+
+    async def _write_resolutions(self, results: list[dict[str, object]]) -> None:
+        """Urteile schreiben und die noch nicht zuordenbaren aufheben."""
+        assert self.repository is not None
+        batch = [entry for entry, _ in self._unwritten.values()] + results
+        if not batch:
+            return
+        try:
+            missing = await self.repository.resolve_alerts(batch)
+        except Exception as exc:  # noqa: BLE001 - DB-Ausfall darf nichts stoppen
+            log.error("urteile nicht schreibbar", error=str(exc), count=len(batch))
+            return
+
+        unmatched = set(missing)
+        retained: dict[str, tuple[dict[str, object], int]] = {}
+        given_up = 0
+        for entry in batch:
+            fingerprint = str(entry.get("fingerprint", ""))
+            if fingerprint not in unmatched:
+                continue
+            attempts = self._unwritten.get(fingerprint, (entry, 0))[1] + 1
+            if attempts >= self.WRITE_ATTEMPTS:
+                given_up += 1
+                continue
+            retained[fingerprint] = (entry, attempts)
+        if len(retained) > self.MAX_UNWRITTEN:
+            given_up += len(retained) - self.MAX_UNWRITTEN
+            retained = dict(list(retained.items())[-self.MAX_UNWRITTEN :])
+        self._unwritten = retained
+
+        if given_up:
+            # Sichtbar machen statt still verlieren: die Bilanz ist dann
+            # unvollständig, und der Grund steht im Log.
+            log.warning(
+                "urteile ohne zugehörigen alarm verworfen - schreibt der db-writer hinterher?",
+                verworfen=given_up,
+                wartend=len(self._unwritten),
+            )
+        elif self._unwritten:
+            log.debug("urteile warten auf ihren alarm", wartend=len(self._unwritten))
+
+    async def _resolve_followup(self, entry: dict, reference: float) -> dict[str, object]:
+        """Einen einzelnen Alarm gegen den aktuellen Marktzustand halten."""
+        fingerprint_value = str(entry.get("fingerprint", ""))
+        if entry.get("expired"):
+            # Der Zwischenspeicher ist abgelaufen, bevor die Nachkontrolle
+            # dran war. Kein Urteil ist besser als ein geratenes.
+            return {"fingerprint": fingerprint_value, "verdict": Verdict.UNRESOLVED.value}
+
+        event_id = str(entry["event_id"])
+        market_key = str(entry["market_key"])
+        selection_key = str(entry["selection_key"])
+        bookmaker = str(entry["bookmaker"])
+
+        quotes = await self.state.get_market(event_id, market_key)
+        book = MarketBook(event_id=event_id, market=MarketKey.parse(market_key))
+        for quote in quotes:
+            book.add(quote)
+
+        current = book.quotes.get(selection_key, {}).get(bookmaker)
+        suspended = bool(current.suspended) if current is not None else False
+        final_price = current.price if current is not None and not suspended else None
+
+        event = self._events.get(event_id) or await self.state.get_event(event_id)
+        is_live = event is not None and event.status is EventStatus.LIVE
+        before = entry.get("state_key")
+        state_changed = bool(before) and event is not None and event.state_key() != before
+        fair = self.followup_engine.fair_odds(
+            book,
+            selection_key,
+            exclude_bookmaker=bookmaker,
+            reference=reference,
+            is_live=is_live,
+        )
+
+        resolution = resolve_verdict(
+            kind=str(entry.get("kind", "")),
+            alert_odds=float(entry["odds"]),
+            alert_fair=float(entry["fair_odds"]),
+            final_price=final_price,
+            final_fair=fair.fair_odds if fair is not None else None,
+            previous_odds=entry.get("previous_odds"),
+            suspended=suspended,
+            state_changed=state_changed,
+            config=self.verdict_config,
+        )
+        log.debug(
+            "nachkontrolle",
+            alert=fingerprint_value,
+            verdict=resolution.verdict.value,
+            clv=resolution.clv_percent,
+        )
+        return {
+            "fingerprint": fingerprint_value,
+            "verdict": resolution.verdict.value,
+            "clv_percent": resolution.clv_percent,
+            "closing_odds": final_price,
+            "closing_fair_odds": fair.fair_odds if fair is not None else None,
+        }
+
     # ----------------------------------------------------------- Health/Pflege
     async def _health_loop(self) -> None:
         while not self._stopped.is_set():
@@ -733,6 +944,10 @@ class ScannerEngine:
                     pending = dict(self._suppressed)
                     self._suppressed.clear()
                     await self.state.add_suppressions(pending)
+                if self._verdicts:
+                    verdicts = dict(self._verdicts)
+                    self._verdicts.clear()
+                    await self.state.add_verdicts(verdicts)
                 counters = await self.state.counters()
                 LIVE_EVENTS.set(counters["live_events"])
                 TRACKED_EVENTS.set(counters["tracked_events"])

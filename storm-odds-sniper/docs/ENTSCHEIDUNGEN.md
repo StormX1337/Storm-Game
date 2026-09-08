@@ -94,6 +94,76 @@ sind deshalb getrennt. Unveränderte Preise werden höchstens alle
 `QUOTE_REFRESH_SECONDS` in Redis bestätigt: korrekt, ohne den Hot-Path mit
 Schreibvorgängen zu fluten.
 
+## Warum jeder Alarm nachkontrolliert wird
+
+Ein Alarm ist eine Behauptung. Ohne Gegenprobe bleibt sie unüberprüft, und
+das System kann beliebig schlecht sein, ohne dass es auffällt — der
+Alarm-Stream sieht in beiden Fällen gleich aus.
+
+Die Nachkontrolle nutzt ausschließlich Daten, die ohnehin einlaufen: nach
+`FOLLOWUP_AFTER_SECONDS` wird derselbe Marktzustand noch einmal aus Redis
+gelesen. Damit kostet die Bilanz **keinen** API-Aufruf — beim Gratis-Tarif
+mit rund 17 Abrufen pro Tag wäre alles andere nicht tragbar.
+
+## Warum die Richtung entscheidet und nicht der Betrag
+
+Die erste Fassung schrieb die geschlossene Lücke derjenigen Seite zu, die
+sich *stärker* bewegt hatte. Der Testlauf gegen echte Daten zeigte, warum das
+falsch ist: Value-Alarme kamen auf 13 „korrigiert" bei einem
+durchschnittlichen CLV von **−2,2 %**. Ein Urteil, das die eigenen Zahlen
+widerlegen.
+
+Der Fall dahinter: der Buchmacher fällt von 2.50 auf 2.20 (−12 %), während
+der Markt von 2.30 auf 2.55 steigt (+11 %). Der Betrag spricht für den
+Buchmacher, aber der Markt ist über den gemeldeten Preis *hinweggezogen* —
+2.50 lag am Ende unter dem Konsens von 2.55. Es gab nie einen Vorteil.
+
+Deshalb jetzt: nur ein **fallender** Buchmacher hat korrigiert, nur ein
+**steigender** Markt ist nachgezogen, und wenn beides zutrifft, entscheidet
+der CLV. „Korrigiert" hat damit eine Zusage, die ein Test festhält: es
+schlägt immer den späteren Markt.
+
+## Warum „offen" nie als Treffer zählt
+
+Fehlen Folgedaten (Kontingent aufgebraucht, Event vorbei, Redis-Zustand
+abgelaufen), gibt es kein Urteil — kein geratenes und erst recht kein
+positives. `pending` und `unresolved` stehen getrennt in der Bilanz. Eine
+Trefferquote, die stillschweigend über fehlende Daten hinwegrechnet, wäre
+genau die Art von Zahl, die gut aussieht und nichts bedeutet.
+
+## Warum CLV und keine Trefferquote gegen das Spielergebnis
+
+Der naheliegende Wunsch wäre: hat die Wette gewonnen? Dafür bräuchte es
+zuverlässige Endergebnisse aller Events — eine weitere Datenquelle, weitere
+Abrufe, und selbst dann sagt eine Stichprobe von ein paar hundert Wetten
+statistisch fast nichts, weil die Varianz einzelner Ergebnisse alles
+überdeckt.
+
+Der Closing Line Value braucht nichts davon und konvergiert erheblich
+schneller. Er ist aber ausdrücklich **kein Gewinn**, und genau so steht es an
+jeder Stelle, an der die Zahl auftaucht — README, Dashboard, Telegram und
+API-Beschreibung.
+
+## Warum Urteile auf ihren Alarm warten dürfen
+
+Alarm und Nachkontrolle schreiben nicht im selben Takt: der Alarm geht in die
+gebündelte Writer-Queue, die Nachkontrolle läuft Minuten später in einem
+eigenen Task. Unter Last liegt der Writer zurück — dann trifft das Urteil auf
+eine Zeile, die es noch nicht gibt.
+
+Im Lasttest war das kein Randfall: 676 berechnete Urteile standen 54
+tatsächlich geschriebenen gegenüber. Das `UPDATE` traf nichts, meldete nichts,
+und das Ergebnis war weg. Ein Urteil, das im Prometheus-Zähler steht, aber
+nicht am Alarm, ist genau die Art stiller Datenverlust, die man erst Wochen
+später bemerkt.
+
+Deshalb meldet `resolve_alerts()` jetzt die nicht zuordenbaren
+Fingerabdrücke zurück, und der Scanner hebt diese Urteile auf und versucht es
+erneut. Das Urteil selbst steht schon fest — nur der Schreibvorgang wird
+wiederholt, nie die Bewertung: eine spätere Neubewertung würde gegen einen
+anderen Markt messen. Nach `WRITE_ATTEMPTS` Versuchen wird aufgegeben, mit
+einer Warnung im Log statt stillem Verlust.
+
 ## Warum ein Cooldown *und* eine Duplikaterkennung
 
 Sie lösen verschiedene Probleme. Der Cooldown begrenzt die Frequenz je

@@ -15,6 +15,10 @@ QUOTES_CHANGED = Counter(
 QUOTES_DROPPED = Counter("storm_quotes_dropped_total", "Verworfene Quoten", ["reason"])
 ALERTS_EMITTED = Counter("storm_alerts_emitted_total", "Ausgelöste Alarme", ["kind", "sport"])
 ALERTS_SUPPRESSED = Counter("storm_alerts_suppressed_total", "Unterdrückte Alarme", ["reason"])
+VERDICTS_RESOLVED = Counter(
+    "storm_alert_verdicts_total", "Nachkontrollierte Alarme je Urteil", ["verdict"]
+)
+FOLLOWUPS_PENDING = Gauge("storm_followups_pending", "Offene Nachkontrollen")
 PROVIDER_RECONNECTS = Counter(
     "storm_provider_reconnects_total", "Reconnect-Versuche je Provider", ["provider"]
 )

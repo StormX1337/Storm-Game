@@ -228,6 +228,70 @@ class TestHelpers:
         assert "Scanner" in text
         assert "pausiert" in text
 
+    def test_scorecard_without_data_explains_itself(self):
+        text = fmt.format_scorecard({"window_hours": 168, "resolved": 0, "pending": 4})
+        assert "Trefferbilanz" in text
+        assert "Nachkontrolle" in text
+
+    def test_scorecard_hides_averages_from_tiny_samples(self):
+        """Ein Mittelwert aus einem Alarm ist ein Einzelfall, keine Kennzahl."""
+        text = fmt.format_scorecard(
+            {
+                "window_hours": 24,
+                "resolved": 5,
+                "scored": 1,
+                "avg_clv_percent": -88.7,
+                "beat_close_share": 0.0,
+                "verdicts": [],
+            }
+        )
+        assert "-88.7" not in text
+        assert "1 von 10" in text
+
+    def test_scorecard_reports_verdicts_and_clv(self):
+        text = fmt.format_scorecard(
+            {
+                "window_hours": 24,
+                "resolved": 10,
+                "pending": 2,
+                "scored": 12,
+                "avg_clv_percent": 6.4,
+                "beat_close_share": 62.5,
+                "verdicts": [
+                    {"verdict": "corrected", "label": fmt.VERDICT_TEXT["corrected"], "count": 6},
+                    {"verdict": "held", "label": fmt.VERDICT_TEXT["held"], "count": 4},
+                ],
+                "by_bookmaker": [
+                    {"bookmaker": "examplebookie", "alerts": 6, "avg_clv_percent": 8.1}
+                ],
+            }
+        )
+        assert "+6.4 %" in text
+        assert "62 %" in text
+        assert "n=12" in text
+        assert "✅" in text
+        assert "examplebookie" in text
+
+    def test_scorecard_never_promises_profit(self):
+        """Die Kennzahl ist kein Gewinn - das muss dort stehen, wo sie steht."""
+        text = fmt.format_scorecard(
+            {
+                "window_hours": 24,
+                "resolved": 30,
+                "scored": 30,
+                "avg_clv_percent": 5.0,
+                "verdicts": [],
+            }
+        )
+        assert "kein Gewinn" in text
+
+    def test_every_verdict_has_an_icon(self):
+        for code in fmt.VERDICT_TEXT:
+            assert code in fmt.VERDICT_ICONS, code
+
+    def test_help_lists_the_scorecard_command(self):
+        assert "/bilanz" in fmt.HELP_TEXT
+
     def test_settings_overview(self):
         row = SimpleNamespace(
             min_value_percent=10.0,
@@ -344,3 +408,39 @@ class TestDispatcherFilters:
         settings = Settings(_env_file=None, telegram_bot_token="x", telegram_chat_id="abc,789")
         dispatcher = AlertDispatcher(None, redis_state, settings, None)
         assert [chat_id for chat_id, _ in await dispatcher.recipients()] == [789]
+
+
+class TestBefehlsregistrierung:
+    """Ein Befehl in der Hilfe, den es nicht gibt, ist schlimmer als keiner."""
+
+    def _registered_commands(self) -> set[str]:
+        from telegram.ext import CommandHandler
+
+        from backend.telegram import handlers
+
+        recorded: list[object] = []
+
+        class FakeApplication:
+            def add_handler(self, handler, group=0):
+                recorded.append(handler)
+
+            def add_error_handler(self, handler):
+                recorded.append(handler)
+
+        handlers.register(FakeApplication())
+        commands: set[str] = set()
+        for handler in recorded:
+            if isinstance(handler, CommandHandler):
+                commands.update(handler.commands)
+        return commands
+
+    def test_scorecard_command_exists(self):
+        commands = self._registered_commands()
+        assert "bilanz" in commands
+        assert "scorecard" in commands
+
+    def test_every_documented_command_is_registered(self):
+        import re
+
+        documented = set(re.findall(r"^/(\w+)", fmt.HELP_TEXT, flags=re.MULTILINE))
+        assert documented <= self._registered_commands()

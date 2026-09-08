@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from html import escape
 
+from backend.core.verdict import VERDICT_LABELS
 from backend.models.domain import Alert, EventSnapshot, now_ts
 from backend.models.enums import AlertKind, EventStatus, Sport
 
@@ -29,6 +30,29 @@ KIND_ICON = {AlertKind.FIXED_ERROR: "🎯", AlertKind.VALUE: "💎", AlertKind.O
 #: Provider, deren Daten erfunden sind. Alarme daraus werden deutlich
 #: gekennzeichnet - sonst suchen Nutzer nach Spielen, die es nicht gibt.
 SIMULATED_PROVIDERS = frozenset({"mock"})
+
+#: Klartext je Urteil, um "pending" ergänzt - das ist kein Urteil, sondern
+#: dessen Abwesenheit, taucht in der Bilanz aber auf.
+VERDICT_TEXT: dict[str, str] = {
+    **VERDICT_LABELS,
+    "pending": "noch offen - Nachkontrolle steht aus",
+}
+
+#: Unter so vielen ausgewerteten Alarmen wird kein Durchschnitt gezeigt.
+#: Muss zu MIN_SCORED im Dashboard passen.
+MIN_SCORED = 10
+
+#: Symbole je Urteil der Nachkontrolle - dieselbe Reihenfolge wie im Dashboard.
+VERDICT_ICONS: dict[str, str] = {
+    "corrected": "✅",
+    "vanished": "🚫",
+    "market_followed": "↗️",
+    "held": "⏸",
+    "reverted": "↩️",
+    "superseded": "🔄",
+    "unresolved": "❔",
+    "pending": "⏳",
+}
 
 SIMULATION_NOTE = "🧪 <b>SIMULATION</b> — dieses Spiel und diese Quoten sind <b>erfunden</b>."
 
@@ -307,6 +331,70 @@ def format_status(
     return "\n".join(lines)
 
 
+def format_scorecard(data: dict) -> str:
+    """Trefferbilanz für Telegram.
+
+    Bewusst ohne Gewinnversprechen: gezeigt wird, ob die gemeldeten Preise
+    besser waren als der Markt kurz danach - nicht, ob eine Wette gewonnen
+    hätte.
+    """
+    window = data.get("window_hours", 168)
+    resolved = data.get("resolved", 0)
+    pending = data.get("pending", 0)
+    scored = data.get("scored", 0)
+    lines = [
+        "📒 <b>Trefferbilanz</b>",
+        f"<i>Zeitraum: letzte {window} Stunden</i>",
+        "",
+        f"✅ Nachkontrolliert: <b>{resolved}</b>",
+        f"⏳ Noch offen: <b>{pending}</b>",
+    ]
+    if not resolved:
+        lines += [
+            "",
+            "Noch keine Nachkontrolle abgeschlossen. Jeder Alarm wird einige "
+            "Minuten später erneut gegen den Markt gehalten - danach steht hier, "
+            "was daraus geworden ist.",
+        ]
+        return "\n".join(lines)
+
+    avg = data.get("avg_clv_percent")
+    share = data.get("beat_close_share")
+    if avg is not None and scored >= MIN_SCORED:
+        lines.append(f"📈 Ø Abstand zum späteren Markt: <b>{avg:+.1f} %</b> (n={scored})")
+        if share is not None:
+            lines.append(f"🎯 Besser als der Markt: <b>{share:.0f} %</b> von {scored}")
+    else:
+        # Ein Mittelwert aus zwei Alarmen ist ein Zufallsergebnis, kein Ergebnis.
+        lines.append(
+            f"📈 Noch kein Durchschnitt: erst {scored} von {MIN_SCORED} Alarmen "
+            "sind mit einer Marktreferenz ausgewertet."
+        )
+
+    lines += ["", "<b>Was aus den Alarmen wurde</b>"]
+    for entry in data.get("verdicts", [])[:6]:
+        code = entry.get("verdict", "")
+        icon = VERDICT_ICONS.get(code, "•")
+        lines.append(f"{icon} {esc(entry.get('label', code))}: <b>{entry.get('count', 0)}</b>")
+
+    books = data.get("by_bookmaker") or []
+    if books:
+        lines += ["", "<b>Auffälligste Buchmacher</b>"]
+        for entry in books[:5]:
+            clv = entry.get("avg_clv_percent")
+            suffix = f" · Ø {clv:+.1f} %" if clv is not None else ""
+            lines.append(
+                f"🏦 {esc(entry.get('bookmaker', '?'))}: {entry.get('alerts', 0)} Alarme{suffix}"
+            )
+
+    lines += [
+        "",
+        "<i>Der Abstand zum Markt ist kein Gewinn. Er zeigt nur, dass ein "
+        "Preis besser war als der Konsens kurz danach.</i>",
+    ]
+    return "\n".join(lines)
+
+
 HELP_TEXT = """
 🚨 <b>Storm Odds Sniper</b>
 
@@ -325,6 +413,7 @@ Ich überwache Fußball- und Tennisquoten mehrerer Anbieter und melde:
 /live — laufende Events
 /value — beste aktuelle Value-Alarme
 /alerts — letzte Alarme
+/bilanz — Trefferbilanz: was aus den Alarmen wurde
 /pause — Benachrichtigungen pausieren
 /resume — Benachrichtigungen fortsetzen
 

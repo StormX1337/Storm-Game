@@ -43,7 +43,22 @@ asyncio.Queue (bounded)     bei Rückstau fliegt die *älteste* Nachricht raus
         5. Error-Detector         error_score 0–100
         6. Filterkette            Quote → Signal → Cooldown/Duplikat
         7. Alarm                  Redis Pub/Sub + DB-Queue
+                                  + Vormerkung zur Nachkontrolle
 ```
+
+Getrennt davon, im eigenen Task:
+
+```
+followup-Loop (alle FOLLOWUP_INTERVAL_SECONDS)
+   │
+   ├─ fällige Alarme aus dem Sorted Set holen  ein Aufruf, nicht einer je Alarm
+   ├─ denselben Markt erneut aus Redis lesen   kein zusätzlicher API-Aufruf
+   ├─ Urteil ableiten                          backend/core/verdict.py
+   └─ Ergebnis am Alarm speichern              verdict, clv_percent, Preise
+```
+
+Bewusst außerhalb des Hot-Paths: eine Nachkontrolle darf niemals einen
+aktuellen Preis verzögern.
 
 ### Warum das schnell ist
 
@@ -76,6 +91,8 @@ Preis ist wertlos, der aktuelle ist alles.
 Schlüsselschema:
 
 ```
+alert:followup                   ZSET   Alarm → Fälligkeit der Nachkontrolle
+fu:{fingerprint}                 STRING Alarmdaten für die Nachkontrolle
 q:{event}:{market}:{selection}   HASH   bookmaker → Quote-JSON
 midx:{event}:{market}            SET    Selektionen des Marktes
 eidx:{event}                     SET    Märkte des Events

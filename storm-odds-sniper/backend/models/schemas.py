@@ -131,6 +131,47 @@ class AlertResponse(BaseModel):
     fair_models: dict[str, float | None] = Field(default_factory=dict)
     score_components: dict[str, float] = Field(default_factory=dict)
     references: dict[str, float] = Field(default_factory=dict)
+    # ------------------------------------------------- Nachkontrolle
+    #: ``None`` = noch nicht nachkontrolliert.
+    verdict: str | None = None
+    verdict_label: str | None = None
+    clv_percent: float | None = None
+    closing_odds: float | None = None
+    closing_fair_odds: float | None = None
+    resolved_at: datetime | None = None
+
+
+class VerdictCount(BaseModel):
+    """Wie oft ein Urteil vorkam."""
+
+    verdict: str
+    label: str
+    count: int
+
+
+class BookmakerScore(BaseModel):
+    bookmaker: str
+    alerts: int
+    avg_clv_percent: float | None = None
+
+
+class ScorecardResponse(BaseModel):
+    """Trefferbilanz: was aus den Alarmen geworden ist.
+
+    ``avg_clv_percent`` ist kein Gewinn, sondern der Abstand des gemeldeten
+    Preises zum später beobachteten Marktkonsens.
+    """
+
+    window_hours: int
+    resolved: int
+    pending: int
+    scored: int
+    avg_clv_percent: float | None = None
+    beat_close: int = 0
+    beat_close_share: float | None = None
+    verdicts: list[VerdictCount] = Field(default_factory=list)
+    by_kind: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    by_bookmaker: list[BookmakerScore] = Field(default_factory=list)
 
 
 class SuppressionReason(BaseModel):
@@ -158,6 +199,10 @@ class StatsResponse(BaseModel):
     #: Warum kein Alarm entstand - absteigend nach Häufigkeit.
     suppressed: list[SuppressionReason] = Field(default_factory=list)
     suppressed_total: int = 0
+    #: Nachkontrolle: wie viele Alarme ausgewertet sind und wie sie ausgingen.
+    verdicts: list[VerdictCount] = Field(default_factory=list)
+    followups_pending: int = 0
+    avg_clv_percent: float | None = None
 
 
 class WsMessage(BaseModel):

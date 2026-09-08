@@ -147,6 +147,22 @@ class Settings(BaseSettings):
     #: Bestätigungsintervall für unveränderte Quoten (Redis-Schreiblast).
     quote_refresh_seconds: float = 5.0
 
+    # -------------------------------------------------- Alarm-Nachverfolgung
+    #: Jeder Alarm wird nachkontrolliert: steht der Preis später noch, hat der
+    #: Buchmacher korrigiert, oder ist der Markt nachgezogen? Kostet keinen
+    #: einzigen zusätzlichen API-Aufruf - es wird nur erneut angesehen, was
+    #: ohnehin schon in Redis liegt.
+    followup_enabled: bool = True
+    #: Wartezeit bis zur Nachkontrolle. Kürzer als die Redis-TTL für Quoten,
+    #: sonst ist der Vergleichsmarkt beim Auswerten schon abgelaufen.
+    followup_after_seconds: float = 300.0
+    #: Takt, in dem fällige Nachkontrollen abgearbeitet werden.
+    followup_interval_seconds: float = 30.0
+    #: Wie viele Nachkontrollen je Durchlauf höchstens.
+    followup_batch: int = 200
+    #: Ab dieser Änderung gilt ein Preis als bewegt (Prozentpunkte).
+    followup_move_percent: float = 2.0
+
     # -------------------------------------------------------------- scanner
     scanner_queue_size: int = 20000
     scanner_workers: int = 4

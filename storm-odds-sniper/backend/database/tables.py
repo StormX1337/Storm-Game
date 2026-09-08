@@ -195,7 +195,24 @@ class AlertRow(Base):
     telegram_sent: Mapped[bool] = mapped_column(Boolean, default=False)
     status: Mapped[str] = mapped_column(String(16), default="new")
 
-    __table_args__ = (Index("ix_alerts_detected_kind", "detected_at", "kind"),)
+    # ------------------------------------------------ Nachkontrolle
+    #: Was aus dem Alarm geworden ist (siehe ``backend/core/verdict.py``).
+    #: ``NULL`` = noch nicht nachkontrolliert.
+    verdict: Mapped[str | None] = mapped_column(String(24), nullable=True, index=True)
+    #: Gemeldeter Preis gegenüber der zuletzt beobachteten fairen Quote, in %.
+    clv_percent: Mapped[float | None] = mapped_column(Float, nullable=True)
+    #: Preis desselben Buchmachers zum Zeitpunkt der Nachkontrolle.
+    closing_odds: Mapped[float | None] = mapped_column(Float, nullable=True)
+    #: Marktkonsens zum Zeitpunkt der Nachkontrolle.
+    closing_fair_odds: Mapped[float | None] = mapped_column(Float, nullable=True)
+    resolved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+
+    __table_args__ = (
+        Index("ix_alerts_detected_kind", "detected_at", "kind"),
+        Index("ix_alerts_verdict_kind", "verdict", "kind"),
+    )
 
 
 class User(Base):

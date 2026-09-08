@@ -310,6 +310,137 @@ class Repository:
             )
             await session.commit()
 
+    async def resolve_alerts(self, resolutions: Sequence[dict[str, Any]]) -> list[str]:
+        """Ergebnisse der Nachkontrolle eintragen.
+
+        Jeder Eintrag braucht ``fingerprint`` und ``verdict``; die Preise
+        dürfen fehlen (ein verschwundener Preis *ist* das Ergebnis).
+
+        Zurück kommen die Fingerabdrücke, zu denen **keine** Zeile gefunden
+        wurde. Das ist kein Randfall: der Alarm wird gebündelt geschrieben,
+        und unter Last kann der Writer hinter der Nachkontrolle liegen. Ohne
+        diese Rückmeldung ginge das Urteil still verloren.
+        """
+        if not resolutions:
+            return []
+        missing: list[str] = []
+        now = datetime.now(UTC)
+        async with self.session_factory() as session:
+            for entry in resolutions:
+                fingerprint = entry.get("fingerprint")
+                if not fingerprint:
+                    continue
+                result = await session.execute(
+                    AlertRow.__table__.update()
+                    .where(AlertRow.fingerprint == fingerprint)
+                    .values(
+                        verdict=entry.get("verdict"),
+                        clv_percent=entry.get("clv_percent"),
+                        closing_odds=entry.get("closing_odds"),
+                        closing_fair_odds=entry.get("closing_fair_odds"),
+                        resolved_at=now,
+                        status="resolved",
+                    )
+                )
+                if not result.rowcount:
+                    missing.append(str(fingerprint))
+            await session.commit()
+        return missing
+
+    async def scorecard(self, *, window_hours: int = 168) -> dict[str, Any]:
+        """Trefferbilanz: was ist aus den Alarmen geworden?
+
+        Bewusst getrennt nach Alarmart - ein Bewegungsalarm hat keinen Value
+        und darf die CLV-Statistik der Value-Alarme nicht verwässern.
+        """
+        since = datetime.now(UTC) - timedelta(hours=window_hours)
+        async with self.session_factory() as session:
+            rows = (
+                await session.execute(
+                    select(
+                        AlertRow.kind,
+                        AlertRow.verdict,
+                        func.count(AlertRow.id),
+                        func.avg(AlertRow.clv_percent),
+                        # Zeilen *mit* CLV - nur über die darf gemittelt werden.
+                        func.count(AlertRow.clv_percent),
+                    )
+                    .where(AlertRow.detected_at >= since)
+                    .group_by(AlertRow.kind, AlertRow.verdict)
+                )
+            ).all()
+            beat = (
+                await session.execute(
+                    select(func.count(AlertRow.id)).where(
+                        AlertRow.detected_at >= since, AlertRow.clv_percent > 0
+                    )
+                )
+            ).scalar_one()
+            scored = (
+                await session.execute(
+                    select(func.count(AlertRow.id), func.avg(AlertRow.clv_percent)).where(
+                        AlertRow.detected_at >= since, AlertRow.clv_percent.is_not(None)
+                    )
+                )
+            ).one()
+            by_bookmaker = (
+                await session.execute(
+                    select(
+                        AlertRow.bookmaker,
+                        func.count(AlertRow.id),
+                        func.avg(AlertRow.clv_percent),
+                    )
+                    .where(AlertRow.detected_at >= since, AlertRow.verdict.is_not(None))
+                    .group_by(AlertRow.bookmaker)
+                    .order_by(func.count(AlertRow.id).desc())
+                    .limit(12)
+                )
+            ).all()
+
+        verdicts: dict[str, int] = {}
+        by_kind: dict[str, dict[str, Any]] = {}
+        # Der Durchschnitt je Alarmart muss über *alle* Gruppen dieser Art
+        # gebildet werden. Ihn je Gruppe zu überschreiben ergäbe den Wert einer
+        # beliebigen Urteilsgruppe - etwa nur den der Fehlschläge.
+        clv_sum: dict[str, float] = {}
+        clv_count: dict[str, int] = {}
+        pending = 0
+        for kind, verdict, count, avg_clv, scored_rows in rows:
+            label = verdict or "pending"
+            if verdict is None:
+                pending += count
+            verdicts[label] = verdicts.get(label, 0) + count
+            bucket = by_kind.setdefault(kind, {"total": 0, "verdicts": {}, "avg_clv_percent": None})
+            bucket["total"] += count
+            bucket["verdicts"][label] = count
+            if avg_clv is not None and scored_rows:
+                clv_sum[kind] = clv_sum.get(kind, 0.0) + float(avg_clv) * int(scored_rows)
+                clv_count[kind] = clv_count.get(kind, 0) + int(scored_rows)
+        for kind, total in clv_count.items():
+            by_kind[kind]["avg_clv_percent"] = round(clv_sum[kind] / total, 2)
+            by_kind[kind]["scored"] = total
+
+        scored_count = int(scored[0] or 0)
+        return {
+            "window_hours": window_hours,
+            "verdicts": verdicts,
+            "by_kind": by_kind,
+            "pending": pending,
+            "resolved": sum(v for k, v in verdicts.items() if k != "pending"),
+            "scored": scored_count,
+            "avg_clv_percent": round(float(scored[1]), 2) if scored[1] is not None else None,
+            "beat_close": int(beat or 0),
+            "beat_close_share": round(beat / scored_count * 100.0, 1) if scored_count else None,
+            "by_bookmaker": [
+                {
+                    "bookmaker": name,
+                    "alerts": count,
+                    "avg_clv_percent": round(float(avg), 2) if avg is not None else None,
+                }
+                for name, count, avg in by_bookmaker
+            ],
+        }
+
     async def upsert_provider_health(self, health: ProviderHealth) -> None:
         async with self.session_factory() as session:
             insert = _insert_for(session)

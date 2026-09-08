@@ -64,6 +64,7 @@ deutlich abweicht — inklusive Bewertung, wie belastbar das Signal ist.
 | 🔴 **Live** | Fußball mit Minute, Spielstand, Halbzeit und roten Karten; Tennis mit Satz, Games, Punkten und Aufschlag |
 | 🤖 **Telegram** | Alarme in Echtzeit, persönliche Filter je Nutzer, Inline-Menü |
 | 📊 **Dashboard** | Dark-Mode-Oberfläche mit Live-WebSocket |
+| 📒 **Trefferbilanz** | Jeder Alarm wird nachkontrolliert: hat der Buchmacher korrigiert, oder ist nur der Markt nachgezogen? Ohne zusätzlichen API-Aufruf |
 | 🔌 **Austauschbare Quellen** | Provider-Adapter hinter einer gemeinsamen Schnittstelle |
 
 **Unterstützte Märkte**
@@ -420,11 +421,17 @@ docker compose exec api python /app/scripts/smoke_test.py http://127.0.0.1:8000
 Das Dashboard zeigt:
 
 - **Alarme** mit Zeit, Sport, Event, Markt, Buchmacher, Quote, fairer Quote,
-  Value, Confidence und Status — filterbar nach Art und Sportart
+  Value, Confidence, Status und **Urteil** — filterbar nach Art und Sportart.
+  Ein Klick auf die Zeile klappt die Herleitung auf: verglichene Preise, die
+  drei Modelle, die Signale des Error-Scores und, sobald vorhanden, die
+  Nachkontrolle mit den Preisen davor und danach.
 - **Live-Events** mit Minute, Spielstand bzw. Satz, Games und Punkten
 - **Quotenbewegungen**
 - **Datenquellen** mit Status und fehlenden Zugangsdaten
 - **Buchmacher** nach Alarmhäufigkeit
+- **Warum keine Alarme?** — Zähler je Grund, in Klartext
+- **Trefferbilanz** — was aus den Alarmen wurde, mit dem Abstand zum späteren
+  Markt (siehe [Abschnitt 15, Schritt 9](#15-wie-die-erkennung-funktioniert))
 - **Systemstatus** (Redis, Datenbank, Laufzeit, Snapshots)
 
 Aktualisiert wird per WebSocket; REST dient als Rückfallebene, falls die
@@ -476,11 +483,12 @@ Dem Bot `/start` schreiben.
 | `/live` | laufende Events |
 | `/value` | beste aktuelle Value-Alarme |
 | `/alerts` | letzte Alarme |
+| `/bilanz` | Trefferbilanz: was aus den Alarmen wurde |
 | `/pause` | Benachrichtigungen pausieren |
 | `/resume` | Benachrichtigungen fortsetzen |
 
 Inline-Menü: ⚽ Fußball · 🎾 Tennis · 🔴 Live · 🟢 Pre-Match · 💎 Value ·
-🎯 Fixed Error · ⚙️ Einstellungen · 📊 Status
+🎯 Fixed Error · 📒 Bilanz · 📊 Status · ⚙️ Einstellungen
 
 Jeder Nutzer hat **eigene** Schwellen (Value, Quote, Buchmacheranzahl,
 Confidence, Cooldown, Sportarten, Märkte, Live/Pre-Match). Sie wirken zusätzlich
@@ -672,6 +680,96 @@ Quotenalter · Cooldown je Quotenzeile · Duplikaterkennung über Preis-Buckets 
 Suspendierungs-Erkennung · Marktdrift-Unterdrückung · Ausschluss praktisch
 entschiedener Märkte.
 
+### Schritt 9 — die Gegenprobe: was ist aus dem Alarm geworden?
+
+Ein Alarm ist eine Behauptung: *dieser Preis ist besser als der Markt*. Ohne
+Nachkontrolle bleibt sie unüberprüft — das System meldet, und niemand weiß, ob
+die Meldungen etwas taugen.
+
+Deshalb wird jeder Alarm vorgemerkt und nach `FOLLOWUP_AFTER_SECONDS`
+(Standard: 5 Minuten) **erneut gegen den Markt gehalten**. Das kostet
+**keinen einzigen zusätzlichen API-Aufruf** — es wird nur noch einmal
+angesehen, was ohnehin schon in Redis liegt. Gerade beim knappen
+Gratis-Kontingent ist das der Punkt: die Bilanz ist umsonst.
+
+Entscheidend ist die Frage, **wer** die Lücke geschlossen hat:
+
+```
+Alarm:   Bookie 3.80   fair 2.45   (+55 %)
+Später:  Bookie 2.50   fair 2.47
+
+  → der Buchmacher ist gefallen, der Markt stand.
+    Urteil: ✅ korrigiert — der Fehlpreis war echt und ist weg.
+```
+
+```
+Alarm:   Bookie 3.80   fair 2.45   (+55 %)
+Später:  Bookie 3.85   fair 3.70
+
+  → der Markt ist gestiegen, nicht der Buchmacher.
+    Urteil: ↗️ Markt gefolgt — das Buch war nur schneller, kein Vorteil.
+```
+
+Diese Unterscheidung ist der ganze Punkt. Ein System ohne sie zählt beide
+Fälle als Treffer und sieht damit deutlich besser aus, als es ist.
+
+| Urteil | Bedeutung |
+| --- | --- |
+| ✅ **korrigiert** | Der Buchmacher hat den Preis selbst gesenkt. Stärkster Beleg für einen echten Fehlpreis. |
+| 🚫 **verschwunden** | Die Quote wurde zurückgezogen oder gesperrt — typisch für echte Eingabefehler. |
+| ↗️ **Markt gefolgt** | Der Markt ist zum gemeldeten Preis gestiegen. Kein Fehler des Buchmachers, kein Vorteil. |
+| ⏸ **unverändert** | Der Preis steht noch. Entweder ein dauerhaft weiches Buch oder eine Schieflage im eigenen Modell. |
+| ↩️ **zurückgelaufen** | Nur bei Bewegungsalarmen: der Sprung hielt nicht. |
+| 🔄 **überholt** | Zwischen Alarm und Nachkontrolle fiel ein Tor bzw. endete ein Satz. Die wahre Wahrscheinlichkeit ist eine andere geworden — ein Preisvergleich wäre sinnlos. |
+| ❔ **offen** | Keine Folgedaten. Wird **nie** als Erfolg gezählt. |
+
+Dazu kommt der **Closing Line Value (CLV)**: um wie viel Prozent der
+gemeldete Preis über der zuletzt beobachteten fairen Quote lag.
+
+Unter zehn ausgewerteten Alarmen zeigen Dashboard und Telegram **keinen**
+Durchschnitt, sondern den Zählerstand. Ein Mittelwert aus einem Alarm ist ein
+Einzelfall — im Testlauf stand dort kurzzeitig „−88,7 %", gebildet aus genau
+einer Zeile.
+
+> **Wichtig, und bitte nicht überlesen:** CLV ist **kein Gewinn**. Er misst
+> nur, dass ein Preis besser war als der Marktkonsens kurz danach — nicht,
+> ob eine Wette gewonnen hätte. Und der „Schlusskurs" ist hier immer nur der
+> *zuletzt beobachtete* Kurs; wer selten pollt, misst gegen eine grobe
+> Referenz. Bei einem Poll-Takt von einer Stunde ist die Bilanz eher ein
+> Indiz als eine Messung.
+
+Zu sehen ist das an vier Stellen:
+
+* **Dashboard** — Panel „Trefferbilanz" und die Spalte *Urteil* in der
+  Alarmtabelle. Ein Klick auf die Zeile zeigt die Preise davor und danach.
+* **Telegram** — `/bilanz`
+* **API** — `GET /alerts/scorecard`, dazu `verdict` und `clv_percent` an
+  jedem Alarm in `GET /alerts`
+* **Prometheus** — `storm_alert_verdicts_total{verdict="…"}` und
+  `storm_followups_pending`
+
+**Im Live-Betrieb bleibt vieles „überholt".** Fällt zwischen Alarm und
+Nachkontrolle ein Tor, ist der Vergleich hinfällig — im Simulationslauf traf
+das auf mehr als die Hälfte der Live-Alarme zu. Das ist kein Defekt, sondern
+die ehrliche Antwort: über ein Tor hinweg lässt sich nichts messen. Bei
+Pre-Match-Alarmen (der Normalfall mit The Odds API) ändert sich der Spielstand
+nicht, dort bekommt fast jeder Alarm ein echtes Urteil. Wer eine aussagekräftige
+Bilanz für Live-Wetten will, muss `FOLLOWUP_AFTER_SECONDS` kurz halten.
+
+Stellschrauben in der `.env`:
+
+```env
+FOLLOWUP_ENABLED=true          # ganz abschaltbar
+FOLLOWUP_AFTER_SECONDS=300     # Wartezeit bis zur Nachkontrolle
+FOLLOWUP_INTERVAL_SECONDS=30   # Takt der Auswertung
+FOLLOWUP_MOVE_PERCENT=2.0      # ab wann ein Preis als bewegt gilt
+```
+
+`FOLLOWUP_AFTER_SECONDS` muss **unter** `ODDS_STATE_TTL_SECONDS` (Standard
+900) liegen — sonst ist der Vergleichsmarkt beim Auswerten schon abgelaufen
+und jedes Urteil lautet „offen". Der Scanner warnt beim Start, wenn das
+passiert.
+
 ---
 
 ## 16. API
@@ -693,7 +791,8 @@ Swagger UI: <http://localhost:8080/docs> · OpenAPI: `/openapi.json`
 | `GET /events/live` | nur laufende Events |
 | `GET /events/{id}` | einzelnes Event |
 | `GET /odds?event_id=` | aktuelle Quoten aus Redis |
-| `GET /alerts` | Alarm-Historie (`?kind=`, `?sport=`, `?min_value=`, `?since_minutes=`) |
+| `GET /alerts` | Alarm-Historie (`?kind=`, `?sport=`, `?min_value=`, `?since_minutes=`), je Alarm mit `verdict` und `clv_percent` |
+| `GET /alerts/scorecard` | Trefferbilanz: was aus den Alarmen wurde (`?window_hours=`) |
 | `GET /stats` | Kennzahlen |
 | `GET /metrics` | Prometheus |
 | `WS /ws` | Live-Stream (Alarme, Events, Bewegungen) |
@@ -740,6 +839,8 @@ Abgedeckt sind unter anderem:
 | Repository und Migrationsschema | `test_database.py` |
 | HTTP-API, CORS, Rate-Limit | `test_api.py` |
 | Telegram-Formatierung und Empfängerfilter | `test_telegram.py` |
+| Urteil und Closing Line Value | `test_verdict.py` |
+| Nachkontrolle vom Alarm bis zur Bilanz | `test_followup.py` |
 | Secret-Redaction im Logging | `test_logging.py` |
 
 Linting:
@@ -826,6 +927,22 @@ Häufige Ursachen:
 3. **Quoten zu alt** — bei langsamem Polling `MAX_ODDS_AGE_SECONDS` erhöhen
 4. **Keine passenden Events** — außerhalb der Saison kann es schlicht nichts
    zu scannen geben; mit `PROVIDERS=mock` gegenprüfen
+
+### Trefferbilanz bleibt leer
+
+```bash
+curl -s localhost:8080/api/alerts/scorecard | jq '{resolved, pending, scored}'
+docker compose logs scanner | grep -i nachkontrolle | tail
+```
+
+| Beobachtung | Ursache |
+|---|---|
+| `resolved` bleibt 0, `pending` wächst | Die Wartezeit ist noch nicht um — `FOLLOWUP_AFTER_SECONDS` abwarten. |
+| Alle Urteile lauten „offen" | `FOLLOWUP_AFTER_SECONDS` liegt über `ODDS_STATE_TTL_SECONDS`; der Vergleichsmarkt ist beim Auswerten schon weg. Der Scanner warnt beim Start. |
+| Viele Urteile „überholt" | Zwischen Alarm und Nachkontrolle fielen Tore. Normal im Live-Betrieb — Wartezeit verkürzen. |
+| `scored` bleibt klein | Nur Value- und Fixed-Error-Alarme bekommen einen CLV; Bewegungsalarme haben keine faire Quote. |
+| Log: `urteile ohne zugehörigen alarm verworfen` | Der DB-Writer kommt nicht hinterher. `DB_WRITER_BATCH` erhöhen oder `SNAPSHOT_PERSIST_EVERY` reduzieren. |
+| `FOLLOWUP_ENABLED=false` | Die Nachkontrolle ist abgeschaltet. |
 
 ### Telegram-Bot antwortet nicht
 
@@ -964,6 +1081,7 @@ storm-odds-sniper/
 │   │   ├── value_engine.py   Modelle A/B/C, Confidence
 │   │   ├── outlier.py        Fixed-Odds-Error-Detector
 │   │   ├── filters.py        False-Positive-Schutz
+│   │   ├── verdict.py        Nachkontrolle: Urteil und Closing Line Value
 │   │   ├── backoff.py        exponentielles Backoff
 │   │   └── metrics.py        Prometheus
 │   ├── models/
@@ -1057,6 +1175,21 @@ einen Bruchteil eines B-Trees.
 - Die Alarme sind **Hinweise**, keine Wettempfehlungen. Ob eine Quote
   tatsächlich spielbar ist (Limits, Einsatzhöhe, Stornoregeln des Anbieters),
   entscheidet der Mensch.
+
+**Trefferbilanz**
+
+- Der Closing Line Value ist **kein Gewinn**. Er misst, dass ein Preis besser
+  war als der Marktkonsens kurz danach — nicht, ob eine Wette gewonnen hätte.
+- Der „Schlusskurs" ist der *zuletzt beobachtete* Kurs, nicht der echte
+  Schlusskurs. Bei einem Poll-Takt von einer Stunde ist die Bilanz ein Indiz,
+  keine Messung.
+- Über einen Spielstandwechsel hinweg wird bewusst **nicht** geurteilt
+  (Urteil „überholt"). Im Live-Betrieb betrifft das viele Alarme; die Bilanz
+  ist dort entsprechend dünn. Pre-Match ist sie belastbarer.
+- Die Referenz ist der Durchschnitt derselben Buchmacher, die auch die Alarme
+  auslösen. Ist der beobachtete Markt insgesamt schief, ist es die Bilanz
+  auch — ein unabhängiger Maßstab wäre nur mit einer weiteren Datenquelle zu
+  haben.
 
 **Betrieb**
 

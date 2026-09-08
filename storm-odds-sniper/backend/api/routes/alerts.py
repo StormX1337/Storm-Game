@@ -7,9 +7,14 @@ from datetime import UTC, datetime, timedelta
 from fastapi import APIRouter, Query, Request
 
 from backend.api.deps import get_optional_repository
-from backend.models.schemas import AlertResponse
+from backend.core.verdict import VERDICT_LABELS
+from backend.models.schemas import AlertResponse, BookmakerScore, ScorecardResponse, VerdictCount
 
 router = APIRouter(prefix="/alerts", tags=["alerts"])
+
+#: ``pending`` ist kein Urteil, sondern dessen Abwesenheit - es taucht in der
+#: Bilanz trotzdem auf, damit die Summen aufgehen.
+LABELS: dict[str, str] = {**VERDICT_LABELS, "pending": "noch offen - Nachkontrolle steht aus"}
 
 
 def _row_to_response(row) -> AlertResponse:
@@ -47,6 +52,12 @@ def _row_to_response(row) -> AlertResponse:
         fair_models=payload.get("fair_models") or {},
         score_components=payload.get("score_components") or {},
         references=payload.get("references") or {},
+        verdict=row.verdict,
+        verdict_label=VERDICT_LABELS.get(row.verdict) if row.verdict else None,
+        clv_percent=row.clv_percent,
+        closing_odds=row.closing_odds,
+        closing_fair_odds=row.closing_fair_odds,
+        resolved_at=row.resolved_at,
     )
 
 
@@ -68,3 +79,38 @@ async def list_alerts(
         limit=limit, offset=offset, sport=sport, kind=kind, min_value=min_value, since=since
     )
     return [_row_to_response(row) for row in rows]
+
+
+@router.get(
+    "/scorecard",
+    response_model=ScorecardResponse,
+    summary="Trefferbilanz der Alarme",
+    description=(
+        "Was aus den Alarmen geworden ist. Jeder Alarm wird nach einer "
+        "Wartezeit erneut gegen den Markt gehalten - ohne zusätzlichen "
+        "API-Aufruf. `avg_clv_percent` ist **kein Gewinn**, sondern der "
+        "Abstand des gemeldeten Preises zum später beobachteten Marktkonsens."
+    ),
+)
+async def scorecard(
+    request: Request, window_hours: int = Query(default=168, ge=1, le=8760)
+) -> ScorecardResponse:
+    repo = get_optional_repository(request)
+    if repo is None:
+        return ScorecardResponse(window_hours=window_hours, resolved=0, pending=0, scored=0)
+    data = await repo.scorecard(window_hours=window_hours)
+    return ScorecardResponse(
+        window_hours=data["window_hours"],
+        resolved=data["resolved"],
+        pending=data["pending"],
+        scored=data["scored"],
+        avg_clv_percent=data["avg_clv_percent"],
+        beat_close=data["beat_close"],
+        beat_close_share=data["beat_close_share"],
+        verdicts=[
+            VerdictCount(verdict=code, label=LABELS.get(code, code), count=count)
+            for code, count in sorted(data["verdicts"].items(), key=lambda kv: kv[1], reverse=True)
+        ],
+        by_kind=data["by_kind"],
+        by_bookmaker=[BookmakerScore(**entry) for entry in data["by_bookmaker"]],
+    )

@@ -184,6 +184,23 @@ class EventSnapshot:
     def title(self) -> str:
         return f"{self.home} vs {self.away}"
 
+    def state_key(self) -> str:
+        """Kurzfassung der Spielsituation.
+
+        Ändert sie sich, hat sich die *wahre* Wahrscheinlichkeit geändert -
+        nach einem Tor ist die Quote von vorher keine gültige Vergleichsgröße
+        mehr. Die Nachkontrolle erkennt daran, wann sie nichts messen darf.
+        """
+        parts: list[str] = [self.status.value]
+        if self.score is not None:
+            parts.append(f"{self.score.home}:{self.score.away}")
+        if self.tennis is not None:
+            parts.append(
+                f"s{self.tennis.sets_home}-{self.tennis.sets_away}"
+                f"g{self.tennis.games_home}-{self.tennis.games_away}"
+            )
+        return "|".join(parts)
+
     def to_json(self) -> dict[str, Any]:
         data = asdict(self)
         data["sport"] = self.sport.value

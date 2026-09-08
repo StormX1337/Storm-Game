@@ -198,6 +198,25 @@ async def cmd_alerts(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     await _send_alert_list(update, context, kind=None, title="🚨 <b>Letzte Alarme</b>")
 
 
+async def cmd_scorecard(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Was aus den bisherigen Alarmen geworden ist."""
+    repo = _repo(context)
+    if repo is None:
+        await _reply(update, "⚠️ Datenbank nicht verfügbar - keine Bilanz möglich.")
+        return
+    try:
+        data = await repo.scorecard()
+    except Exception as exc:  # noqa: BLE001 - eine Kennzahl darf den Bot nie stoppen
+        log.warning("bilanz nicht lesbar", error=str(exc))
+        await _reply(update, "⚠️ Bilanz gerade nicht abrufbar.")
+        return
+    data["verdicts"] = [
+        {"verdict": code, "label": fmt.VERDICT_TEXT.get(code, code), "count": count}
+        for code, count in sorted(data["verdicts"].items(), key=lambda kv: kv[1], reverse=True)
+    ]
+    await _reply(update, fmt.format_scorecard(data), back_to_menu())
+
+
 async def cmd_pause(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     repo = _repo(context)
     user = update.effective_user
@@ -244,6 +263,7 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             "live": cmd_live,
             "value": cmd_value,
             "sports": cmd_sports,
+            "scorecard": cmd_scorecard,
         }
         if target == "prematch":
             await _prematch_view(update, context)
@@ -362,6 +382,8 @@ def register(application: Application) -> None:
     application.add_handler(CommandHandler("live", cmd_live))
     application.add_handler(CommandHandler("value", cmd_value))
     application.add_handler(CommandHandler("alerts", cmd_alerts))
+    application.add_handler(CommandHandler("bilanz", cmd_scorecard))
+    application.add_handler(CommandHandler("scorecard", cmd_scorecard))
     application.add_handler(CommandHandler("pause", cmd_pause))
     application.add_handler(CommandHandler("resume", cmd_resume))
     application.add_handler(CallbackQueryHandler(on_callback))

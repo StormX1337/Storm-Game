@@ -16,6 +16,8 @@ Schlüsselschema::
     ev:live                          SET    Event-IDs mit Status LIVE
     ph:{provider}                    STRING Provider-Health-JSON
     cd:*/dup:*                       STRING Cooldown / Duplikat (SET NX EX)
+    alert:followup                   ZSET   Alarm -> Fälligkeit der Nachkontrolle
+    fu:{fingerprint}                 STRING Alarmdaten für die Nachkontrolle
 """
 
 from __future__ import annotations
@@ -299,6 +301,94 @@ class RedisState:
 
     async def reset_suppressions(self) -> None:
         await self.client.delete("stat:suppressed")
+
+    # ------------------------------------------- Alarm-Nachverfolgung
+    #: Fällige Nachkontrollen liegen in einem Sorted Set, sortiert nach
+    #: Fälligkeit. Der Scanner holt sich damit in einem Aufruf genau die
+    #: Alarme, die jetzt dran sind - ohne über alle offenen zu iterieren.
+    FOLLOWUP_QUEUE = "alert:followup"
+
+    @staticmethod
+    def followup_key(fingerprint: str) -> str:
+        return f"fu:{fingerprint}"
+
+    async def schedule_followup(
+        self, alert: Alert, *, due_at: float, ttl_seconds: int = 86400
+    ) -> None:
+        """Einen Alarm zur späteren Nachkontrolle vormerken."""
+        payload = {
+            "fingerprint": alert.fingerprint,
+            "kind": alert.kind.value,
+            "event_id": alert.event.event_id,
+            "market_key": alert.market.key,
+            "selection_key": alert.selection.key,
+            "bookmaker": alert.bookmaker,
+            "odds": alert.odds,
+            "fair_odds": alert.fair_odds,
+            "previous_odds": alert.previous_odds,
+            "detected_at": alert.detected_at,
+            "due_at": due_at,
+            # Spielsituation zum Alarmzeitpunkt. Ändert sie sich, ist ein
+            # Preisvergleich hinfällig.
+            "state_key": alert.event.state_key(),
+        }
+        pipe = self.client.pipeline(transaction=False)
+        pipe.set(self.followup_key(alert.fingerprint), _dumps(payload), ex=ttl_seconds)
+        pipe.zadd(self.FOLLOWUP_QUEUE, {alert.fingerprint: due_at})
+        await pipe.execute()
+
+    async def claim_followups(self, *, now: float, limit: int = 200) -> list[dict[str, Any]]:
+        """Fällige Nachkontrollen holen und aus der Warteschlange entfernen.
+
+        Das Entfernen geschieht sofort: ein Alarm wird genau einmal
+        ausgewertet. Läuft der Scanner mehrfach, bekommt ihn nur einer -
+        ``zrem`` meldet, wie viele Einträge tatsächlich entfernt wurden.
+        """
+        members = await self.client.zrangebyscore(
+            self.FOLLOWUP_QUEUE, min=0, max=now, start=0, num=max(1, limit)
+        )
+        if not members:
+            return []
+        out: list[dict[str, Any]] = []
+        for member in members:
+            removed = await self.client.zrem(self.FOLLOWUP_QUEUE, member)
+            if not removed:
+                continue  # ein anderer Scanner war schneller
+            key = member.decode() if isinstance(member, bytes) else member
+            raw = await self.client.get(self.followup_key(key))
+            data = _loads(raw)
+            if isinstance(data, dict):
+                out.append(data)
+            else:
+                # Der Zustand ist abgelaufen - der Alarm bleibt unaufgelöst,
+                # das ist eine Information und kein Fehler.
+                out.append({"fingerprint": key, "expired": True})
+            await self.client.delete(self.followup_key(key))
+        return out
+
+    async def pending_followups(self) -> int:
+        return int(await self.client.zcard(self.FOLLOWUP_QUEUE) or 0)
+
+    async def add_verdicts(self, counts: dict[str, int]) -> None:
+        """Urteile gebündelt zählen - eine Runde, ein Roundtrip."""
+        if not counts:
+            return
+        pipe = self.client.pipeline(transaction=False)
+        for verdict, amount in counts.items():
+            pipe.hincrby("stat:verdicts", verdict, amount)
+        pipe.expire("stat:verdicts", 86400 * 7)
+        await pipe.execute()
+
+    async def get_verdicts(self) -> dict[str, int]:
+        raw = await self.client.hgetall("stat:verdicts")
+        out: dict[str, int] = {}
+        for key, value in (raw or {}).items():
+            code = key.decode() if isinstance(key, bytes) else key
+            try:
+                out[code] = int(value)
+            except (TypeError, ValueError):
+                continue
+        return out
 
     # ------------------------------------------------------------ Statistik
     async def counters(self) -> dict[str, int]:

@@ -158,6 +158,71 @@ class TestAlerts:
     async def test_limits_are_validated(self, client):
         assert (await client.get("/alerts?limit=99999")).status_code == 422
 
+    async def test_alert_without_followup_reports_no_verdict(self, client, repository):
+        """Kein Urteil ist etwas anderes als ein schlechtes Urteil."""
+        from backend.tests.test_database import make_alert
+
+        await repository.write_batch(alerts=[make_alert()])
+        row = (await client.get("/alerts")).json()[0]
+        assert row["verdict"] is None
+        assert row["clv_percent"] is None
+
+    async def test_verdict_is_returned_with_plain_text(self, client, repository):
+        from backend.tests.test_database import make_alert
+
+        alert = make_alert()
+        await repository.write_batch(alerts=[alert])
+        await repository.resolve_alerts(
+            [
+                {
+                    "fingerprint": alert.fingerprint,
+                    "verdict": "corrected",
+                    "clv_percent": 12.5,
+                    "closing_odds": 2.70,
+                    "closing_fair_odds": 2.66,
+                }
+            ]
+        )
+        row = (await client.get("/alerts")).json()[0]
+        assert row["verdict"] == "corrected"
+        assert "Buchmacher" in row["verdict_label"]
+        assert row["clv_percent"] == pytest.approx(12.5)
+        assert row["resolved_at"] is not None
+
+
+class TestScorecard:
+    async def test_empty_scorecard_is_not_an_error(self, client):
+        body = (await client.get("/alerts/scorecard")).json()
+        assert body["resolved"] == 0
+        assert body["pending"] == 0
+        assert body["avg_clv_percent"] is None
+
+    async def test_scorecard_counts_open_and_resolved(self, client, repository):
+        from backend.tests.test_database import make_alert
+
+        alert = make_alert()
+        await repository.write_batch(alerts=[alert])
+        assert (await client.get("/alerts/scorecard")).json()["pending"] == 1
+
+        await repository.resolve_alerts(
+            [{"fingerprint": alert.fingerprint, "verdict": "corrected", "clv_percent": 20.0}]
+        )
+        body = (await client.get("/alerts/scorecard")).json()
+        assert body["resolved"] == 1
+        assert body["pending"] == 0
+        assert body["avg_clv_percent"] == pytest.approx(20.0)
+        assert body["beat_close_share"] == 100.0
+        assert body["verdicts"][0]["verdict"] == "corrected"
+        assert body["by_bookmaker"][0]["bookmaker"] == "examplebookie"
+
+    async def test_window_is_validated(self, client):
+        assert (await client.get("/alerts/scorecard?window_hours=0")).status_code == 422
+
+    async def test_scorecard_route_is_not_shadowed_by_the_list(self, client):
+        """/alerts/scorecard darf nicht als Alarm-Filter enden."""
+        body = (await client.get("/alerts/scorecard")).json()
+        assert isinstance(body, dict)
+
 
 class TestStats:
     async def test_stats_combine_redis_and_database(self, client, redis_state, repository):
@@ -167,6 +232,19 @@ class TestStats:
         assert body["tracked_events_redis"] == 2
         assert body["live_events_redis"] == 2
         assert body["window_hours"] == 24
+
+    async def test_stats_expose_the_followup_backlog(self, client, redis_state, repository):
+        from backend.tests.test_database import make_alert
+
+        alert = make_alert()
+        await repository.write_batch(alerts=[alert])
+        await redis_state.schedule_followup(alert, due_at=now_ts() + 300)
+        await redis_state.add_verdicts({"corrected": 3})
+        body = (await client.get("/stats")).json()
+        assert body["followups_pending"] == 1
+        assert body["verdicts"][0]["verdict"] == "corrected"
+        assert body["verdicts"][0]["count"] == 3
+        assert "Buchmacher" in body["verdicts"][0]["label"]
 
 
 class TestInfrastructure:
@@ -178,7 +256,15 @@ class TestInfrastructure:
     async def test_openapi_is_generated(self, client):
         schema = (await client.get("/openapi.json")).json()
         assert schema["info"]["title"]
-        for path in ("/health", "/events", "/events/live", "/odds", "/alerts", "/stats"):
+        for path in (
+            "/health",
+            "/events",
+            "/events/live",
+            "/odds",
+            "/alerts",
+            "/alerts/scorecard",
+            "/stats",
+        ):
             assert path in schema["paths"], path
 
     async def test_swagger_ui(self, client):
