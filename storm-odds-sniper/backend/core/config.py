@@ -76,6 +76,23 @@ class Settings(BaseSettings):
     #: kostet pro Durchlauf eigene Credits.
     odds_api_max_discovered_sports: int = 4
 
+    # SportsGameOdds (https://sportsgameodds.com) - REST mit echtem Live-Filter.
+    # Schema aus der offiziellen, OpenAPI-generierten SDK übernommen.
+    sgo_api_key: str = ""
+    sgo_base_url: str = "https://api.sportsgameodds.com/v2"
+    #: Leer = über sportID gefiltert. Konkrete Ligen (z. B. "EPL,BUNDESLIGA")
+    #: sparen Kontingent, weil weniger Events zurückkommen.
+    sgo_leagues: str = ""
+    sgo_sport_ids: str = "SOCCER,TENNIS"
+    #: true = ausschließlich laufende Events. Genau dafür ist diese Quelle da.
+    sgo_live_only: bool = False
+    sgo_poll_interval: float = 20.0
+    #: Jede Seite ist ein eigener Abruf - hier begrenzt sich der Verbrauch.
+    sgo_max_pages: int = 3
+    sgo_page_limit: int = 50
+    #: Optional auf bestimmte Buchmacher einschränken (kommagetrennt).
+    sgo_bookmakers: str = ""
+
     # Betfair Exchange (https://developer.betfair.com) - App-Key + Session nötig.
     betfair_app_key: str = ""
     betfair_username: str = ""

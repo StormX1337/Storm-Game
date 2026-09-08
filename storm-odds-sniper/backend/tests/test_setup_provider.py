@@ -231,3 +231,112 @@ class TestHumanInterval:
     )
     def test_units(self, script, seconds, expected):
         assert expected in script.human_interval(seconds)
+
+
+class TestSportsGameOddsEinrichtung:
+    """Die Einrichtungshilfe für die Live-Quelle.
+
+    Ihr wichtigster Zweck ist nicht der Key-Test, sondern die Anzeige des
+    umgerechneten Preises: ob "-110" amerikanisch gemeint ist, entscheidet
+    über jeden Preis im System, und das lässt sich nur am echten Konto prüfen.
+    """
+
+    def _args(self, script, **overrides):
+        from types import SimpleNamespace
+
+        base = {
+            "provider": "sportsgameodds",
+            "key": "k" * 20,
+            "leagues": "",
+            "sports": "SOCCER",
+            "live": False,
+            "limit": 25,
+            "env": "/dev/null",
+            "write": False,
+            "base_url": "https://api.sportsgameodds.com/v2",
+        }
+        base.update(overrides)
+        return SimpleNamespace(**base)
+
+    def _patch(self, script, monkeypatch, handler):
+        from backend.providers import sportsgameodds as sgo
+
+        original = sgo.SportsGameOddsProvider.connect
+
+        async def connect(self):
+            await original(self)
+            self._client = httpx.AsyncClient(
+                base_url=self.base_url,
+                transport=httpx.MockTransport(handler),
+                headers={"x-api-key": self._api_key},
+            )
+
+        monkeypatch.setattr(sgo.SportsGameOddsProvider, "connect", connect)
+
+    async def test_a_valid_key_shows_converted_prices(self, script, monkeypatch, capsys):
+        from backend.tests.test_sportsgameodds import event, page
+
+        self._patch(script, monkeypatch, lambda r: httpx.Response(200, json=page([event()])))
+        code = await script.check_sportsgameodds(self._args(script))
+        out = capsys.readouterr().out
+        assert code == 0
+        assert "Key akzeptiert" in out
+        assert "Quotenformat prüfen" in out
+        assert "2.500" in out, "die umgerechnete Quote muss sichtbar sein"
+        assert "bet365" in out
+
+    async def test_an_invalid_key_is_named_as_such(self, script, monkeypatch, capsys):
+        self._patch(script, monkeypatch, lambda r: httpx.Response(401, json={}))
+        code = await script.check_sportsgameodds(self._args(script))
+        assert code == 2
+        assert "abgelehnt" in capsys.readouterr().out
+
+    async def test_events_without_odds_fail_loudly(self, script, monkeypatch, capsys):
+        """Ein abweichendes Schema darf nicht als leerer Markt durchgehen."""
+        from backend.tests.test_sportsgameodds import event, market, page
+
+        raw = event(odds={"x": market(betTypeID="voellig_anders")})
+        self._patch(script, monkeypatch, lambda r: httpx.Response(200, json=page([raw])))
+        code = await script.check_sportsgameodds(self._args(script))
+        out = capsys.readouterr().out
+        assert code == 3
+        assert "keine einzige verwertbare Quote" in out
+        assert "abweichendes Antwortschema" in out
+
+    async def test_skipped_markets_are_listed(self, script, monkeypatch, capsys):
+        from backend.tests.test_sportsgameodds import event, market, page
+
+        raw = event(
+            odds={
+                "a": market(),
+                "b": market(sideID="PLAYER_9"),
+            }
+        )
+        self._patch(script, monkeypatch, lambda r: httpx.Response(200, json=page([raw])))
+        await script.check_sportsgameodds(self._args(script))
+        out = capsys.readouterr().out
+        assert "Übersprungen" in out
+        assert "seite:PLAYER_9" in out
+
+    async def test_live_flag_reaches_the_api(self, script, monkeypatch, capsys):
+        from backend.tests.test_sportsgameodds import page
+
+        seen: dict = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            seen.update(dict(request.url.params))
+            return httpx.Response(200, json=page([]))
+
+        self._patch(script, monkeypatch, handler)
+        await script.check_sportsgameodds(self._args(script, live=True))
+        assert seen.get("live") == "true"
+
+    async def test_the_env_block_is_printed(self, script, monkeypatch, capsys):
+        from backend.tests.test_sportsgameodds import event, page
+
+        self._patch(script, monkeypatch, lambda r: httpx.Response(200, json=page([event()])))
+        await script.check_sportsgameodds(self._args(script, live=True))
+        out = capsys.readouterr().out
+        assert "PROVIDERS=sportsgameodds" in out
+        assert "SGO_LIVE_ONLY=true" in out
+        assert "SGO_API_KEY=" in out

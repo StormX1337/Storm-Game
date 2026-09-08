@@ -8,6 +8,9 @@ aufgebraucht. Dieses Skript prüft beides, bevor der Scanner startet.
     python scripts/setup_provider.py the_odds_api --key DEIN_KEY
     python scripts/setup_provider.py the_odds_api --key DEIN_KEY --write
 
+    python scripts/setup_provider.py sportsgameodds --key DEIN_KEY --live
+    python scripts/setup_provider.py sportsgameodds --key DEIN_KEY --write
+
 Ohne ``--write`` wird nichts verändert; das Skript zeigt nur, was es findet,
 und gibt den passenden ``.env``-Block aus.
 """
@@ -22,6 +25,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from backend.providers.base import ProviderAuthError, ProviderError  # noqa: E402
+from backend.providers.sportsgameodds import (  # noqa: E402
+    SportsGameOddsProvider,
+    american_to_decimal,
+)
 from backend.providers.the_odds_api import TheOddsApiProvider, sport_from_key  # noqa: E402
 
 OK, FAIL, INFO = "[ OK ]", "[FEHL]", "[    ]"
@@ -191,6 +198,126 @@ async def check_the_odds_api(args: argparse.Namespace) -> int:
     return 0
 
 
+def _raw_pairs(provider: SportsGameOddsProvider) -> list[tuple[str, str, str, float | None]]:
+    """Rohwerte der letzten Antwort neben ihrer Umrechnung.
+
+    Ohne den Rohwert daneben ist die Anzeige wertlos: eine falsch verstandene
+    Umrechnung sähe genauso plausibel aus wie eine richtige.
+    """
+    pairs: list[tuple[str, str, str, float | None]] = []
+    for raw_event in provider.last_raw_events:
+        for market in (raw_event.get("odds") or {}).values():
+            if not isinstance(market, dict):
+                continue
+            side = str(market.get("sideID") or "?")
+            for bookmaker, entry in (market.get("byBookmaker") or {}).items():
+                if not isinstance(entry, dict):
+                    continue
+                raw = str(entry.get("odds") or "")
+                pairs.append((str(bookmaker), side, raw, american_to_decimal(raw)))
+    return pairs
+
+
+async def check_sportsgameodds(args: argparse.Namespace) -> int:
+    """Key prüfen und - genauso wichtig - das Quotenformat sichtbar machen.
+
+    Die API liefert Quoten als Zeichenkette. Ob "-110" amerikanisch gemeint
+    ist, entscheidet über jeden einzelnen Preis im System. Deshalb zeigt das
+    Skript Rohwert und umgerechneten Wert nebeneinander: eine falsch
+    verstandene Umrechnung fällt hier auf, nicht erst in den Alarmen.
+    """
+    provider = SportsGameOddsProvider(
+        api_key=args.key,
+        base_url=args.base_url,
+        leagues=args.leagues,
+        sport_ids=args.sports,
+        live_only=args.live,
+        page_limit=args.limit,
+        max_pages=1,
+    )
+    print(f"{INFO} Prüfe SportsGameOdds ...")
+    try:
+        await provider.connect()
+        events = await provider.get_events()
+        quotes = await provider.get_odds()
+    except ProviderAuthError as exc:
+        print(f"{FAIL} {exc}")
+        print("       Key prüfen: https://sportsgameodds.com/pricing")
+        return 2
+    except ProviderError as exc:
+        print(f"{FAIL} {exc}")
+        print(
+            explain_network_error(str(exc)).replace(
+                "api.the-odds-api.com", "api.sportsgameodds.com"
+            )
+        )
+        return 2
+    finally:
+        await provider.disconnect()
+
+    print(f"{OK} Key akzeptiert.")
+    if provider.health.rate_limit_remaining is not None:
+        print(f"{INFO} Restkontingent laut API: {provider.health.rate_limit_remaining}")
+
+    live = [e for e in events if e.status.value == "LIVE"]
+    print(f"{OK} {len(events)} Events gefunden, davon {len(live)} live.")
+    if not events:
+        print(
+            f"{INFO} Keine Events. Mögliche Gründe: --live gesetzt und gerade läuft nichts,\n"
+            "       oder die gewählten Ligen sind im Tarif nicht enthalten."
+        )
+
+    print(f"{OK} {len(quotes)} verwertbare Quoten.")
+    if provider.skipped:
+        print(f"{INFO} Übersprungen (bewusst, nichts wird geraten):")
+        for reason, count in provider.skipped.most_common(6):
+            print(f"         {reason}: {count}")
+
+    if quotes:
+        print()
+        print("--- Quotenformat prüfen (Rohwert -> umgerechnet) ---")
+        print("    Vergleiche die rechte Spalte mit der Anzeige des Buchmachers.")
+        print("    Weichen sie ab, ist das Quotenformat anders als angenommen -")
+        print("    dann bitte melden, JEDER Preis im System wäre sonst falsch.")
+        for bookmaker, side, raw, decimal in _raw_pairs(provider)[:10]:
+            marker = " " if decimal else "  <-- nicht lesbar"
+            shown = f"{decimal:.3f}" if decimal else "?"
+            print(f"      {bookmaker:<14} {side:<8} {raw:>8}  ->  {shown}{marker}")
+    elif events:
+        print(f"{FAIL} Events da, aber keine einzige verwertbare Quote.")
+        print("       Das deutet auf ein abweichendes Antwortschema hin - bitte melden.")
+        return 3
+
+    env_block = "\n".join(
+        [
+            "PROVIDERS=sportsgameodds",
+            f"SGO_API_KEY={args.key}",
+            *(
+                [f"SGO_BASE_URL={args.base_url}"]
+                if args.base_url != "https://api.sportsgameodds.com/v2"
+                else []
+            ),
+            f"SGO_SPORT_IDS={args.sports}",
+            f"SGO_LEAGUES={args.leagues}",
+            f"SGO_LIVE_ONLY={'true' if args.live else 'false'}",
+            "SGO_POLL_INTERVAL=20",
+            "SGO_MAX_PAGES=1",
+            "# Echte Quellen liefern weniger Buchmacher je Markt als die Simulation.",
+            "MIN_BOOKMAKERS=3",
+            "MAX_ODDS_AGE_SECONDS=120",
+        ]
+    )
+    print("\n--- Für deine .env ---")
+    print(env_block)
+    if args.write:
+        written = apply_to_env(Path(args.env), env_block)
+        print(f"\n{OK} {written} Zeilen in {args.env} gesetzt.")
+        print("       Jetzt: docker compose up -d --build")
+    else:
+        print("\n       Mit --write trägt das Skript das direkt in die .env ein.")
+    return 0
+
+
 def apply_to_env(path: Path, block: str) -> int:
     """Schlüssel in der .env setzen oder ergänzen - Kommentare bleiben erhalten."""
     updates: dict[str, str] = {}
@@ -223,19 +350,37 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
-    parser.add_argument("provider", choices=["the_odds_api"], help="Zu prüfende Quelle")
+    parser.add_argument(
+        "provider", choices=["the_odds_api", "sportsgameodds"], help="Zu prüfende Quelle"
+    )
     parser.add_argument("--key", required=True, help="API-Key")
     parser.add_argument("--regions", default="eu,uk", help="Regionen (Standard: eu,uk)")
     parser.add_argument("--markets", default="h2h,totals", help="Märkte (Standard: h2h,totals)")
     parser.add_argument("--max-sports", type=int, default=4, help="Max. Wettbewerbe")
     parser.add_argument("--env", default=".env", help="Pfad zur .env")
+    # nur sportsgameodds
+    parser.add_argument("--leagues", default="", help="Ligen, z. B. EPL,BUNDESLIGA")
+    parser.add_argument("--sports", default="SOCCER,TENNIS", help="sportIDs")
+    parser.add_argument("--live", action="store_true", help="nur laufende Events")
+    parser.add_argument("--limit", type=int, default=25, help="Events je Seite")
+    parser.add_argument(
+        "--base-url",
+        default="https://api.sportsgameodds.com/v2",
+        help="Basis-URL (für Tests oder ein Gateway)",
+    )
     parser.add_argument("--write", action="store_true", help="Ergebnis in die .env schreiben")
     return parser
 
 
+CHECKS = {
+    "the_odds_api": check_the_odds_api,
+    "sportsgameodds": check_sportsgameodds,
+}
+
+
 def main() -> int:
     args = build_parser().parse_args()
-    return asyncio.run(check_the_odds_api(args))
+    return asyncio.run(CHECKS[args.provider](args))
 
 
 if __name__ == "__main__":

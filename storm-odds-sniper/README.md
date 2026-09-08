@@ -65,7 +65,7 @@ deutlich abweicht — inklusive Bewertung, wie belastbar das Signal ist.
 | 🤖 **Telegram** | Alarme in Echtzeit, persönliche Filter je Nutzer, Inline-Menü |
 | 📊 **Dashboard** | Dark-Mode-Oberfläche mit Live-WebSocket |
 | 📒 **Trefferbilanz** | Jeder Alarm wird nachkontrolliert: hat der Buchmacher korrigiert, oder ist nur der Markt nachgezogen? Ohne zusätzlichen API-Aufruf |
-| 🔌 **Austauschbare Quellen** | Provider-Adapter hinter einer gemeinsamen Schnittstelle |
+| 🔌 **Austauschbare Quellen** | Vier Adapter hinter einer gemeinsamen Schnittstelle: Simulation, The Odds API, SportsGameOdds (Live-Filter), Betfair Exchange |
 
 **Unterstützte Märkte**
 
@@ -251,6 +251,21 @@ Filtereinstellungen.
 
 ## 9. Datenquellen konfigurieren
 
+**Welche Quelle taugt für Live?** Kurz zusammengefasst, bevor es ins Detail geht:
+
+| Quelle | Live geeignet | Kosten | Womit |
+|---|---|---|---|
+| MockProvider | – (erfunden) | – | nur zum Ausprobieren |
+| The Odds API | erst ab bezahltem Tarif | Gratis-Tarif reicht nicht (~17 Abrufe/Tag) | derselbe Endpunkt, nur mit Kontingent |
+| **SportsGameOdds** | **ja**, eigener `live=true`-Filter | Gratis-Einstieg, Stream nur im Spitzentarif | ein Abruf liefert alle Buchmacher |
+| **Betfair Exchange** | **ja**, echte Börsenpreise mit Liquidität | Konto nötig, Daten kostenlos | bereits implementiert, nur nicht eingerichtet |
+
+Für echtes Live-Scanning sind **SportsGameOdds** und **Betfair** die beiden
+sinnvollen Wege. Betfair ist dabei schon fertig eingebaut — es fehlt nur der
+App-Key.
+
+
+
 Die Provider werden über `PROVIDERS` gewählt (kommagetrennt, mehrere parallel).
 
 ### MockProvider — funktioniert sofort
@@ -356,6 +371,53 @@ gepollten Quellen angepasst werden, sonst entsteht **kein einziger Alarm**:
 
 Diese Quelle liefert **keine** Spielminute, keine Karten und keine
 Tennis-Punktdetails. Diese Felder bleiben leer — sie werden nicht geschätzt.
+
+### SportsGameOdds — echter Live-Filter
+
+```env
+PROVIDERS=sportsgameodds
+SGO_API_KEY=dein_key
+SGO_LIVE_ONLY=true
+```
+
+Einrichten und in einem Rutsch prüfen:
+
+```bash
+./scripts/setup-provider.sh sportsgameodds --key DEIN_KEY --live
+./scripts/setup-provider.sh sportsgameodds --key DEIN_KEY --live --write
+```
+
+Der Unterschied zu The Odds API: diese Quelle kennt einen **Live-Filter**
+(`live=true`) und liefert je Markt die Preise **aller** Buchmacher in *einem*
+Aufruf. Für Live-Erkennung ist das die günstigere Bauform — ein Abruf statt
+einer pro Region und Markt.
+
+Unterstützt werden Moneyline (1X2 bzw. Match Winner), Spread/Handicap und
+Over/Under, jeweils für Vollzeit, Halbzeiten und Tennissätze.
+
+**Wichtig zum Quotenformat:** die API liefert Quoten als Zeichenkette im
+amerikanischen Format (`"-110"`, `"+150"`); der Adapter rechnet sie in
+Dezimalquoten um. Genau deshalb zeigt das Einrichtungsskript Rohwert und
+umgerechneten Wert nebeneinander:
+
+```
+--- Quotenformat prüfen (Rohwert -> umgerechnet) ---
+      bet365         home         +110  ->  2.100
+      pinnacle       away         -125  ->  1.800
+```
+
+Weicht die rechte Spalte von der Anzeige des Buchmachers ab, stimmt die
+Annahme nicht — dann bitte melden, denn dann wäre **jeder** Preis falsch.
+
+Was diese Quelle **nicht** liefert: Spielminute, Karten, Tennis-Punktdetails.
+Diese Felder bleiben leer statt geschätzt zu werden. Spielerwetten und
+unbekannte Marktarten werden übersprungen und gezählt (im Log und im
+Einrichtungsskript sichtbar), nicht auf gut Glück zugeordnet.
+
+Der Anbieter hat zusätzlich einen **WebSocket-Stream** (Pusher). Er ist hier
+bewusst *nicht* implementiert: er setzt den teuersten Tarif voraus und ließe
+sich ohne Konto nicht testen — ungetesteter Code im Low-Latency-Pfad ist ein
+Risiko. Der REST-Adapter mit kurzem Poll-Takt deckt dieselben Daten ab.
 
 ### Betfair Exchange — Börsenpreise mit echter Liquidität
 
@@ -851,6 +913,7 @@ Abgedeckt sind unter anderem:
 | Fixed-Odds-Error-Detector | `test_outlier.py` |
 | Stale, Cooldown, Duplikate, Schwellen | `test_filters.py` |
 | Mock-Simulation, Reconnect, Parser der echten Quellen | `test_providers.py` |
+| SportsGameOdds: Schema, Quotenformat, Pagination | `test_sportsgameodds.py` |
 | Scanner-Pipeline, Vorreiter/Nachzügler | `test_scanner.py` |
 | Redis-Zustand und Pub/Sub | `test_redis_state.py` |
 | Repository und Migrationsschema | `test_database.py` |
@@ -1207,6 +1270,7 @@ storm-odds-sniper/
 │   │   ├── base.py           OddsProvider-Schnittstelle
 │   │   ├── mock_provider.py  Simulation (Push)
 │   │   ├── the_odds_api.py   The Odds API (REST)
+│   ├── sportsgameodds.py SportsGameOdds (REST, Live-Filter)
 │   │   ├── betfair_exchange.py  Betfair (JSON-RPC)
 │   │   └── registry.py       Auswahl und Zugangsdatenprüfung
 │   ├── scanner/
@@ -1312,6 +1376,20 @@ einen Bruchteil eines B-Trees.
 - Das Dashboard ist **im Auslieferungszustand ungeschützt**. Für den Betrieb
   im Internet `./scripts/set-dashboard-password.sh` ausführen — und zusätzlich
   TLS davorsetzen, weil Basic Auth das Passwort sonst im Klartext überträgt.
+
+**SportsGameOdds ohne echtes Konto gebaut**
+
+Das Schema stammt aus der offiziellen, aus der OpenAPI-Spezifikation
+generierten SDK — Feldnamen und Parameter sind damit belegt, nicht geraten.
+Geprüft wurde der Adapter gegen einen schemagetreuen Testserver: Scanner,
+Erkennung, Alarme und Dashboard laufen damit durch.
+
+**Nicht geprüft ist ein echter Aufruf gegen die API** (kein Konto vorhanden).
+Offen bleibt vor allem das Quotenformat: dass `"-110"` amerikanisch gemeint
+ist, geht aus Beispielen hervor, nicht aus der Spezifikation. Der erste Lauf
+mit deinem Key beantwortet das — dafür zeigt
+`./scripts/setup-provider.sh sportsgameodds --key … --live` Rohwert und
+Umrechnung nebeneinander.
 
 **In dieser Umgebung nicht ausgeführt**
 

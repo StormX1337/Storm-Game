@@ -8,6 +8,7 @@ Welche Quelle liefert was — und was sie **nicht** liefert.
 |---|---|---|---|---|
 | `mock` | Push (Simulation) | keine | vollständig (simuliert) | ~0,3 s |
 | `the_odds_api` | REST-Polling | API-Key | nur Spielstand | Poll-Intervall |
+| `sportsgameodds` | REST-Polling | API-Key | Live-Kennzeichen + Abschnitt | Poll-Intervall |
 | `betfair` | JSON-RPC-Polling | Konto + App-Key | Live-Kennzeichen | ~1 s |
 
 Auswahl über `PROVIDERS` (kommagetrennt, mehrere parallel).
@@ -184,3 +185,78 @@ Drei Regeln:
 1. **Eigene Event-IDs verwenden.** Die kanonische ID vergibt der Scanner.
 2. **Nichts erfinden.** Was die Quelle nicht liefert, bleibt `None`.
 3. **Nur erlaubte Quellen.** Kein Scraping hinter Login, kein CAPTCHA-Bypass.
+
+
+---
+
+## sportsgameodds — SportsGameOdds
+
+**Zweck:** Live-Quoten vieler Buchmacher in einem Aufruf.
+
+Registrierung: <https://sportsgameodds.com/pricing> · Doku:
+<https://sportsgameodds.com/docs/>
+
+```
+GET https://api.sportsgameodds.com/v2/events
+Header: x-api-key: <KEY>
+```
+
+Das Schema stammt aus der offiziellen, aus der OpenAPI-Spezifikation
+generierten SDK (`SportsGameOdds/sports-odds-api-python`) — nicht aus
+Vermutungen. Verwendete Parameter:
+
+| Parameter | Wirkung |
+|---|---|
+| `live=true` | nur laufende Events (`SGO_LIVE_ONLY`) |
+| `sportID` / `leagueID` | Auswahl der Sportart bzw. Liga |
+| `oddsAvailable=true` | nur Märkte, die offen sind |
+| `finalized=false` | Beendetes weglassen (spart Kontingent) |
+| `limit` / `cursor` | Seitenweise; `SGO_MAX_PAGES` begrenzt den Verbrauch |
+| `bookmakerID` | optional auf bestimmte Buchmacher einschränken |
+
+**Antwortstruktur** (gekürzt):
+
+```json
+{"data": [{
+  "eventID": "...", "sportID": "SOCCER", "leagueID": "EPL",
+  "teams": {"home": {"names": {"long": "Arsenal"}, "score": 1}, "away": {...}},
+  "status": {"live": true, "startsAt": "...", "currentPeriodID": "2h"},
+  "odds": {"points-home-game-ml-home": {
+      "betTypeID": "ml", "periodID": "game", "sideID": "home",
+      "byBookmaker": {"bet365": {"odds": "+150", "available": true}}}}
+}], "nextCursor": null}
+```
+
+`oddID` setzt sich zusammen aus
+`{statID}-{statEntityID}-{periodID}-{betTypeID}-{sideID}`. Der Adapter liest
+die **Einzelfelder**, nicht den zusammengesetzten String — das ist robust
+gegen Namen mit Bindestrich.
+
+**Zuordnung:**
+
+| API | intern |
+|---|---|
+| `betTypeID=ml` | 1X2 (Fußball) bzw. Match Winner (Tennis) |
+| `betTypeID=sp` | Handicap bzw. Game Handicap |
+| `betTypeID=ou` | Over/Under bzw. Over/Under Games |
+| `periodID` `game`/`reg` | Vollzeit |
+| `periodID` `h1`/`h2` | Halbzeiten |
+| `periodID` `set1`…`set5` | Tennissätze |
+| `sideID` `home`/`away`/`draw`/`over`/`under` | Selektion |
+
+**Was übersprungen wird** (bewusst, statt geraten): Spielerwetten
+(`sideID` = eine playerID), unbekannte Marktarten, unbekannte Abschnitte
+(ein Viertel darf nicht als Vollzeit gelten). Die Zähler stehen im Log und im
+Einrichtungsskript.
+
+**Quotenformat:** amerikanisch als Zeichenkette (`"-110"`). Der Adapter
+rechnet um und **verwirft** jeden Wert, der außerhalb von 1,01–1000 landet —
+eine falsch umgerechnete Quote erzeugt Fehlalarme, und das ist schlimmer als
+eine fehlende Quote.
+
+**Nicht geliefert:** Spielminute, Karten, Tennis-Punktdetails. Diese Felder
+bleiben leer.
+
+**Nicht implementiert:** der WebSocket-Stream (Pusher). Er setzt den
+Spitzentarif voraus und wäre ohne Konto nicht testbar; ungetesteter Code im
+Low-Latency-Pfad ist ein Risiko. Der REST-Adapter deckt dieselben Daten ab.

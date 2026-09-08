@@ -13,6 +13,7 @@ from backend.core.logging import get_logger
 from backend.providers.base import OddsProvider, ProviderAuthError, ProviderSpec
 from backend.providers.betfair_exchange import BetfairExchangeProvider
 from backend.providers.mock_provider import MockProvider
+from backend.providers.sportsgameodds import SportsGameOddsProvider
 from backend.providers.the_odds_api import TheOddsApiProvider
 
 log = get_logger("provider.registry")
@@ -40,6 +41,18 @@ PROVIDER_SPECS: dict[str, ProviderSpec] = {
             "keine Spielminute/Karten. Kontingent wird pro Abfrage verbraucht."
         ),
     ),
+    "sportsgameodds": ProviderSpec(
+        key="sportsgameodds",
+        title="SportsGameOdds",
+        kind="rest",
+        requires_credentials=True,
+        docs_url="https://sportsgameodds.com/docs/",
+        notes=(
+            "Echte REST-API mit Live-Filter (live=true) und allen Buchmacher-"
+            "preisen je Markt in einem Aufruf. Kostenloser Einstiegstarif. "
+            "Keine Spielminute, keine Tennis-Punktdetails."
+        ),
+    ),
     "betfair": ProviderSpec(
         key="betfair",
         title="Betfair Exchange (JSON-RPC)",
@@ -58,6 +71,8 @@ def missing_credentials(key: str, settings: Settings) -> list[str]:
     """Welche Umgebungsvariablen fehlen, damit dieser Provider starten kann?"""
     if key == "the_odds_api":
         return [] if settings.odds_api_key else ["ODDS_API_KEY"]
+    if key == "sportsgameodds":
+        return [] if settings.sgo_api_key else ["SGO_API_KEY"]
     if key == "betfair":
         missing = []
         if not settings.betfair_app_key:
@@ -119,8 +134,23 @@ def _make_betfair(settings: Settings) -> OddsProvider:
     )
 
 
+def _make_sportsgameodds(settings: Settings) -> OddsProvider:
+    return SportsGameOddsProvider(
+        api_key=settings.sgo_api_key,
+        base_url=settings.sgo_base_url,
+        leagues=settings.sgo_leagues,
+        sport_ids=settings.sgo_sport_ids,
+        live_only=settings.sgo_live_only,
+        poll_interval=settings.sgo_poll_interval,
+        max_pages=settings.sgo_max_pages,
+        page_limit=settings.sgo_page_limit,
+        bookmakers=settings.sgo_bookmakers,
+    )
+
+
 FACTORIES: dict[str, Callable[[Settings], OddsProvider]] = {
     "mock": _make_mock,
+    "sportsgameodds": _make_sportsgameodds,
     "the_odds_api": _make_the_odds_api,
     "betfair": _make_betfair,
 }

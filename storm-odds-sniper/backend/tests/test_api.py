@@ -60,11 +60,12 @@ class TestHealth:
         response = await client.get("/health/providers")
         assert response.status_code == 200
         keys = {row["key"] for row in response.json()}
-        assert keys == {"mock", "the_odds_api", "betfair"}
+        assert keys == {"mock", "the_odds_api", "sportsgameodds", "betfair"}
 
     async def test_missing_credentials_are_reported(self, client):
         rows = {row["key"]: row for row in (await client.get("/health/providers")).json()}
         assert rows["the_odds_api"]["missing_credentials"] == ["ODDS_API_KEY"]
+        assert rows["sportsgameodds"]["missing_credentials"] == ["SGO_API_KEY"]
         assert rows["mock"]["missing_credentials"] == []
 
     async def test_provider_catalogue(self, client):

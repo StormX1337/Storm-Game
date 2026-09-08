@@ -636,7 +636,7 @@ class TestRegistry:
 
     def test_descriptions_include_every_provider(self):
         specs = describe_providers(Settings(_env_file=None))
-        assert {s.key for s in specs} == {"mock", "the_odds_api", "betfair"}
+        assert {s.key for s in specs} == {"mock", "the_odds_api", "sportsgameodds", "betfair"}
         assert all(s.title for s in specs)
 
 

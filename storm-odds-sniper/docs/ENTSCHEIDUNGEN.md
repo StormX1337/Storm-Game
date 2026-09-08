@@ -208,6 +208,38 @@ Das ist ein legitimer Testaufbau, aber fast nie das, was jemand im Betrieb
 will. Deshalb: Warnung beim Start mit der fertigen `PROVIDERS`-Zeile zum
 Kopieren, plus `./scripts/no-simulation.sh`.
 
+## Warum das SportsGameOdds-Schema aus der SDK stammt
+
+Die Doku-Seiten des Anbieters waren aus dieser Umgebung nicht erreichbar. Ein
+Adapter auf Basis von Suchergebnis-Schnipseln wäre geraten gewesen - genau
+das, was hier nicht passieren darf.
+
+Stattdessen kommt das Schema aus der offiziellen, aus der
+OpenAPI-Spezifikation generierten SDK (`SportsGameOdds/sports-odds-api-python`).
+Dort stehen Feldnamen, Verschachtelung und Parameter als Quelltext: `data` und
+`nextCursor` für die Seiten, `teams.home.names.long`, `status.live`,
+`byBookmaker`, und die Zusammensetzung von `oddID`. Das ist keine
+Interpretation, sondern die Definition.
+
+Ungeprüft bleibt genau ein Punkt: das **Quotenformat**. Dass `"-110"`
+amerikanisch gemeint ist, geht aus Beispielen hervor, nicht aus der
+Spezifikation. Weil davon jeder einzelne Preis abhängt, zeigt das
+Einrichtungsskript Rohwert und Umrechnung nebeneinander - überprüfbar in fünf
+Sekunden gegen die Anzeige des Buchmachers, statt Wochen später an
+unerklärlichen Alarmen.
+
+## Warum unbekannte Märkte übersprungen und gezählt werden
+
+Ein `betTypeID`, das der Adapter nicht kennt, könnte man auf die
+naheliegendste Marktart abbilden. Damit wäre ein Viertel irgendwann Vollzeit
+und eine Spielerwette ein Teamergebnis - und der Fehler stünde als plausibler
+Alarm im Dashboard.
+
+Deshalb: nur belegte Kennungen werden zugeordnet, alles andere wandert in
+einen Zähler. Liefert eine Quelle Events, aber keine einzige verwertbare
+Quote, geht der Provider mit dieser Begründung in die Health-Anzeige - denn
+sonst sieht ein Schema-Missverständnis genauso aus wie ein ruhiger Markt.
+
 ## Warum ein Cooldown *und* eine Duplikaterkennung
 
 Sie lösen verschiedene Probleme. Der Cooldown begrenzt die Frequenz je
