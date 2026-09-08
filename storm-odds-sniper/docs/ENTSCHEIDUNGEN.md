@@ -182,6 +182,32 @@ Nebenbei aufgefallen: `.banner { display: flex }` schlägt das
 `[hidden]`-Attribut des Browsers. Das Simulations-Banner ließ sich dadurch
 nie ausblenden - es fiel nur nicht auf, weil die Simulation meistens lief.
 
+## Warum die Simulation nicht mehr einspringt
+
+Ursprünglich griff der MockProvider immer, wenn keine Quelle startbar war -
+„damit das System nie stumm läuft". Das war die falsche Prioritätensetzung.
+
+Wer `PROVIDERS=the_odds_api` schreibt, will echte Daten. Fehlt der Schlüssel,
+sah das Dashboard mit dem Fallback aus wie ein laufendes System: Alarme,
+Fehlpreise, Bewegungen - alles erfunden. Ein stummes System mit klarer
+Begründung ist ehrlicher als ein beschäftigtes, das nichts Echtes anzeigt.
+
+Jetzt springt die Simulation nur ein, wenn **gar nichts** angefordert wurde.
+Wurde etwas angefordert und ist nicht startbar, bleibt die Liste leer und der
+Grund steht im Log.
+
+## Warum Mischbetrieb eine Warnung auslöst
+
+Die Simulation tickt alle 0,35 s und injiziert absichtlich Fehlpreise; The
+Odds API liefert im Gratis-Tarif ein paar Abrufe am Tag. Nebeneinander ist das
+Verhältnis etwa tausend zu eins - die Alarmliste besteht dann praktisch nur
+aus Erfundenem, obwohl echte Daten fließen. Auf dem Dashboard fiel das nicht
+auf, weil beide Zeilen gleich aussehen (bis auf das 🧪).
+
+Das ist ein legitimer Testaufbau, aber fast nie das, was jemand im Betrieb
+will. Deshalb: Warnung beim Start mit der fertigen `PROVIDERS`-Zeile zum
+Kopieren, plus `./scripts/no-simulation.sh`.
+
 ## Warum ein Cooldown *und* eine Duplikaterkennung
 
 Sie lösen verschiedene Probleme. Der Cooldown begrenzt die Frequenz je

@@ -590,19 +590,49 @@ class TestRegistry:
         assert missing_credentials("the_odds_api", settings) == ["ODDS_API_KEY"]
         assert "BETFAIR_APP_KEY" in missing_credentials("betfair", settings)
 
-    def test_providers_without_credentials_are_skipped(self):
+    def test_a_requested_source_is_never_replaced_by_the_simulation(self, capsys):
+        """Wer echte Daten verlangt, darf keine erfundenen bekommen.
+
+        Vorher sprang hier die Simulation ein. Auf dem Dashboard sah eine
+        vergessene ODDS_API_KEY damit aus wie ein laufendes System - mit
+        künstlichen Fehlpreisen, die nach echten Funden aussehen.
+        """
         settings = Settings(_env_file=None, providers="the_odds_api")
         providers = build_providers(settings)
-        # Fallback auf Mock statt stillem Nichtstun.
-        assert [p.name for p in providers] == ["mock"]
+        assert providers == []
+        out = capsys.readouterr().out
+        assert "KEINE DATENQUELLE STARTBAR" in out
+        assert "setup-provider" in out
 
     def test_configured_mock_is_built(self):
         providers = build_providers(Settings(_env_file=None, providers="mock", mock_events=3))
         assert isinstance(providers[0], MockProvider)
 
-    def test_unknown_provider_is_ignored(self):
-        providers = build_providers(Settings(_env_file=None, providers="does_not_exist"))
+    def test_the_simulation_only_fills_in_when_nothing_was_asked_for(self):
+        providers = build_providers(Settings(_env_file=None, providers="", mock_events=3))
         assert [p.name for p in providers] == ["mock"]
+
+    def test_unknown_provider_does_not_summon_the_simulation(self):
+        providers = build_providers(Settings(_env_file=None, providers="does_not_exist"))
+        assert providers == []
+
+    def test_simulation_next_to_real_data_is_called_out(self, monkeypatch, capsys):
+        """Der Fall vom Server: in der Alarmliste stand fast nur Erfundenes."""
+        monkeypatch.setenv("ODDS_API_KEY", "x" * 20)
+        settings = Settings(_env_file=None, providers="mock,the_odds_api")
+        providers = build_providers(settings)
+        assert {p.name for p in providers} == {"mock", "the_odds_api"}
+        # Auf ASCII prüfen: je nach Testreihenfolge steht das Log als Text
+        # oder als JSON da, und dort sind Umlaute escaped.
+        out = capsys.readouterr().out
+        assert "SIMULATION" in out
+        assert "dominiert" in out
+        assert "PROVIDERS=the_odds_api" in out
+
+    def test_real_data_alone_is_not_warned_about(self, monkeypatch, capsys):
+        monkeypatch.setenv("ODDS_API_KEY", "x" * 20)
+        build_providers(Settings(_env_file=None, providers="the_odds_api"))
+        assert "dominiert" not in capsys.readouterr().out
 
     def test_descriptions_include_every_provider(self):
         specs = describe_providers(Settings(_env_file=None))

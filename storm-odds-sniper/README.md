@@ -264,6 +264,21 @@ Sätze, Games), mehreren Buchmachern mit eigener Marge und gelegentlichen
 Fehlpreisen. **Keine echten Quoten** — Team- und Buchmachernamen tragen
 deshalb bewusst das Präfix `Mock`.
 
+> **Nicht neben einer echten Quelle laufen lassen.** Die Simulation erzeugt
+> künstliche Fehlpreise im Sekundentakt, eine echte Quelle liefert alle paar
+> Minuten einen echten Preis. In der Alarmliste steht danach fast nur
+> Erfundenes. Sobald eine echte Quelle steht:
+>
+> ```bash
+> ./scripts/no-simulation.sh
+> docker compose up -d
+> ```
+
+Umgekehrt gilt: steht in `PROVIDERS` eine **echte** Quelle und fehlen ihre
+Zugangsdaten, weicht der Scanner **nicht** auf die Simulation aus. Er bleibt
+stumm und schreibt den Grund ins Log. Erfundene Daten in einem Werkzeug, das
+echte Fehlpreise finden soll, sind schlimmer als gar keine.
+
 ### The Odds API — echte Quoten, API-Key nötig
 
 1. Key holen: <https://the-odds-api.com> (kostenloses Einstiegskontingent)
@@ -370,9 +385,11 @@ Der Scanner führt Events beider Quellen automatisch zusammen (siehe
 [Abschnitt 15](#15-wie-die-erkennung-funktioniert)).
 
 Fehlt einem konfigurierten Provider ein Zugangsdatum, wird er übersprungen und
-der Grund geloggt — die übrigen laufen weiter. Bleibt keiner übrig, greift der
-MockProvider, damit das System nie stumm läuft. Welche Quelle gerade läuft und
-was fehlt, zeigen das Dashboard und `GET /health/providers`.
+der Grund geloggt — die übrigen laufen weiter. Bleibt **keiner** übrig, bleibt
+der Scanner stumm und schreibt den Grund ins Log; auf die Simulation wird
+bewusst nicht ausgewichen. Sie springt nur ein, wenn `PROVIDERS` ganz leer ist.
+Welche Quelle gerade läuft und was fehlt, zeigen das Dashboard und
+`GET /health/providers`.
 
 Ausführlich: [`docs/PROVIDER.md`](docs/PROVIDER.md).
 
@@ -926,7 +943,8 @@ Häufige Ursachen:
    Bücher je Markt; `MIN_BOOKMAKERS` senken oder zweite Quelle ergänzen
 3. **Quoten zu alt** — bei langsamem Polling `MAX_ODDS_AGE_SECONDS` erhöhen
 4. **Keine passenden Events** — außerhalb der Saison kann es schlicht nichts
-   zu scannen geben; mit `PROVIDERS=mock` gegenprüfen
+   zu scannen geben; zum Gegenprüfen `PROVIDERS=mock` setzen — und danach mit
+   `./scripts/no-simulation.sh` wieder abschalten
 
 ### Trefferbilanz bleibt leer
 
@@ -943,6 +961,27 @@ docker compose logs scanner | grep -i nachkontrolle | tail
 | `scored` bleibt klein | Nur Value- und Fixed-Error-Alarme bekommen einen CLV; Bewegungsalarme haben keine faire Quote. |
 | Log: `urteile ohne zugehörigen alarm verworfen` | Der DB-Writer kommt nicht hinterher. `DB_WRITER_BATCH` erhöhen oder `SNAPSHOT_PERSIST_EVERY` reduzieren. |
 | `FOLLOWUP_ENABLED=false` | Die Nachkontrolle ist abgeschaltet. |
+
+### In der Alarmliste steht nur „Mock"
+
+Dann läuft die Simulation neben der echten Quelle. Sie erzeugt künstliche
+Fehlpreise im Sekundentakt, die echte Quelle liefert alle paar Minuten einen
+echten Preis — die Liste besteht danach praktisch nur aus Erfundenem.
+
+```bash
+./scripts/no-simulation.sh
+docker compose up -d
+```
+
+Das Skript streicht `mock` aus `PROVIDERS` und lässt den Rest stehen. Der
+Scanner warnt seit dieser Version schon beim Start, wenn beides zusammen
+läuft.
+
+**Danach wird es deutlich stiller.** Echte Fixed-Odds-Fehler sind selten, und
+das Gratis-Kontingent erlaubt nur wenige Abrufe pro Tag — es können Tage ohne
+einen einzigen Alarm vergehen. Das ist der Unterschied zwischen erfundenen und
+echten Daten, kein Defekt. Was der Scanner in der Zwischenzeit tut, steht im
+Panel „Warum keine Alarme?".
 
 ### Dashboard bleibt auf „Lade…" nach einem Update
 
@@ -1185,6 +1224,7 @@ storm-odds-sniper/
 ├── frontend/src/             Dashboard (HTML, CSS, JS)
 ├── docker/nginx/             nginx-Konfiguration
 ├── scripts/
+│   ├── no-simulation.sh      Simulation abschalten, nur echte Quellen
 │   ├── set-dashboard-password.sh  Zugangsschutz fürs Dashboard
 │   ├── setup-provider.sh     echte Datenquelle prüfen und übernehmen
 │   ├── setup_provider.py     die eigentliche Prüflogik

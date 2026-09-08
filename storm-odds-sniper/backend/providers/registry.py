@@ -130,11 +130,17 @@ def build_providers(settings: Settings) -> list[OddsProvider]:
     """Konfigurierte Provider instanziieren.
 
     Fehlen Zugangsdaten, wird der Provider übersprungen und der Grund geloggt -
-    der Scanner startet trotzdem. Bleibt nichts übrig, greift der MockProvider,
-    damit das System nie stumm läuft.
+    der Scanner startet trotzdem.
+
+    Die Simulation springt **nur** ein, wenn gar keine Quelle verlangt wurde.
+    Wer ``PROVIDERS=the_odds_api`` schreibt und dessen Schlüssel vergisst,
+    bekommt keine erfundenen Quoten untergeschoben, sondern ein stummes System
+    mit klarer Begründung. Erfundene Daten in einem Werkzeug, das echte
+    Fehlpreise finden soll, sind schlimmer als gar keine.
     """
+    requested = settings.provider_names
     providers: list[OddsProvider] = []
-    for key in settings.provider_names:
+    for key in requested:
         factory = FACTORIES.get(key)
         if factory is None:
             log.warning("unbekannter provider in PROVIDERS", provider=key)
@@ -154,9 +160,30 @@ def build_providers(settings: Settings) -> list[OddsProvider]:
         except Exception as exc:  # noqa: BLE001 - ein defekter Adapter darf nicht alles stoppen
             log.error("provider-initialisierung fehlgeschlagen", provider=key, error=str(exc))
 
-    if not providers:
-        log.warning("kein Provider startbar - falle auf MockProvider zurück")
+    real = [p for p in providers if p.name != "mock"]
+    if real and len(real) != len(providers):
+        # Der Fall aus der Praxis: die Simulation erzeugt am laufenden Band
+        # künstliche Fehlpreise, die echte Quelle alle paar Minuten einen
+        # echten Preis. In der Alarmliste steht dann fast nur Erfundenes.
+        log.warning(
+            "SIMULATION LÄUFT NEBEN ECHTEN DATEN - die Alarmliste wird von "
+            "erfundenen Fehlpreisen dominiert",
+            echt=[p.name for p in real],
+            empfehlung="'mock' aus PROVIDERS entfernen: "
+            f"PROVIDERS={','.join(p.name for p in real)}",
+        )
+
+    if not providers and not requested:
+        log.warning("kein Provider konfiguriert - starte die Simulation")
         providers.append(_make_mock(settings))
+    elif not providers:
+        log.error(
+            "KEINE DATENQUELLE STARTBAR - der Scanner läuft, findet aber nichts. "
+            "Es wird bewusst NICHT auf die Simulation ausgewichen: angefordert "
+            "waren echte Daten.",
+            angefordert=",".join(requested),
+            naechster_schritt="./scripts/setup-provider.sh the_odds_api --key <KEY> --write",
+        )
     return providers
 
 
