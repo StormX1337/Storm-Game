@@ -28,7 +28,7 @@ def make_alert(**overrides) -> Alert:
         "confidence": 94,
         "error_score": 91,
         "bookmaker_count": 7,
-        "provider": "mock",
+        "provider": "sportsgameodds",
     }
     data.update(overrides)
     alert = Alert(**data)
@@ -186,7 +186,7 @@ class TestQueries:
 class TestProviderHealth:
     async def test_upsert(self, repository):
         health = ProviderHealth(
-            name="mock", status=ProviderStatus.CONNECTED, messages=10, quotes=100
+            name="sportsgameodds", status=ProviderStatus.CONNECTED, messages=10, quotes=100
         )
         await repository.upsert_provider_health(health)
         health.messages = 20

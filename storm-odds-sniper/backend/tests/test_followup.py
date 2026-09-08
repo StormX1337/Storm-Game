@@ -20,7 +20,7 @@ from backend.tests.test_scanner import market_message
 def followup_settings(**overrides) -> Settings:
     base = {
         "_env_file": None,
-        "providers": "mock",
+        "providers": "sportsgameodds",
         "min_value_percent": 10.0,
         "min_outlier_percent": 15.0,
         "min_bookmakers": 3,

@@ -100,18 +100,18 @@ class TestQuotaPacing:
 class TestEnvWriting:
     def test_existing_keys_are_replaced(self, script, tmp_path):
         env = tmp_path / ".env"
-        env.write_text("# Kommentar\nPROVIDERS=mock\nPOSTGRES_PASSWORD=geheim\n")
+        env.write_text("# Kommentar\nPROVIDERS=betfair\nPOSTGRES_PASSWORD=geheim\n")
         script.apply_to_env(env, "PROVIDERS=the_odds_api\nODDS_API_KEY=abc")
         text = env.read_text()
         assert "PROVIDERS=the_odds_api" in text
-        assert "PROVIDERS=mock" not in text
+        assert "PROVIDERS=betfair" not in text
         assert "POSTGRES_PASSWORD=geheim" in text  # fremde Werte bleiben
         assert "# Kommentar" in text  # Kommentare bleiben
         assert "ODDS_API_KEY=abc" in text
 
     def test_comment_lines_in_the_block_are_ignored(self, script, tmp_path):
         env = tmp_path / ".env"
-        env.write_text("PROVIDERS=mock\n")
+        env.write_text("PROVIDERS=the_odds_api\n")
         count = script.apply_to_env(env, "# nur ein Hinweis\nPROVIDERS=the_odds_api")
         assert count == 1
         assert "# nur ein Hinweis" not in env.read_text()
@@ -211,7 +211,7 @@ class TestScriptRun:
             return httpx.Response(200, json=ODDS_API_PAYLOAD, headers=headers)
 
         env = tmp_path / ".env"
-        env.write_text("PROVIDERS=mock\nPOSTGRES_PASSWORD=geheim\n")
+        env.write_text("PROVIDERS=betfair\nPOSTGRES_PASSWORD=geheim\n")
         self._install(monkeypatch, handler)
         args = script.build_parser().parse_args(
             ["the_odds_api", "--key", "abc123", "--env", str(env), "--write"]
@@ -221,7 +221,7 @@ class TestScriptRun:
         assert "PROVIDERS=the_odds_api" in text
         assert "ODDS_API_KEY=abc123" in text
         assert "POSTGRES_PASSWORD=geheim" in text
-        assert "PROVIDERS=mock" not in text
+        assert "PROVIDERS=betfair" not in text
 
 
 class TestHumanInterval:
@@ -254,6 +254,7 @@ class TestSportsGameOddsEinrichtung:
             "env": "/dev/null",
             "write": False,
             "base_url": "https://api.sportsgameodds.com/v2",
+            "plan": "free",
         }
         base.update(overrides)
         return SimpleNamespace(**base)
@@ -340,3 +341,33 @@ class TestSportsGameOddsEinrichtung:
         assert "PROVIDERS=sportsgameodds" in out
         assert "SGO_LIVE_ONLY=true" in out
         assert "SGO_API_KEY=" in out
+
+
+class TestTarifvoreinstellung:
+    """``--plan`` setzt Poll-Takt und Limit passend zum gebuchten Tarif."""
+
+    def test_every_plan_stays_within_its_own_limit(self, script):
+        for name, plan in script.PLANS.items():
+            per_minute = 60.0 / plan["poll"] * plan["pages"]
+            assert per_minute <= plan["rpm"], (name, per_minute, plan["rpm"])
+
+    def test_pro_polls_faster_than_free(self, script):
+        assert script.PLANS["pro"]["poll"] < script.PLANS["free"]["poll"]
+        assert script.PLANS["pro"]["rpm"] > script.PLANS["free"]["rpm"]
+
+    def test_the_max_age_follows_the_poll_rate(self, script):
+        """Ein Quotenalter unter dem Poll-Takt ließe nie einen Alarm zu."""
+        for name, plan in script.PLANS.items():
+            assert plan["max_age"] >= 2 * plan["poll"], name
+
+    async def test_the_plan_lands_in_the_env_block(self, script, monkeypatch, capsys):
+        from backend.tests.test_sportsgameodds import event, page
+
+        klass = TestSportsGameOddsEinrichtung()
+        klass._patch(script, monkeypatch, lambda r: httpx.Response(200, json=page([event()])))
+        args = klass._args(script, plan="pro")
+        await script.check_sportsgameodds(args)
+        out = capsys.readouterr().out
+        assert "SGO_RATE_LIMIT_PER_MINUTE=300" in out
+        assert "SGO_POLL_INTERVAL=5" in out
+        assert "36 Anfragen/Minute von 300" in out

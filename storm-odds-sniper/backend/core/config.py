@@ -50,8 +50,11 @@ class Settings(BaseSettings):
     telegram_parse_mode: str = "HTML"
 
     # ------------------------------------------------------------ providers
-    # Kommaseparierte Liste aktiver Provider, z. B. "mock" oder "the_odds_api,betfair".
-    providers: str = "mock"
+    # Kommaseparierte Liste aktiver Provider, z. B. "sportsgameodds"
+    # oder "sportsgameodds,betfair". Leer = keine Quelle; der Scanner läuft
+    # dann, findet nichts und schreibt den Grund ins Log. Es gibt bewusst
+    # keine Ersatzquelle, die Daten erfinden könnte.
+    providers: str = ""
 
     # The Odds API (https://the-odds-api.com) - echter REST-Anbieter, Key nötig.
     odds_api_key: str = ""
@@ -86,10 +89,16 @@ class Settings(BaseSettings):
     sgo_sport_ids: str = "SOCCER,TENNIS"
     #: true = ausschließlich laufende Events. Genau dafür ist diese Quelle da.
     sgo_live_only: bool = False
-    sgo_poll_interval: float = 20.0
+    #: Poll-Takt. Der Pro-Tarif erlaubt 300 Anfragen/Minute und aktualisiert
+    #: schneller als einmal pro Minute - fünf Sekunden je Seite liegen weit
+    #: darunter (siehe ``requests_per_minute()``).
+    sgo_poll_interval: float = 5.0
     #: Jede Seite ist ein eigener Abruf - hier begrenzt sich der Verbrauch.
     sgo_max_pages: int = 3
-    sgo_page_limit: int = 50
+    sgo_page_limit: int = 100
+    #: Anfragen pro Minute, die der Tarif zulässt. Der Adapter drosselt sich
+    #: selbst darauf; 0 = keine Drosselung.
+    sgo_rate_limit_per_minute: int = 300
     #: Optional auf bestimmte Buchmacher einschränken (kommagetrennt).
     sgo_bookmakers: str = ""
 
@@ -115,13 +124,6 @@ class Settings(BaseSettings):
     betfair_max_markets_per_request: int = 40
     betfair_max_catalogue_results: int = 100
     betfair_inplay_only: bool = False
-
-    # Mock-Provider (Entwicklung / Tests / Demo)
-    mock_tick_interval: float = 0.35
-    mock_events: int = 8
-    mock_bookmakers: int = 7
-    mock_error_probability: float = 0.02
-    mock_seed: int | None = None
 
     # ----------------------------------------------------------- thresholds
     min_value_percent: float = 10.0

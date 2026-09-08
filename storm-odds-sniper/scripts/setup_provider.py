@@ -198,6 +198,19 @@ async def check_the_odds_api(args: argparse.Namespace) -> int:
     return 0
 
 
+#: Voreinstellungen je Tarif. Die Zahlen stammen aus der Preisseite des
+#: Anbieters; der Poll-Takt ist so gewählt, dass das Anfragelimit klar
+#: eingehalten wird - der Adapter drosselt zusätzlich selbst.
+PLANS: dict[str, dict[str, int | float]] = {
+    # 10 Anfragen/min: ein Durchlauf alle 30 s, eine Seite.
+    "free": {"rpm": 10, "poll": 30, "pages": 1, "page_limit": 50, "max_age": 300},
+    # 60 Anfragen/min: alle 10 s zwei Seiten = 12/min.
+    "allstar": {"rpm": 60, "poll": 10, "pages": 2, "page_limit": 100, "max_age": 180},
+    # 300 Anfragen/min: alle 5 s drei Seiten = 36/min - viel Luft nach oben.
+    "pro": {"rpm": 300, "poll": 5, "pages": 3, "page_limit": 100, "max_age": 60},
+}
+
+
 def _raw_pairs(provider: SportsGameOddsProvider) -> list[tuple[str, str, str, float | None]]:
     """Rohwerte der letzten Antwort neben ihrer Umrechnung.
 
@@ -234,6 +247,7 @@ async def check_sportsgameodds(args: argparse.Namespace) -> int:
         live_only=args.live,
         page_limit=args.limit,
         max_pages=1,
+        rate_limit_per_minute=int(PLANS[args.plan]["rpm"]),
     )
     print(f"{INFO} Prüfe SportsGameOdds ...")
     try:
@@ -300,15 +314,21 @@ async def check_sportsgameodds(args: argparse.Namespace) -> int:
             f"SGO_SPORT_IDS={args.sports}",
             f"SGO_LEAGUES={args.leagues}",
             f"SGO_LIVE_ONLY={'true' if args.live else 'false'}",
-            "SGO_POLL_INTERVAL=20",
-            "SGO_MAX_PAGES=1",
-            "# Echte Quellen liefern weniger Buchmacher je Markt als die Simulation.",
+            f"SGO_POLL_INTERVAL={PLANS[args.plan]['poll']}",
+            f"SGO_MAX_PAGES={PLANS[args.plan]['pages']}",
+            f"SGO_PAGE_LIMIT={PLANS[args.plan]['page_limit']}",
+            f"SGO_RATE_LIMIT_PER_MINUTE={PLANS[args.plan]['rpm']}",
             "MIN_BOOKMAKERS=3",
-            "MAX_ODDS_AGE_SECONDS=120",
+            f"MAX_ODDS_AGE_SECONDS={PLANS[args.plan]['max_age']}",
         ]
     )
-    print("\n--- Für deine .env ---")
+    print(f"\n--- Für deine .env (Tarif: {args.plan}) ---")
     print(env_block)
+    plan = PLANS[args.plan]
+    print(
+        f"\n{INFO} Ergibt {60 / plan['poll'] * plan['pages']:.0f} Anfragen/Minute "
+        f"von {plan['rpm']} erlaubten."
+    )
     if args.write:
         written = apply_to_env(Path(args.env), env_block)
         print(f"\n{OK} {written} Zeilen in {args.env} gesetzt.")
@@ -362,6 +382,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--leagues", default="", help="Ligen, z. B. EPL,BUNDESLIGA")
     parser.add_argument("--sports", default="SOCCER,TENNIS", help="sportIDs")
     parser.add_argument("--live", action="store_true", help="nur laufende Events")
+    parser.add_argument(
+        "--plan",
+        choices=sorted(PLANS),
+        default="free",
+        help="Tarif - bestimmt Poll-Takt und Anfragelimit (Standard: free)",
+    )
     parser.add_argument("--limit", type=int, default=25, help="Events je Seite")
     parser.add_argument(
         "--base-url",

@@ -179,85 +179,44 @@ der es behebt. Ein leeres Dashboard ohne Erklärung sieht aus wie ein kaputtes
 System; es war nur ein vergessenes `--build`.
 
 Nebenbei aufgefallen: `.banner { display: flex }` schlägt das
-`[hidden]`-Attribut des Browsers. Das Simulations-Banner ließ sich dadurch
-nie ausblenden - es fiel nur nicht auf, weil die Simulation meistens lief.
+`[hidden]`-Attribut des Browsers. Kein Banner ließ sich dadurch ausblenden -
+es fiel nur lange nicht auf.
 
-## Warum die Simulation nicht mehr einspringt
+## Warum die Simulation ganz entfernt wurde
 
-Ursprünglich griff der MockProvider immer, wenn keine Quelle startbar war -
-„damit das System nie stumm läuft". Das war die falsche Prioritätensetzung.
+Sie hatte einen klaren Zweck: das System ohne Zugangsdaten ausprobieren zu
+können. Der Preis dafür stellte sich als zu hoch heraus.
 
-Wer `PROVIDERS=the_odds_api` schreibt, will echte Daten. Fehlt der Schlüssel,
-sah das Dashboard mit dem Fallback aus wie ein laufendes System: Alarme,
-Fehlpreise, Bewegungen - alles erfunden. Ein stummes System mit klarer
-Begründung ist ehrlicher als ein beschäftigtes, das nichts Echtes anzeigt.
+Die Simulation tickte alle 0,35 s und erzeugte absichtlich Fehlpreise, eine
+echte Quelle liefert im Vergleich ein paar Preise pro Minute. Nebeneinander
+war das Verhältnis etwa tausend zu eins - die Alarmliste bestand praktisch nur
+aus Erfundenem, obwohl echte Daten flossen. Auf dem Bildschirm unterschieden
+sich beide nur durch ein kleines 🧪. Dazu kam ein Fallback, der die Simulation
+startete, sobald keine echte Quelle hochkam: eine vergessene Zugangsdatei sah
+damit aus wie ein prima laufendes System voller überzeugender Funde.
 
-Jetzt springt die Simulation nur ein, wenn **gar nichts** angefordert wurde.
-Wurde etwas angefordert und ist nicht startbar, bleibt die Liste leer und der
-Grund steht im Log.
+Beides ließ sich abmildern (Warnungen, ein Abschaltskript, kein Fallback mehr),
+aber die Grundspannung blieb: ein Werkzeug, das echte Fehlpreise von Rauschen
+trennen soll, sollte nicht selbst überzeugendes Rauschen herstellen. Mit einem
+bezahlten Zugang entfällt auch der ursprüngliche Zweck.
 
-## Warum Mischbetrieb eine Warnung auslöst
+Verloren geht damit: das Ausprobieren ohne Zugangsdaten, und Tests, die die
+Kette über den Simulator geführt haben. Die zwei Stellen, an denen der Scanner
+eine laufende Quelle braucht, decken jetzt ein paar Zeilen Stub im Testcode ab
+(`StubStreamProvider`) - der landet nicht im Auslieferungsstand.
 
-Die Simulation tickt alle 0,35 s und injiziert absichtlich Fehlpreise; The
-Odds API liefert im Gratis-Tarif ein paar Abrufe am Tag. Nebeneinander ist das
-Verhältnis etwa tausend zu eins - die Alarmliste besteht dann praktisch nur
-aus Erfundenem, obwohl echte Daten fließen. Auf dem Dashboard fiel das nicht
-auf, weil beide Zeilen gleich aussehen (bis auf das 🧪).
+## Warum der Adapter sein eigenes Anfragelimit rechnet
 
-Das ist ein legitimer Testaufbau, aber fast nie das, was jemand im Betrieb
-will. Deshalb: Warnung beim Start mit der fertigen `PROVIDERS`-Zeile zum
-Kopieren, plus `./scripts/no-simulation.sh`.
+Ein Tarif nennt Anfragen pro Minute, konfiguriert wird aber ein Poll-Takt in
+Sekunden. Dazwischen liegt die Seitenzahl: ein Durchlauf kostet
+`SGO_MAX_PAGES` Anfragen, nicht eine. Wer `SGO_POLL_INTERVAL=1` und
+`SGO_MAX_PAGES=10` setzt, landet bei 600 Anfragen pro Minute - und ein
+Provider in Dauer-429 findet gar nichts mehr.
 
-## Warum das SportsGameOdds-Schema aus der SDK stammt
-
-Die Doku-Seiten des Anbieters waren aus dieser Umgebung nicht erreichbar. Ein
-Adapter auf Basis von Suchergebnis-Schnipseln wäre geraten gewesen - genau
-das, was hier nicht passieren darf.
-
-Stattdessen kommt das Schema aus der offiziellen, aus der
-OpenAPI-Spezifikation generierten SDK (`SportsGameOdds/sports-odds-api-python`).
-Dort stehen Feldnamen, Verschachtelung und Parameter als Quelltext: `data` und
-`nextCursor` für die Seiten, `teams.home.names.long`, `status.live`,
-`byBookmaker`, und die Zusammensetzung von `oddID`. Das ist keine
-Interpretation, sondern die Definition.
-
-Ungeprüft bleibt genau ein Punkt: das **Quotenformat**. Dass `"-110"`
-amerikanisch gemeint ist, geht aus Beispielen hervor, nicht aus der
-Spezifikation. Weil davon jeder einzelne Preis abhängt, zeigt das
-Einrichtungsskript Rohwert und Umrechnung nebeneinander - überprüfbar in fünf
-Sekunden gegen die Anzeige des Buchmachers, statt Wochen später an
-unerklärlichen Alarmen.
-
-## Warum unbekannte Märkte übersprungen und gezählt werden
-
-Ein `betTypeID`, das der Adapter nicht kennt, könnte man auf die
-naheliegendste Marktart abbilden. Damit wäre ein Viertel irgendwann Vollzeit
-und eine Spielerwette ein Teamergebnis - und der Fehler stünde als plausibler
-Alarm im Dashboard.
-
-Deshalb: nur belegte Kennungen werden zugeordnet, alles andere wandert in
-einen Zähler. Liefert eine Quelle Events, aber keine einzige verwertbare
-Quote, geht der Provider mit dieser Begründung in die Health-Anzeige - denn
-sonst sieht ein Schema-Missverständnis genauso aus wie ein ruhiger Markt.
-
-## Warum die Einrichtungshilfe den Host-Code in den Container mountet
-
-Sie lief mit `docker compose run api python /app/scripts/setup_provider.py` -
-also mit dem Code aus dem **gebauten Image**. Nach einem `git pull` ohne
-`--build` kannte das Skript im Container einen neu hinzugekommenen Provider
-noch nicht und brach mit `invalid choice` ab, obwohl auf dem Host alles
-vorhanden war. Genau dieselbe Konstellation hatte kurz zuvor schon das
-Dashboard leer aussehen lassen.
-
-Der Container wird nur wegen der Abhängigkeiten benutzt (httpx & Co. fehlen
-dem System-Python). Die liegen im Image unter `/opt/venv`, der Code getrennt
-davon unter `/app`. Damit lässt sich `backend/` und `scripts/` vom Host
-darüberlegen: Abhängigkeiten aus dem Image, Code vom Host. Ein Neubau ist für
-dieses Skript damit nie wieder nötig.
-
-Für die laufenden Dienste bleibt `--build` erforderlich - dort gibt es keinen
-gleichwertigen Trick, und der Hinweis steht jetzt in jedem Skript, das zum
-Neustart auffordert.
+Deshalb rechnet `next_poll_delay()` die Untergrenze aus
+`60 * seiten / limit` und setzt den Takt notfalls hoch. Der gewünschte Wert
+gilt, solange er darüber liegt; ein zu gieriger wird stillschweigend
+gedrosselt und beim Start mit der tatsächlichen Rate geloggt.
 
 ## Warum ein Cooldown *und* eine Duplikaterkennung
 
@@ -372,12 +331,3 @@ halben Jahr sagt `the_odds_api.py` mehr als `provider_1.py`, und die Registry
 stellt die Austauschbarkeit ohnehin sicher. Zuordnung:
 `provider_1 = the_odds_api`, `provider_2 = betfair_exchange`.
 
-## Warum der Mock so ausführlich ist
-
-Er ist kein Platzhalter, sondern das Testinstrument: mit ihm laufen Streaming,
-inkrementelle Verarbeitung, Value Engine, Fehlerdetektor, Cooldown, Telegram
-und Dashboard end-to-end ohne einen einzigen API-Key. Zwei echte Fehler im
-Scanner sind zuerst im Mock-Betrieb aufgefallen.
-
-Damit er nicht mit echten Daten verwechselt wird, tragen alle Namen das
-Präfix `Mock`.

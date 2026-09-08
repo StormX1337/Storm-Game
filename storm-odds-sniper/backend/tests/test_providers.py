@@ -1,4 +1,4 @@
-"""Provider: Mock-Simulation, Supervisor/Reconnect, Parser der echten Quellen."""
+"""Provider: Supervisor/Reconnect, Registry und die Parser der echten Quellen."""
 
 from __future__ import annotations
 
@@ -18,183 +18,9 @@ from backend.providers.base import (
     ProviderHealth,
 )
 from backend.providers.betfair_exchange import BetfairExchangeProvider, map_market_type
-from backend.providers.mock_provider import MockProvider
 from backend.providers.registry import build_providers, describe_providers, missing_credentials
 from backend.providers.the_odds_api import TheOddsApiProvider, sport_from_key
 from backend.scanner.supervisor import ProviderSupervisor
-
-
-class TestMockProvider:
-    async def test_connect_creates_events(self):
-        provider = MockProvider(events=6, bookmakers=5, seed=1)
-        await provider.connect()
-        try:
-            events = await provider.get_events()
-            assert len(events) == 6
-            assert provider.health.status is ProviderStatus.CONNECTED
-            assert {e.sport for e in events} == {Sport.FOOTBALL, Sport.TENNIS}
-        finally:
-            await provider.disconnect()
-
-    async def test_event_pairings_are_unique(self):
-        """Sonst führt der EventMatcher zwei Sim-Events zu einem zusammen."""
-        provider = MockProvider(events=10, seed=3)
-        await provider.connect()
-        try:
-            events = await provider.get_events()
-            pairings = {(e.home, e.away) for e in events}
-            assert len(pairings) == len(events)
-        finally:
-            await provider.disconnect()
-
-    async def test_full_snapshot_covers_all_markets(self):
-        provider = MockProvider(events=4, bookmakers=5, seed=2)
-        await provider.connect()
-        try:
-            quotes = await provider.get_odds()
-            markets = {q.market.type for q in quotes}
-            # Nicht nur 1X2 - alle simulierten Marktarten müssen fließen.
-            assert MarketType.MATCH_ODDS in markets
-            assert MarketType.OVER_UNDER in markets
-            assert MarketType.BTTS in markets
-            assert len(markets) >= 5
-        finally:
-            await provider.disconnect()
-
-    async def test_quotes_carry_the_provider_event_id(self):
-        provider = MockProvider(events=3, seed=4)
-        await provider.connect()
-        try:
-            quotes = await provider.get_odds()
-            event_ids = {e.provider_event_id for e in await provider.get_events()}
-            assert all(q.event_id in event_ids for q in quotes)
-        finally:
-            await provider.disconnect()
-
-    async def test_stream_pushes_only_changes(self):
-        provider = MockProvider(tick_interval=0.05, events=3, bookmakers=4, seed=5)
-        await provider.connect()
-        try:
-            sizes = []
-            stream = provider.stream()
-            for _ in range(6):
-                message = await asyncio.wait_for(stream.__anext__(), timeout=5)
-                sizes.append(len(message.quotes))
-            # Erste Nachricht überträgt alles, danach nur noch Deltas.
-            assert sizes[0] > 0
-            assert min(sizes[1:]) < sizes[0]
-        finally:
-            await provider.disconnect()
-
-    async def test_probabilities_are_normalised(self):
-        provider = MockProvider(events=4, seed=6)
-        await provider.connect()
-        try:
-            for sim in provider.events:
-                for (market_type, _line), probs in sim.probabilities().items():
-                    if market_type is MarketType.DOUBLE_CHANCE:
-                        # Double Chance überlappt sich: die drei Selektionen
-                        # summieren sich per Definition auf 2, nicht auf 1.
-                        assert sum(probs.values()) == pytest.approx(2.0, abs=0.02)
-                        continue
-                    assert 0.98 <= sum(probs.values()) <= 1.02, market_type
-        finally:
-            await provider.disconnect()
-
-    async def test_live_events_have_live_details(self):
-        provider = MockProvider(events=6, seed=7)
-        await provider.connect()
-        try:
-            live = [e for e in await provider.get_events() if e.status is EventStatus.LIVE]
-            assert live
-            for event in live:
-                if event.sport is Sport.FOOTBALL:
-                    assert event.football is not None and event.football.minute is not None
-                else:
-                    assert event.tennis is not None and event.tennis.set_number is not None
-        finally:
-            await provider.disconnect()
-
-    async def test_prematch_events_have_no_invented_live_state(self):
-        provider = MockProvider(events=6, seed=8)
-        await provider.connect()
-        try:
-            for event in await provider.get_events():
-                if event.status is EventStatus.PRE_MATCH:
-                    assert event.score is None
-                    if event.football:
-                        assert event.football.minute is None
-                    if event.tennis:
-                        assert event.tennis.set_number is None
-        finally:
-            await provider.disconnect()
-
-    async def test_long_match_never_crashes(self):
-        """Regression: bei 0:0 in der 90. Minute hat Draw No Bet keine
-        Wahrscheinlichkeitsmasse mehr - das führte zu einer Division durch 0."""
-        for seed in (3, 11, 42):
-            provider = MockProvider(events=8, bookmakers=7, error_probability=0.3, seed=seed)
-            provider._build_events()
-            for _ in range(1200):
-                for sim in provider.events:
-                    sim.last_progress = 0.0  # Spieluhr forcieren
-                provider._advance()
-                provider._build_quotes(force=True)
-
-    async def test_void_markets_produce_no_quotes(self):
-        provider = MockProvider(events=3, seed=5)
-        provider._build_events()
-        football = next(e for e in provider.events if e.sport is Sport.FOOTBALL)
-        football.status = EventStatus.LIVE
-        football.minute = 90  # keine Restspielzeit -> Draw No Bet ist void
-        football.score_home = football.score_away = 0
-        quotes = [q for q in provider._build_quotes(force=True) if q.event_id == football.event_id]
-        assert quotes, "andere Märkte müssen weiterhin Quoten liefern"
-        assert not [q for q in quotes if q.market.type is MarketType.DRAW_NO_BET]
-
-    async def test_finished_events_are_replaced(self):
-        """Ohne Nachschub wäre nach etwa einer Stunde kein Event mehr live."""
-        provider = MockProvider(events=8, bookmakers=7, seed=17)
-        provider._build_events()
-        live_counts = []
-        for step in range(4000):
-            for sim in provider.events:
-                sim.last_progress = 0.0
-            provider._advance()
-            if step % 400 == 0:
-                live_counts.append(sum(1 for e in provider.events if e.status is EventStatus.LIVE))
-        assert len(provider.events) == 8
-        assert min(live_counts[1:]) > 0, f"Simulation lief leer: {live_counts}"
-
-    async def test_replacements_never_duplicate_a_live_pairing(self):
-        """Zwei gleichzeitige Events mit derselben Paarung würde der
-        EventMatcher zusammenführen - ihre Quoten wären dann vermischt."""
-        provider = MockProvider(events=8, bookmakers=7, seed=17)
-        provider._build_events()
-        for _ in range(4000):
-            for sim in provider.events:
-                sim.last_progress = 0.0
-            provider._advance()
-            pairings = [(e.home, e.away) for e in provider.events]
-            assert len(set(pairings)) == len(pairings), f"Doppelte Paarung: {pairings}"
-
-    async def test_suspended_events_recover(self):
-        """Regression: suspendierte Events wurden von _advance() übersprungen
-        und blieben deshalb für immer stehen."""
-        provider = MockProvider(events=4, seed=13)
-        provider._build_events()
-        live = next(e for e in provider.events if e.status is EventStatus.LIVE)
-        live.status = EventStatus.SUSPENDED
-        live.last_progress = 0.0
-        provider._advance()
-        assert live.status is EventStatus.LIVE
-
-    async def test_disconnect_is_idempotent(self):
-        provider = MockProvider(events=2, seed=9)
-        await provider.connect()
-        await provider.disconnect()
-        await provider.disconnect()
-        assert provider.health.status is ProviderStatus.DISCONNECTED
 
 
 class FlakyProvider(OddsProvider):
@@ -582,62 +408,52 @@ class TestBetfair:
 
 
 class TestRegistry:
-    def test_mock_needs_no_credentials(self):
-        assert missing_credentials("mock", Settings(_env_file=None)) == []
-
     def test_missing_keys_are_reported(self):
         settings = Settings(_env_file=None, providers="the_odds_api,betfair")
         assert missing_credentials("the_odds_api", settings) == ["ODDS_API_KEY"]
         assert "BETFAIR_APP_KEY" in missing_credentials("betfair", settings)
 
-    def test_a_requested_source_is_never_replaced_by_the_simulation(self, capsys):
-        """Wer echte Daten verlangt, darf keine erfundenen bekommen.
+    def test_sportsgameodds_needs_its_key(self):
+        assert missing_credentials("sportsgameodds", Settings(_env_file=None)) == ["SGO_API_KEY"]
 
-        Vorher sprang hier die Simulation ein. Auf dem Dashboard sah eine
-        vergessene ODDS_API_KEY damit aus wie ein laufendes System - mit
-        künstlichen Fehlpreisen, die nach echten Funden aussehen.
-        """
-        settings = Settings(_env_file=None, providers="the_odds_api")
-        providers = build_providers(settings)
+    def test_a_source_without_credentials_yields_nothing(self, capsys):
+        """Kein Ersatz, keine erfundenen Daten - nur eine klare Meldung."""
+        providers = build_providers(Settings(_env_file=None, providers="the_odds_api"))
         assert providers == []
         out = capsys.readouterr().out
         assert "KEINE DATENQUELLE STARTBAR" in out
         assert "setup-provider" in out
 
-    def test_configured_mock_is_built(self):
-        providers = build_providers(Settings(_env_file=None, providers="mock", mock_events=3))
-        assert isinstance(providers[0], MockProvider)
+    def test_an_empty_configuration_yields_nothing(self, capsys):
+        """Früher sprang hier eine Simulation ein - die gibt es nicht mehr."""
+        assert build_providers(Settings(_env_file=None, providers="")) == []
+        assert "KEINE DATENQUELLE STARTBAR" in capsys.readouterr().out
 
-    def test_the_simulation_only_fills_in_when_nothing_was_asked_for(self):
-        providers = build_providers(Settings(_env_file=None, providers="", mock_events=3))
-        assert [p.name for p in providers] == ["mock"]
+    def test_unknown_provider_yields_nothing(self):
+        assert build_providers(Settings(_env_file=None, providers="does_not_exist")) == []
 
-    def test_unknown_provider_does_not_summon_the_simulation(self):
-        providers = build_providers(Settings(_env_file=None, providers="does_not_exist"))
-        assert providers == []
+    def test_a_configured_source_is_built(self, monkeypatch):
+        monkeypatch.setenv("SGO_API_KEY", "x" * 20)
+        providers = build_providers(Settings(_env_file=None, providers="sportsgameodds"))
+        assert [p.name for p in providers] == ["sportsgameodds"]
 
-    def test_simulation_next_to_real_data_is_called_out(self, monkeypatch, capsys):
-        """Der Fall vom Server: in der Alarmliste stand fast nur Erfundenes."""
-        monkeypatch.setenv("ODDS_API_KEY", "x" * 20)
-        settings = Settings(_env_file=None, providers="mock,the_odds_api")
-        providers = build_providers(settings)
-        assert {p.name for p in providers} == {"mock", "the_odds_api"}
-        # Auf ASCII prüfen: je nach Testreihenfolge steht das Log als Text
-        # oder als JSON da, und dort sind Umlaute escaped.
-        out = capsys.readouterr().out
-        assert "SIMULATION" in out
-        assert "dominiert" in out
-        assert "PROVIDERS=the_odds_api" in out
-
-    def test_real_data_alone_is_not_warned_about(self, monkeypatch, capsys):
-        monkeypatch.setenv("ODDS_API_KEY", "x" * 20)
-        build_providers(Settings(_env_file=None, providers="the_odds_api"))
-        assert "dominiert" not in capsys.readouterr().out
+    def test_one_broken_source_does_not_stop_the_others(self, monkeypatch):
+        monkeypatch.setenv("SGO_API_KEY", "x" * 20)
+        providers = build_providers(
+            Settings(_env_file=None, providers="the_odds_api,sportsgameodds")
+        )
+        assert [p.name for p in providers] == ["sportsgameodds"]
 
     def test_descriptions_include_every_provider(self):
         specs = describe_providers(Settings(_env_file=None))
-        assert {s.key for s in specs} == {"mock", "the_odds_api", "sportsgameodds", "betfair"}
+        assert {s.key for s in specs} == {"the_odds_api", "sportsgameodds", "betfair"}
         assert all(s.title for s in specs)
+
+    def test_no_adapter_is_a_simulation(self):
+        """Die Simulation ist vollständig entfernt - auch als Katalogeintrag."""
+        specs = describe_providers(Settings(_env_file=None))
+        assert all(s.kind != "mock" for s in specs)
+        assert all("mock" not in s.key for s in specs)
 
 
 class TestHealth:

@@ -219,7 +219,7 @@ class ProviderSpec:
 
     key: str
     title: str
-    kind: str  # "mock" | "rest" | "stream"
+    kind: str  # "rest" | "stream"
     requires_credentials: bool
     docs_url: str = ""
     notes: str = ""

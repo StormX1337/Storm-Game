@@ -18,16 +18,19 @@ from backend.models.domain import (
     now_ts,
 )
 from backend.models.enums import AlertKind, EventStatus, MarketType, SelectionCode, Sport
+from backend.providers.base import OddsProvider
 from backend.scanner.engine import ScannerEngine, thresholds_from_settings
 from backend.tests.conftest import OVER, OVER_UNDER_25, UNDER, make_event
 
 MARKET = OVER_UNDER_25
+#: Name der Testquelle - der Scanner bindet Events je Provider.
+PROVIDER = "sportsgameodds"
 
 
 def scanner_settings(**overrides) -> Settings:
     base = {
         "_env_file": None,
-        "providers": "mock",
+        "providers": PROVIDER,
         "min_value_percent": 10.0,
         "min_outlier_percent": 15.0,
         "min_bookmakers": 3,
@@ -51,7 +54,7 @@ def quote(bookmaker: str, price: float, selection=OVER, *, event_id="p-1", ts=No
         selection=selection,
         bookmaker=bookmaker,
         price=price,
-        provider="mock",
+        provider=PROVIDER,
         ts=stamp,
         received_at=stamp,
         confirmed_at=stamp,
@@ -66,7 +69,7 @@ def market_message(prices: dict[str, float], *, event: EventSnapshot | None = No
         quotes.append(quote(bookmaker, price, OVER, ts=ts))
         counter = 1.0 / max(0.02, (1.05 - 1.0 / price))
         quotes.append(quote(bookmaker, counter, UNDER, ts=ts))
-    return ProviderMessage(provider="mock", events=[event], quotes=quotes)
+    return ProviderMessage(provider=PROVIDER, events=[event], quotes=quotes)
 
 
 @pytest.fixture
@@ -89,7 +92,7 @@ class TestEventBinding:
             sport=Sport.FOOTBALL,
             home="Bayern München",
             away="Borussia Dortmund",
-            provider="mock",
+            provider=PROVIDER,
             provider_event_id="a-1",
             start_time=start,
             status=EventStatus.PRE_MATCH,
@@ -104,7 +107,7 @@ class TestEventBinding:
             start_time=start,
             status=EventStatus.PRE_MATCH,
         )
-        await engine.handle_message(ProviderMessage(provider="mock", events=[first]))
+        await engine.handle_message(ProviderMessage(provider=PROVIDER, events=[first]))
         await engine.handle_message(ProviderMessage(provider="other", events=[second]))
         assert len(engine._events) == 1
 
@@ -112,14 +115,14 @@ class TestEventBinding:
         start = datetime.now(UTC) + timedelta(hours=2)
         await engine.handle_message(
             ProviderMessage(
-                provider="mock",
+                provider=PROVIDER,
                 events=[
                     EventSnapshot(
                         event_id="",
                         sport=Sport.FOOTBALL,
                         home="Bayern München",
                         away="Borussia Dortmund",
-                        provider="mock",
+                        provider=PROVIDER,
                         provider_event_id="a-1",
                         start_time=start,
                         status=EventStatus.LIVE,
@@ -164,7 +167,7 @@ class TestEventBinding:
         assert binding.swapped is True
 
     async def test_quotes_of_unknown_events_are_dropped(self, engine):
-        message = ProviderMessage(provider="mock", quotes=[quote("b1", 2.4, event_id="ghost")])
+        message = ProviderMessage(provider=PROVIDER, quotes=[quote("b1", 2.4, event_id="ghost")])
         assert await engine.handle_message(message) == []
 
     async def test_live_transition_is_stored_in_redis(self, engine, redis_state):
@@ -293,7 +296,7 @@ class TestAlerting:
             for bookmaker, price in (extra or {}).items():
                 quotes.append(quote(bookmaker, price, OVER))
                 quotes.append(quote(bookmaker, 120.0, UNDER))
-            return ProviderMessage(provider="mock", events=[event], quotes=quotes)
+            return ProviderMessage(provider=PROVIDER, events=[event], quotes=quotes)
 
         await engine.handle_message(decided())
         alerts = await engine.handle_message(decided({"off": 1.40}))
@@ -455,11 +458,80 @@ class TestThresholdMapping:
         assert thresholds.sports == frozenset(Sport)
 
 
-class TestEngineLifecycle:
-    async def test_start_and_stop_with_the_mock_provider(self, redis_state):
-        from backend.providers.mock_provider import MockProvider
+class StubStreamProvider(OddsProvider):
+    """Kleiner Push-Provider für die Lebenszyklus-Tests.
 
-        provider = MockProvider(tick_interval=0.05, events=4, bookmakers=5, seed=21)
+    Er ersetzt die frühere Simulation an genau den zwei Stellen, an denen der
+    Scanner eine laufende Quelle braucht - ohne einen ganzen Simulator im
+    Auslieferungsstand zu behalten.
+    """
+
+    name = "stub"
+    supports_streaming = True
+
+    #: Deutlich verschiedene Namen - der EventMatcher führt ähnliche Paarungen
+    #: absichtlich zusammen, "Heim 0" und "Heim 1" wären ein Event.
+    PAIRS = (
+        ("Hamburger SV", "Werder Bremen"),
+        ("Real Madrid", "Atletico Madrid"),
+        ("Juventus Turin", "SSC Neapel"),
+        ("Ajax Amsterdam", "PSV Eindhoven"),
+        ("Celtic Glasgow", "Rangers FC"),
+        ("Benfica Lissabon", "FC Porto"),
+    )
+
+    def __init__(self, *, events: int = 4, tick: float = 0.02) -> None:
+        super().__init__()
+        self.events = events
+        self.tick = tick
+
+    async def connect(self) -> None:
+        self.reset_stop()
+        self.mark_connected("stub")
+
+    async def disconnect(self) -> None:
+        self.request_stop()
+        self.mark_disconnected("stub")
+
+    async def get_events(self):
+        return []
+
+    async def get_odds(self):
+        return []
+
+    async def stream(self):
+        counter = 0
+        while not self.stopping:
+            counter += 1
+            for index in range(min(self.events, len(self.PAIRS))):
+                home, away = self.PAIRS[index]
+                snapshot = make_event(
+                    event_id="",
+                    provider=self.name,
+                    provider_event_id=f"stub-{index}",
+                    home=home,
+                    away=away,
+                )
+                quotes = []
+                for offset, book in enumerate(("b1", "b2", "b3", "b4")):
+                    price = 2.40 + offset * 0.05 + (counter % 7) * 0.01
+                    quotes.append(quote(book, round(price, 3), OVER, event_id=f"stub-{index}"))
+                    quotes.append(
+                        quote(
+                            book,
+                            round(1.0 / max(0.02, 1.05 - 1.0 / price), 3),
+                            UNDER,
+                            event_id=f"stub-{index}",
+                        )
+                    )
+                self.mark_message(len(quotes))
+                yield ProviderMessage(provider=self.name, events=[snapshot], quotes=quotes)
+            await asyncio.sleep(self.tick)
+
+
+class TestEngineLifecycle:
+    async def test_start_and_stop_with_a_running_source(self, redis_state):
+        provider = StubStreamProvider(events=4)
         engine = ScannerEngine(
             scanner_settings(scanner_workers=2),
             state=redis_state,
@@ -522,12 +594,10 @@ class TestConfigurationWarnings:
 
     async def test_streaming_providers_are_never_flagged(self, redis_state):
         """Push-Provider haben keinen Poll-Takt, der zu langsam sein könnte."""
-        from backend.providers.mock_provider import MockProvider
-
         engine = ScannerEngine(
             scanner_settings(max_odds_age_seconds=1.0),
             state=redis_state,
             repository=None,
-            providers=[MockProvider(events=2, seed=1)],
+            providers=[StubStreamProvider(events=2)],
         )
         assert "kein Alarm" not in self._capture(engine)

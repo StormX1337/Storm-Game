@@ -12,7 +12,6 @@ from backend.core.config import Settings
 from backend.core.logging import get_logger
 from backend.providers.base import OddsProvider, ProviderAuthError, ProviderSpec
 from backend.providers.betfair_exchange import BetfairExchangeProvider
-from backend.providers.mock_provider import MockProvider
 from backend.providers.sportsgameodds import SportsGameOddsProvider
 from backend.providers.the_odds_api import TheOddsApiProvider
 
@@ -20,16 +19,6 @@ log = get_logger("provider.registry")
 
 #: Statische Beschreibung für README, Dashboard und ``/health/providers``.
 PROVIDER_SPECS: dict[str, ProviderSpec] = {
-    "mock": ProviderSpec(
-        key="mock",
-        title="MockProvider (Simulation)",
-        kind="mock",
-        requires_credentials=False,
-        notes=(
-            "Vollständige Simulation mit Push-Stream, Live-Verlauf und "
-            "künstlichen Fehlpreisen. Keine echten Quoten."
-        ),
-    ),
     "the_odds_api": ProviderSpec(
         key="the_odds_api",
         title="The Odds API",
@@ -85,16 +74,6 @@ def missing_credentials(key: str, settings: Settings) -> list[str]:
     return []
 
 
-def _make_mock(settings: Settings) -> OddsProvider:
-    return MockProvider(
-        tick_interval=settings.mock_tick_interval,
-        events=settings.mock_events,
-        bookmakers=settings.mock_bookmakers,
-        error_probability=settings.mock_error_probability,
-        seed=settings.mock_seed,
-    )
-
-
 def _make_the_odds_api(settings: Settings) -> OddsProvider:
     return TheOddsApiProvider(
         api_key=settings.odds_api_key,
@@ -145,11 +124,11 @@ def _make_sportsgameodds(settings: Settings) -> OddsProvider:
         max_pages=settings.sgo_max_pages,
         page_limit=settings.sgo_page_limit,
         bookmakers=settings.sgo_bookmakers,
+        rate_limit_per_minute=settings.sgo_rate_limit_per_minute,
     )
 
 
 FACTORIES: dict[str, Callable[[Settings], OddsProvider]] = {
-    "mock": _make_mock,
     "sportsgameodds": _make_sportsgameodds,
     "the_odds_api": _make_the_odds_api,
     "betfair": _make_betfair,
@@ -159,14 +138,10 @@ FACTORIES: dict[str, Callable[[Settings], OddsProvider]] = {
 def build_providers(settings: Settings) -> list[OddsProvider]:
     """Konfigurierte Provider instanziieren.
 
-    Fehlen Zugangsdaten, wird der Provider übersprungen und der Grund geloggt -
-    der Scanner startet trotzdem.
-
-    Die Simulation springt **nur** ein, wenn gar keine Quelle verlangt wurde.
-    Wer ``PROVIDERS=the_odds_api`` schreibt und dessen Schlüssel vergisst,
-    bekommt keine erfundenen Quoten untergeschoben, sondern ein stummes System
-    mit klarer Begründung. Erfundene Daten in einem Werkzeug, das echte
-    Fehlpreise finden soll, sind schlimmer als gar keine.
+    Fehlt einem Provider ein Zugangsdatum, wird er übersprungen und der Grund
+    geloggt - die übrigen laufen weiter. Bleibt keiner übrig, liefert diese
+    Funktion eine leere Liste: der Scanner läuft, findet nichts und sagt
+    warum. Es gibt bewusst keine Ersatzquelle, die Daten erfinden könnte.
     """
     requested = settings.provider_names
     providers: list[OddsProvider] = []
@@ -190,29 +165,13 @@ def build_providers(settings: Settings) -> list[OddsProvider]:
         except Exception as exc:  # noqa: BLE001 - ein defekter Adapter darf nicht alles stoppen
             log.error("provider-initialisierung fehlgeschlagen", provider=key, error=str(exc))
 
-    real = [p for p in providers if p.name != "mock"]
-    if real and len(real) != len(providers):
-        # Der Fall aus der Praxis: die Simulation erzeugt am laufenden Band
-        # künstliche Fehlpreise, die echte Quelle alle paar Minuten einen
-        # echten Preis. In der Alarmliste steht dann fast nur Erfundenes.
-        log.warning(
-            "SIMULATION LÄUFT NEBEN ECHTEN DATEN - die Alarmliste wird von "
-            "erfundenen Fehlpreisen dominiert",
-            echt=[p.name for p in real],
-            empfehlung="'mock' aus PROVIDERS entfernen: "
-            f"PROVIDERS={','.join(p.name for p in real)}",
-        )
-
-    if not providers and not requested:
-        log.warning("kein Provider konfiguriert - starte die Simulation")
-        providers.append(_make_mock(settings))
-    elif not providers:
+    if not providers:
         log.error(
-            "KEINE DATENQUELLE STARTBAR - der Scanner läuft, findet aber nichts. "
-            "Es wird bewusst NICHT auf die Simulation ausgewichen: angefordert "
-            "waren echte Daten.",
-            angefordert=",".join(requested),
-            naechster_schritt="./scripts/setup-provider.sh the_odds_api --key <KEY> --write",
+            "KEINE DATENQUELLE STARTBAR - der Scanner läuft, findet aber nichts.",
+            angefordert=",".join(requested) or "(nichts konfiguriert)",
+            naechster_schritt=(
+                "./scripts/setup-provider.sh sportsgameodds --key <KEY> --live --write"
+            ),
         )
     return providers
 

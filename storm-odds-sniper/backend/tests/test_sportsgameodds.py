@@ -372,3 +372,49 @@ class TestAbrufUndFehler:
     async def test_missing_key_is_refused_at_construction(self):
         with pytest.raises(ProviderAuthError, match="SGO_API_KEY"):
             SportsGameOddsProvider(api_key="")
+
+
+class TestTarifdrosselung:
+    """Der Adapter hält das Anfragelimit des Tarifs von selbst ein.
+
+    Ohne diese Rechnung genügt ein beherzt gesetztes SGO_POLL_INTERVAL, um
+    sich in 429er zu schicken - und ein pausierter Provider findet nichts.
+    """
+
+    @pytest.mark.parametrize(
+        ("pages", "wish", "limit", "expected"),
+        [
+            (3, 5.0, 300, 5.0),  # Pro: weit unter dem Limit, Wunsch gilt
+            (50, 0.5, 300, 10.0),  # zu gierig: auf das Limit gedrosselt
+            (10, 1.0, 60, 10.0),  # All-Star
+            (3, 5.0, 0, 5.0),  # keine Drosselung konfiguriert
+        ],
+    )
+    def test_the_poll_rate_respects_the_plan(self, pages, wish, limit, expected):
+        prov = provider(max_pages=pages, poll_interval=wish, rate_limit_per_minute=limit)
+        assert prov.next_poll_delay() == pytest.approx(expected)
+
+    def test_the_resulting_rate_never_exceeds_the_plan(self):
+        for pages in (1, 3, 10, 50):
+            for wish in (0.1, 1.0, 5.0):
+                prov = provider(max_pages=pages, poll_interval=wish, rate_limit_per_minute=300)
+                per_minute = 60.0 / prov.next_poll_delay() * prov.requests_per_cycle()
+                assert per_minute <= 300.0 + 1e-6, (pages, wish, per_minute)
+
+    def test_one_request_per_page(self):
+        assert provider(max_pages=7).requests_per_cycle() == 7
+
+
+class TestKeineSimulationMehr:
+    """Die Simulation ist entfernt - sie darf auch nicht wieder einsickern."""
+
+    def test_the_module_is_gone(self):
+        import importlib.util
+
+        assert importlib.util.find_spec("backend.providers.mock_provider") is None
+
+    def test_the_registry_offers_only_real_sources(self):
+        from backend.providers.registry import FACTORIES, PROVIDER_SPECS
+
+        assert set(FACTORIES) == {"the_odds_api", "sportsgameodds", "betfair"}
+        assert set(PROVIDER_SPECS) == {"the_odds_api", "sportsgameodds", "betfair"}

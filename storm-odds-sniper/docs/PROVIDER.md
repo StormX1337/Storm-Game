@@ -6,44 +6,13 @@ Welche Quelle liefert was — und was sie **nicht** liefert.
 
 | Provider | Art | Zugangsdaten | Live-Details | Latenz |
 |---|---|---|---|---|
-| `mock` | Push (Simulation) | keine | vollständig (simuliert) | ~0,3 s |
 | `the_odds_api` | REST-Polling | API-Key | nur Spielstand | Poll-Intervall |
 | `sportsgameodds` | REST-Polling | API-Key | Live-Kennzeichen + Abschnitt | Poll-Intervall |
 | `betfair` | JSON-RPC-Polling | Konto + App-Key | Live-Kennzeichen | ~1 s |
 
-Auswahl über `PROVIDERS` (kommagetrennt, mehrere parallel).
-
----
-
-## mock — MockProvider
-
-**Zweck:** das komplette System ohne Zugangsdaten testbar machen.
-
-Simuliert werden Fußball (Minute, Spielstand, Halbzeiten, rote Karten,
-kurze Suspendierungen) und Tennis (Sätze, Games, Punkte, Aufschlag), dazu
-mehrere Buchmacher mit eigener Marge, eigenem Bias und eigenem Update-Takt
-sowie gelegentliche Fehlpreise.
-
-Die Fußball-Wahrscheinlichkeiten stammen aus einem Poisson-Modell über die
-Restspielzeit: fällt ein Tor, bewegt sich der ganze Markt realistisch. Tennis
-nutzt ein bewusst einfacheres Modell aus Grundstärke plus Führungsbonus.
-
-Beendete Partien werden automatisch durch neue ersetzt, damit auch nach
-Stunden noch etwas live ist. Dabei wird darauf geachtet, dass nie zwei Events
-mit derselben Paarung gleichzeitig laufen — der EventMatcher würde sie sonst
-(korrekterweise) zu einem Event zusammenführen und ihre Quoten vermischen.
-
-**Wichtig:** Alle Namen tragen das Präfix `Mock`. Es werden keine echten
-Buchmacherquoten nachgebildet oder behauptet.
-
-```env
-PROVIDERS=mock
-MOCK_TICK_INTERVAL=0.35
-MOCK_EVENTS=8
-MOCK_BOOKMAKERS=7
-MOCK_ERROR_PROBABILITY=0.02
-MOCK_SEED=42          # reproduzierbarer Verlauf
-```
+Auswahl über `PROVIDERS` (kommagetrennt, mehrere parallel). Ohne gültige
+Zugangsdaten läuft **keine** Quelle - es gibt keinen Ersatz, der Daten
+erfinden könnte.
 
 ---
 

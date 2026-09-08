@@ -60,18 +60,24 @@ class TestHealth:
         response = await client.get("/health/providers")
         assert response.status_code == 200
         keys = {row["key"] for row in response.json()}
-        assert keys == {"mock", "the_odds_api", "sportsgameodds", "betfair"}
+        assert keys == {"the_odds_api", "sportsgameodds", "betfair"}
 
     async def test_missing_credentials_are_reported(self, client):
         rows = {row["key"]: row for row in (await client.get("/health/providers")).json()}
         assert rows["the_odds_api"]["missing_credentials"] == ["ODDS_API_KEY"]
         assert rows["sportsgameodds"]["missing_credentials"] == ["SGO_API_KEY"]
-        assert rows["mock"]["missing_credentials"] == []
+        assert rows["betfair"]["missing_credentials"]
 
     async def test_provider_catalogue(self, client):
         rows = (await client.get("/providers")).json()
-        assert any(row["enabled"] for row in rows)
+        assert {row["key"] for row in rows} == {"the_odds_api", "sportsgameodds", "betfair"}
         assert all("docs_url" in row for row in rows)
+
+    async def test_without_credentials_nothing_is_enabled(self, client):
+        """Es gibt keine Quelle mehr, die ohne Zugangsdaten läuft."""
+        rows = (await client.get("/providers")).json()
+        assert not any(row["enabled"] for row in rows)
+        assert all(row["missing_credentials"] for row in rows)
 
 
 class TestEvents:

@@ -23,7 +23,7 @@ x-python-env: &python-env
   POSTGRES_USER: ${POSTGRES_USER:-storm}
   POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD muss in .env gesetzt sein}
   REDIS_URL: redis://redis:6379/0
-  PROVIDERS: ${PROVIDERS:-mock}
+  PROVIDERS: ${PROVIDERS:-}
   ODDS_API_KEY: ${ODDS_API_KEY:-}
   ODDS_API_REGIONS: ${ODDS_API_REGIONS:-eu,uk}
   ODDS_API_SPORTS: ${ODDS_API_SPORTS:-}
@@ -154,9 +154,6 @@ services:
     environment:
       <<: *python-env
       SCANNER_WORKERS: ${SCANNER_WORKERS:-4}
-      MOCK_TICK_INTERVAL: ${MOCK_TICK_INTERVAL:-0.35}
-      MOCK_EVENTS: ${MOCK_EVENTS:-8}
-      MOCK_BOOKMAKERS: ${MOCK_BOOKMAKERS:-7}
     depends_on:
       postgres:
         condition: service_healthy

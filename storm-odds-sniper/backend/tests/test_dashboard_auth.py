@@ -143,7 +143,7 @@ class TestPasswordSetter:
         """Minimales Projektabbild, damit das Skript relativ arbeiten kann."""
         (tmp_path / "scripts").mkdir()
         shutil.copy(SETTER, tmp_path / "scripts" / SETTER.name)
-        (tmp_path / ".env").write_text("PROVIDERS=mock\nPOSTGRES_PASSWORD=geheim\n")
+        (tmp_path / ".env").write_text("PROVIDERS=sportsgameodds\nPOSTGRES_PASSWORD=geheim\n")
         return tmp_path
 
     def test_it_writes_a_hash_not_the_password(self, tmp_path):
@@ -159,7 +159,7 @@ class TestPasswordSetter:
         self._run(root, "admin", "geheim")
         env = (root / ".env").read_text()
         assert "POSTGRES_PASSWORD=geheim" in env
-        assert "PROVIDERS=mock" in env
+        assert "PROVIDERS=sportsgameodds" in env
 
     def test_running_twice_replaces_instead_of_appending(self, tmp_path):
         root = self._prepare(tmp_path)
@@ -345,7 +345,7 @@ class TestAbschalten:
     def _prepare(self, tmp_path: Path) -> Path:
         (tmp_path / "scripts").mkdir()
         shutil.copy(SETTER, tmp_path / "scripts" / SETTER.name)
-        (tmp_path / ".env").write_text("PROVIDERS=mock\nPOSTGRES_PASSWORD=geheim\n")
+        (tmp_path / ".env").write_text("PROVIDERS=sportsgameodds\nPOSTGRES_PASSWORD=geheim\n")
         return tmp_path
 
     def _run(self, root: Path, *args: str) -> subprocess.CompletedProcess:
@@ -373,7 +373,7 @@ class TestAbschalten:
         self._run(root, "--off")
         env = (root / ".env").read_text()
         assert "POSTGRES_PASSWORD=geheim" in env
-        assert "PROVIDERS=mock" in env
+        assert "PROVIDERS=sportsgameodds" in env
 
     def test_off_says_the_dashboard_is_open_again(self, tmp_path):
         root = self._prepare(tmp_path)
@@ -385,74 +385,6 @@ class TestAbschalten:
         self._run(root, "--off")
         self._run(root, "--off")
         assert (root / ".env").read_text().count("DASHBOARD_AUTH=") == 1
-
-
-class TestSimulationAbschalten:
-    """``no-simulation.sh``: die Simulation aus PROVIDERS entfernen.
-
-    Beobachtet: neben einer echten Quelle erzeugt die Simulation so viele
-    künstliche Fehlpreise, dass in der Alarmliste praktisch nur noch
-    Erfundenes steht.
-    """
-
-    SCRIPT = REPO / "scripts" / "no-simulation.sh"
-
-    def _run(self, tmp_path: Path, providers: str | None) -> subprocess.CompletedProcess:
-        (tmp_path / "scripts").mkdir(exist_ok=True)
-        shutil.copy(self.SCRIPT, tmp_path / "scripts" / self.SCRIPT.name)
-        content = "ODDS_API_KEY=abc\n"
-        if providers is not None:
-            content = f"PROVIDERS={providers}\n" + content
-        (tmp_path / ".env").write_text(content)
-        return subprocess.run(  # noqa: S603 - festes Skript aus dem Repo
-            ["/bin/sh", str(tmp_path / "scripts" / self.SCRIPT.name)],
-            cwd=tmp_path,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-
-    def test_mock_is_removed_and_the_rest_kept(self, tmp_path):
-        result = self._run(tmp_path, "mock,the_odds_api")
-        assert result.returncode == 0
-        assert "PROVIDERS=the_odds_api\n" in (tmp_path / ".env").read_text()
-
-    def test_order_and_whitespace_survive(self, tmp_path):
-        result = self._run(tmp_path, "betfair, mock ,the_odds_api")
-        assert result.returncode == 0
-        assert "PROVIDERS=betfair,the_odds_api\n" in (tmp_path / ".env").read_text()
-
-    def test_mock_alone_is_refused(self, tmp_path):
-        """Ohne echte Quelle bliebe nichts übrig - das wäre keine Hilfe."""
-        result = self._run(tmp_path, "mock")
-        assert result.returncode != 0
-        assert "einzige Quelle" in result.stderr
-        assert "PROVIDERS=mock\n" in (tmp_path / ".env").read_text()
-
-    def test_running_twice_is_harmless(self, tmp_path):
-        self._run(tmp_path, "mock,the_odds_api")
-        second = subprocess.run(  # noqa: S603 - festes Skript aus dem Repo
-            ["/bin/sh", str(tmp_path / "scripts" / self.SCRIPT.name)],
-            cwd=tmp_path,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        assert second.returncode == 0
-        assert "ohnehin nicht" in second.stdout
-
-    def test_other_settings_are_untouched(self, tmp_path):
-        self._run(tmp_path, "mock,the_odds_api")
-        assert "ODDS_API_KEY=abc" in (tmp_path / ".env").read_text()
-
-    def test_it_warns_that_real_data_is_quieter(self, tmp_path):
-        """Sonst kommt in einer Stunde die Frage, warum nichts mehr kommt."""
-        result = self._run(tmp_path, "mock,the_odds_api")
-        assert "weniger Alarmen" in result.stdout
-
-    def test_missing_providers_line_is_an_error(self, tmp_path):
-        result = self._run(tmp_path, None)
-        assert result.returncode != 0
 
 
 class TestWrapperNutztHostCode:
@@ -471,7 +403,7 @@ class TestWrapperNutztHostCode:
         (tmp_path / "backend").mkdir()
         shutil.copy(self.WRAPPER, tmp_path / "scripts" / self.WRAPPER.name)
         shutil.copy(REPO / "docker-compose.yml", tmp_path / "docker-compose.yml")
-        (tmp_path / ".env").write_text("PROVIDERS=mock\n")
+        (tmp_path / ".env").write_text("PROVIDERS=sportsgameodds\n")
 
         fake = tmp_path / "fake"
         fake.mkdir()
@@ -526,7 +458,7 @@ class TestBuildHinweise:
 
     @pytest.mark.parametrize(
         "name",
-        ["setup_provider.py", "no-simulation.sh", "set-dashboard-password.sh", "setup-provider.sh"],
+        ["setup_provider.py", "set-dashboard-password.sh", "setup-provider.sh"],
     )
     def test_no_hint_forgets_the_build_flag(self, name):
         text = (REPO / "scripts" / name).read_text()

@@ -4,7 +4,7 @@ Die Tests laufen ohne echte Infrastruktur:
 
 * Redis -> ``fakeredis`` (inkl. Pipelines und Pub/Sub)
 * PostgreSQL -> SQLite via ``aiosqlite`` (Schema aus den ORM-Modellen)
-* Provider -> ``MockProvider`` bzw. handgebaute Nachrichten
+* Provider -> handgebaute Nachrichten
 """
 
 from __future__ import annotations
@@ -44,7 +44,7 @@ def settings() -> Settings:
     """Testkonfiguration - bewusst ohne .env-Datei."""
     return Settings(
         _env_file=None,
-        providers="mock",
+        providers="sportsgameodds",
         redis_url="redis://localhost:6379/15",
         min_value_percent=10.0,
         min_outlier_percent=15.0,
@@ -56,7 +56,6 @@ def settings() -> Settings:
         min_error_score=50,
         db_writer_interval=0.05,
         provider_health_interval=0.05,
-        mock_seed=42,
     )
 
 
@@ -93,7 +92,7 @@ def make_event(
     away: str = "Borussia Dortmund",
     minute: int | None = 67,
     score: tuple[int, int] | None = (1, 1),
-    provider: str = "mock",
+    provider: str = "sportsgameodds",
     provider_event_id: str = "p-1",
     start_time: datetime | None = None,
 ) -> EventSnapshot:
@@ -121,7 +120,7 @@ def make_tennis_event(
         sport=Sport.TENNIS,
         home="Jannik Sinner",
         away="Carlos Alcaraz",
-        provider="mock",
+        provider="sportsgameodds",
         provider_event_id="p-t1",
         league="ATP Masters",
         start_time=datetime.now(UTC) - timedelta(minutes=90),
@@ -158,7 +157,7 @@ def make_quote(
     suspended: bool = False,
     liquidity: float | None = None,
     is_exchange: bool = False,
-    provider: str = "mock",
+    provider: str = "sportsgameodds",
 ) -> OddsQuote:
     stamp = now_ts() if ts is None else ts
     # Standardfall: der Preis wurde zuletzt gesehen, als er gesetzt wurde.

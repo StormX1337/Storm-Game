@@ -128,9 +128,9 @@ class TestCooldownStore:
 
 class TestProviderHealth:
     async def test_roundtrip(self, redis_state):
-        await redis_state.set_provider_health("mock", {"name": "mock", "healthy": True})
+        await redis_state.set_provider_health("sgo", {"name": "sgo", "healthy": True})
         rows = await redis_state.get_provider_health()
-        assert rows == [{"name": "mock", "healthy": True}]
+        assert rows == [{"name": "sgo", "healthy": True}]
 
     async def test_empty(self, redis_state):
         assert await redis_state.get_provider_health() == []

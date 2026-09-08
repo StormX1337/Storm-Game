@@ -117,7 +117,8 @@ class OddsProvider(ABC):
 
 Die Basisklasse pollt im `poll_interval`-Takt. Push-fähige Quellen
 überschreiben `stream()` und liefern Nachrichten ohne Wartezeit — der
-MockProvider zeigt das mit einer Producer-Task und einer internen Queue.
+Ein Push-Adapter überschreibt dafür ``stream()`` und schiebt Nachrichten,
+sobald die Quelle sendet.
 
 **Vertrag:** Adapter liefern ihre *eigenen* Event-IDs. Die kanonische,
 providerübergreifende ID vergibt allein der Scanner. Adapter erfinden niemals
@@ -146,7 +147,7 @@ Die zentrale Unterscheidung im Live-Betrieb:
 ```
 t0   Markt: 2.40 2.45 2.50 2.42   ← ruhig
 t1   TOR
-t2   MockExchange springt auf 8.00, Rest steht noch
+t2   Ein Buch springt auf 8.00, der Rest steht noch
         → Median unverändert, eigener Sprung riesig
         → dieses Buch FÜHRT die Bewegung an     → kein Alarm
 t3   Rest zieht nach: 7.80 8.10 7.95

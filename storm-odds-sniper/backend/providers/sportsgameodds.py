@@ -180,6 +180,7 @@ class SportsGameOddsProvider(OddsProvider):
         max_pages: int = 3,
         page_limit: int = 50,
         bookmakers: str = "",
+        rate_limit_per_minute: int = 300,
         timeout: float = 12.0,
     ) -> None:
         super().__init__()
@@ -194,6 +195,7 @@ class SportsGameOddsProvider(OddsProvider):
         self.max_pages = max(1, max_pages)
         self.page_limit = max(1, min(page_limit, 100))
         self.bookmakers = bookmakers
+        self.rate_limit_per_minute = max(0, rate_limit_per_minute)
         self.timeout = timeout
 
         self._client: httpx.AsyncClient | None = None
@@ -208,6 +210,25 @@ class SportsGameOddsProvider(OddsProvider):
         #: Rohantwort der letzten Seite - nur für die Einrichtungshilfe, damit
         #: sich das Quotenformat gegen die Anzeige des Buchmachers prüfen lässt.
         self.last_raw_events: list[dict[str, Any]] = []
+
+    # ------------------------------------------------------- Drosselung
+    def requests_per_cycle(self) -> int:
+        """Anfragen je Durchlauf - eine je Seite."""
+        return self.max_pages
+
+    def next_poll_delay(self) -> float:
+        """Poll-Takt, der das Anfragelimit des Tarifs einhält.
+
+        Ein Durchlauf kostet ``max_pages`` Anfragen. Damit die pro Minute
+        erlaubte Zahl nicht überschritten wird, darf ein Durchlauf nicht
+        häufiger als ``60 * seiten / limit`` Sekunden starten. Ohne diese
+        Rechnung genügt ein beherzt gesetztes SGO_POLL_INTERVAL, um sich
+        selbst in 429er zu schicken.
+        """
+        if self.rate_limit_per_minute <= 0:
+            return self.poll_interval
+        floor = 60.0 * self.requests_per_cycle() / self.rate_limit_per_minute
+        return max(self.poll_interval, floor)
 
     # ------------------------------------------------------------ Lifecycle
     async def connect(self) -> None:
@@ -230,6 +251,10 @@ class SportsGameOddsProvider(OddsProvider):
             leagues=self.leagues or "(alle)",
             sports=self.sport_ids,
             live_only=self.live_only,
+            poll_takt_s=round(self.next_poll_delay(), 2),
+            anfragen_pro_minute=round(
+                60.0 / max(0.001, self.next_poll_delay()) * self.requests_per_cycle(), 1
+            ),
         )
 
     async def disconnect(self) -> None:

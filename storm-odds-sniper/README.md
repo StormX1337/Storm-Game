@@ -12,15 +12,15 @@ deutlich abweicht — inklusive Bewertung, wie belastbar das Signal ist.
 > werden nur Quellen genutzt, deren automatisierter Abruf ausdrücklich erlaubt
 > ist. Kein CAPTCHA-, Cloudflare- oder Anti-Bot-Bypass.
 
-> ### 🧪 Nach der Installation laufen erfundene Daten
+> ### 🔑 Ohne Zugangsdaten läuft nichts
 >
-> Ohne Konfiguration startet das System mit dem **MockProvider** — einer
-> Simulation. Spiele wie „Mock München vs Mock Dortmund" **existieren nicht**;
-> das Präfix `Mock` kennzeichnet sie. Das ist Absicht: so lässt sich alles
-> ausprobieren, bevor Zugangsdaten hinterlegt sind. Dashboard und Telegram
-> weisen darauf hin, solange simuliert wird.
+> Das System zeigt **ausschließlich echte Quoten**. Es gibt keine Simulation
+> und keine Ersatzquelle: fehlen die Zugangsdaten der in `PROVIDERS`
+> genannten Quelle, bleibt der Scanner stumm und schreibt den Grund ins Log.
+> Erfundene Daten in einem Werkzeug, das echte Fehlpreise finden soll, wären
+> schlimmer als gar keine.
 >
-> Für echte Quoten `PROVIDERS` in der `.env` umstellen →
+> Erster Schritt ist deshalb immer eine Datenquelle →
 > [Abschnitt 9](#9-datenquellen-konfigurieren).
 
 ---
@@ -65,7 +65,7 @@ deutlich abweicht — inklusive Bewertung, wie belastbar das Signal ist.
 | 🤖 **Telegram** | Alarme in Echtzeit, persönliche Filter je Nutzer, Inline-Menü |
 | 📊 **Dashboard** | Dark-Mode-Oberfläche mit Live-WebSocket |
 | 📒 **Trefferbilanz** | Jeder Alarm wird nachkontrolliert: hat der Buchmacher korrigiert, oder ist nur der Markt nachgezogen? Ohne zusätzlichen API-Aufruf |
-| 🔌 **Austauschbare Quellen** | Vier Adapter hinter einer gemeinsamen Schnittstelle: Simulation, The Odds API, SportsGameOdds (Live-Filter), Betfair Exchange |
+| 🔌 **Austauschbare Quellen** | Drei Adapter hinter einer gemeinsamen Schnittstelle: SportsGameOdds (Live-Filter), The Odds API, Betfair Exchange |
 
 **Unterstützte Märkte**
 
@@ -112,7 +112,7 @@ Provider-Adapter — die Engine selbst kennt keine Sonderfälle.
         │            └────▲──────────────┘
         │                 │
         │        ┌────────┴────────┬──────────────┐
-        │   MockProvider     The Odds API      Betfair
+        │   SportsGameOdds   The Odds API      Betfair
         │      (Push)           (REST)       (JSON-RPC)
         │
    ┌────┴──────────┐
@@ -140,7 +140,7 @@ sudo apt install -y git curl ca-certificates
 
 **Empfohlene Mindestausstattung**
 
-| | Mock/Test | Produktivbetrieb |
+| | Minimal | Produktivbetrieb |
 |---|---|---|
 | CPU | 2 Kerne | 4 Kerne |
 | RAM | 2 GB | 4 GB |
@@ -198,10 +198,9 @@ nano .env
 **Pflichtfeld:** `POSTGRES_PASSWORD`. Ohne diesen Wert startet Docker Compose
 absichtlich nicht.
 
-Alles Weitere ist optional: mit den Standardwerten läuft das System sofort mit
-dem `MockProvider` und liefert simulierte Daten — nützlich, um Pipeline,
-Dashboard und Telegram-Formatierung zu prüfen, bevor echte Zugangsdaten
-hinterlegt werden.
+Damit überhaupt Daten fließen, braucht es zusätzlich eine Datenquelle in
+`PROVIDERS` samt deren Zugangsdaten — siehe
+[Abschnitt 9](#9-datenquellen-konfigurieren).
 
 ---
 
@@ -255,9 +254,8 @@ Filtereinstellungen.
 
 | Quelle | Live geeignet | Kosten | Womit |
 |---|---|---|---|
-| MockProvider | – (erfunden) | – | nur zum Ausprobieren |
 | The Odds API | erst ab bezahltem Tarif | Gratis-Tarif reicht nicht (~17 Abrufe/Tag) | derselbe Endpunkt, nur mit Kontingent |
-| **SportsGameOdds** | **ja**, eigener `live=true`-Filter | Gratis-Einstieg, Stream nur im Spitzentarif | ein Abruf liefert alle Buchmacher |
+| **SportsGameOdds** | **ja**, eigener `live=true`-Filter | Gratis-Einstieg; Pro (300 Anfragen/min) für dichte Live-Abdeckung | ein Abruf liefert alle Buchmacher |
 | **Betfair Exchange** | **ja**, echte Börsenpreise mit Liquidität | Konto nötig, Daten kostenlos | bereits implementiert, nur nicht eingerichtet |
 
 Für echtes Live-Scanning sind **SportsGameOdds** und **Betfair** die beiden
@@ -267,32 +265,6 @@ App-Key.
 
 
 Die Provider werden über `PROVIDERS` gewählt (kommagetrennt, mehrere parallel).
-
-### MockProvider — funktioniert sofort
-
-```env
-PROVIDERS=mock
-```
-
-Vollständige Simulation mit Push-Stream, Live-Spielverlauf (Tore, Karten,
-Sätze, Games), mehreren Buchmachern mit eigener Marge und gelegentlichen
-Fehlpreisen. **Keine echten Quoten** — Team- und Buchmachernamen tragen
-deshalb bewusst das Präfix `Mock`.
-
-> **Nicht neben einer echten Quelle laufen lassen.** Die Simulation erzeugt
-> künstliche Fehlpreise im Sekundentakt, eine echte Quelle liefert alle paar
-> Minuten einen echten Preis. In der Alarmliste steht danach fast nur
-> Erfundenes. Sobald eine echte Quelle steht:
->
-> ```bash
-> ./scripts/no-simulation.sh
-> docker compose up -d
-> ```
-
-Umgekehrt gilt: steht in `PROVIDERS` eine **echte** Quelle und fehlen ihre
-Zugangsdaten, weicht der Scanner **nicht** auf die Simulation aus. Er bleibt
-stumm und schreibt den Grund ins Log. Erfundene Daten in einem Werkzeug, das
-echte Fehlpreise finden soll, sind schlimmer als gar keine.
 
 ### The Odds API — echte Quoten, API-Key nötig
 
@@ -358,16 +330,15 @@ wählt den Takt so, dass der Rest bis Monatsende reicht
 (`ODDS_API_PACE_TO_QUOTA=true`). `ODDS_API_POLL_INTERVAL` ist dabei nur die
 Untergrenze. Unterhalb von `ODDS_API_MIN_REMAINING` pausiert er ganz.
 
-#### Wichtig beim Umstieg von der Simulation
+#### Zwei Werte, die zum Poll-Takt passen müssen
 
-Zwei Standardwerte sind auf die Simulation zugeschnitten und müssen mit
-gepollten Quellen angepasst werden, sonst entsteht **kein einziger Alarm**:
+Sonst entsteht **kein einziger Alarm**:
 
-- `MAX_ODDS_AGE_SECONDS=10` — bei einem Poll-Takt von Minuten gelten sonst
-  alle Quoten sofort als veraltet. Faustregel: mindestens das Doppelte des
-  Takts.
-- `MIN_BOOKMAKERS=3` — echte Quellen liefern je Markt oft weniger Buchmacher
-  als die Simulation. Wie viele es bei dir sind, sagt das Setup-Skript.
+- `MAX_ODDS_AGE_SECONDS` — bei einem Poll-Takt von Minuten gelten Quoten
+  sonst schon beim Eintreffen als veraltet. Faustregel: mindestens das
+  Doppelte des Takts. Der Scanner warnt beim Start, wenn das nicht passt.
+- `MIN_BOOKMAKERS` — wie viele Buchmacher je Markt tatsächlich ankommen,
+  sagt das Einrichtungsskript.
 
 Diese Quelle liefert **keine** Spielminute, keine Karten und keine
 Tennis-Punktdetails. Diese Felder bleiben leer — sie werden nicht geschätzt.
@@ -380,12 +351,24 @@ SGO_API_KEY=dein_key
 SGO_LIVE_ONLY=true
 ```
 
-Einrichten und in einem Rutsch prüfen:
+Einrichten und in einem Rutsch prüfen — `--plan` setzt Poll-Takt und
+Anfragelimit passend zum gebuchten Tarif:
 
 ```bash
-./scripts/setup-provider.sh sportsgameodds --key DEIN_KEY --live
-./scripts/setup-provider.sh sportsgameodds --key DEIN_KEY --live --write
+./scripts/setup-provider.sh sportsgameodds --key DEIN_KEY --live --plan pro
+./scripts/setup-provider.sh sportsgameodds --key DEIN_KEY --live --plan pro --write
 ```
+
+| `--plan` | Anfragen/Minute | Poll-Takt | Seiten | ergibt |
+|---|---|---|---|---|
+| `free` | 10 | 30 s | 1 | 2 Anfragen/min |
+| `allstar` | 60 | 10 s | 2 | 12 Anfragen/min |
+| `pro` | 300 | 5 s | 3 | **36 Anfragen/min** |
+
+Der Adapter rechnet zusätzlich selbst nach: ein Durchlauf kostet
+`SGO_MAX_PAGES` Anfragen, und der Takt wird notfalls hochgesetzt, damit
+`SGO_RATE_LIMIT_PER_MINUTE` eingehalten wird. Ein zu beherzt gesetztes
+`SGO_POLL_INTERVAL` kann sich damit nicht selbst in 429er schicken.
 
 Der Unterschied zu The Odds API: diese Quelle kennt einen **Live-Filter**
 (`live=true`) und liefert je Markt die Preise **aller** Buchmacher in *einem*
@@ -448,9 +431,8 @@ Der Scanner führt Events beider Quellen automatisch zusammen (siehe
 
 Fehlt einem konfigurierten Provider ein Zugangsdatum, wird er übersprungen und
 der Grund geloggt — die übrigen laufen weiter. Bleibt **keiner** übrig, bleibt
-der Scanner stumm und schreibt den Grund ins Log; auf die Simulation wird
-bewusst nicht ausgewichen. Sie springt nur ein, wenn `PROVIDERS` ganz leer ist.
-Welche Quelle gerade läuft und was fehlt, zeigen das Dashboard und
+der Scanner stumm und schreibt den Grund ins Log. Es gibt bewusst keine
+Ersatzquelle. Welche Quelle gerade läuft und was fehlt, zeigen das Dashboard und
 `GET /health/providers`.
 
 Ausführlich: [`docs/PROVIDER.md`](docs/PROVIDER.md).
@@ -828,7 +810,7 @@ Zu sehen ist das an vier Stellen:
   `storm_followups_pending`
 
 **Im Live-Betrieb bleibt vieles „überholt".** Fällt zwischen Alarm und
-Nachkontrolle ein Tor, ist der Vergleich hinfällig — im Simulationslauf traf
+Nachkontrolle ein Tor, ist der Vergleich hinfällig — im Testlauf traf
 das auf mehr als die Hälfte der Live-Alarme zu. Das ist kein Defekt, sondern
 die ehrliche Antwort: über ein Tor hinweg lässt sich nichts messen. Bei
 Pre-Match-Alarmen (der Normalfall mit The Odds API) ändert sich der Spielstand
@@ -912,7 +894,7 @@ Abgedeckt sind unter anderem:
 | Faire Quoten, Margin-Modelle, Confidence | `test_value_engine.py` |
 | Fixed-Odds-Error-Detector | `test_outlier.py` |
 | Stale, Cooldown, Duplikate, Schwellen | `test_filters.py` |
-| Mock-Simulation, Reconnect, Parser der echten Quellen | `test_providers.py` |
+| Supervisor/Reconnect, Registry, Parser der echten Quellen | `test_providers.py` |
 | SportsGameOdds: Schema, Quotenformat, Pagination | `test_sportsgameodds.py` |
 | Scanner-Pipeline, Vorreiter/Nachzügler | `test_scanner.py` |
 | Redis-Zustand und Pub/Sub | `test_redis_state.py` |
@@ -1006,8 +988,8 @@ Häufige Ursachen:
    Bücher je Markt; `MIN_BOOKMAKERS` senken oder zweite Quelle ergänzen
 3. **Quoten zu alt** — bei langsamem Polling `MAX_ODDS_AGE_SECONDS` erhöhen
 4. **Keine passenden Events** — außerhalb der Saison kann es schlicht nichts
-   zu scannen geben; zum Gegenprüfen `PROVIDERS=mock` setzen — und danach mit
-   `./scripts/no-simulation.sh` wieder abschalten
+   zu scannen geben; `./scripts/setup-provider.sh sportsgameodds --key … --live`
+   zeigt, wie viele Events die Quelle gerade überhaupt hergibt
 
 ### Trefferbilanz bleibt leer
 
@@ -1025,26 +1007,21 @@ docker compose logs scanner | grep -i nachkontrolle | tail
 | Log: `urteile ohne zugehörigen alarm verworfen` | Der DB-Writer kommt nicht hinterher. `DB_WRITER_BATCH` erhöhen oder `SNAPSHOT_PERSIST_EVERY` reduzieren. |
 | `FOLLOWUP_ENABLED=false` | Die Nachkontrolle ist abgeschaltet. |
 
-### In der Alarmliste steht nur „Mock"
-
-Dann läuft die Simulation neben der echten Quelle. Sie erzeugt künstliche
-Fehlpreise im Sekundentakt, die echte Quelle liefert alle paar Minuten einen
-echten Preis — die Liste besteht danach praktisch nur aus Erfundenem.
+### Trefferbilanz bleibt leer
 
 ```bash
-./scripts/no-simulation.sh
-docker compose up -d
+curl -s localhost:8080/api/alerts/scorecard | jq '{resolved, pending, scored}'
+docker compose logs scanner | grep -i nachkontrolle | tail
 ```
 
-Das Skript streicht `mock` aus `PROVIDERS` und lässt den Rest stehen. Der
-Scanner warnt seit dieser Version schon beim Start, wenn beides zusammen
-läuft.
-
-**Danach wird es deutlich stiller.** Echte Fixed-Odds-Fehler sind selten, und
-das Gratis-Kontingent erlaubt nur wenige Abrufe pro Tag — es können Tage ohne
-einen einzigen Alarm vergehen. Das ist der Unterschied zwischen erfundenen und
-echten Daten, kein Defekt. Was der Scanner in der Zwischenzeit tut, steht im
-Panel „Warum keine Alarme?".
+| Beobachtung | Ursache |
+|---|---|
+| `resolved` bleibt 0, `pending` wächst | Die Wartezeit ist noch nicht um — `FOLLOWUP_AFTER_SECONDS` abwarten. |
+| Alle Urteile lauten „offen" | `FOLLOWUP_AFTER_SECONDS` liegt über `ODDS_STATE_TTL_SECONDS`; der Vergleichsmarkt ist beim Auswerten schon weg. Der Scanner warnt beim Start. |
+| Viele Urteile „überholt" | Zwischen Alarm und Nachkontrolle fielen Tore. Normal im Live-Betrieb — Wartezeit verkürzen. |
+| `scored` bleibt klein | Nur Value- und Fixed-Error-Alarme bekommen einen CLV; Bewegungsalarme haben keine faire Quote. |
+| Log: `urteile ohne zugehörigen alarm verworfen` | Der DB-Writer kommt nicht hinterher. `DB_WRITER_BATCH` erhöhen oder `SNAPSHOT_PERSIST_EVERY` reduzieren. |
+| `FOLLOWUP_ENABLED=false` | Die Nachkontrolle ist abgeschaltet. |
 
 ### `invalid choice: 'sportsgameodds'` bei der Einrichtungshilfe
 
@@ -1290,7 +1267,6 @@ storm-odds-sniper/
 │   │   └── migrations/       Alembic
 │   ├── providers/
 │   │   ├── base.py           OddsProvider-Schnittstelle
-│   │   ├── mock_provider.py  Simulation (Push)
 │   │   ├── the_odds_api.py   The Odds API (REST)
 │   ├── sportsgameodds.py SportsGameOdds (REST, Live-Filter)
 │   │   ├── betfair_exchange.py  Betfair (JSON-RPC)
@@ -1310,7 +1286,6 @@ storm-odds-sniper/
 ├── frontend/src/             Dashboard (HTML, CSS, JS)
 ├── docker/nginx/             nginx-Konfiguration
 ├── scripts/
-│   ├── no-simulation.sh      Simulation abschalten, nur echte Quellen
 │   ├── set-dashboard-password.sh  Zugangsschutz fürs Dashboard
 │   ├── setup-provider.sh     echte Datenquelle prüfen und übernehmen
 │   ├── setup_provider.py     die eigentliche Prüflogik
@@ -1343,9 +1318,9 @@ einen Bruchteil eines B-Trees.
 **Datenquellen**
 
 - Es gibt derzeit **keine frei zugängliche WebSocket-Quelle** für
-  Buchmacherquoten. Die Architektur ist auf Push ausgelegt (der MockProvider
-  nutzt sie), die beiden echten Adapter arbeiten aber mit asynchronem
-  HTTP-Polling. Ein Push-Adapter braucht nur `stream()` zu überschreiben.
+  Buchmacherquoten zum Nulltarif. Die Architektur ist auf Push ausgelegt, die
+  drei Adapter arbeiten aber mit asynchronem HTTP-Polling. Ein Push-Adapter
+  braucht nur `stream()` zu überschreiben.
 - Die Betfair Stream API (TLS-Socket, nicht WebSocket) ist bewusst **nicht**
   implementiert: sie ist ohne Konto nicht testbar, und ungetesteter Code für
   Delta-Merging wäre in einem Low-Latency-Pfad ein Risiko. Der JSON-RPC-Adapter
@@ -1353,9 +1328,7 @@ einen Bruchteil eines B-Trees.
 - Das kostenlose Kontingent von The Odds API reicht **nicht** für Live-Scans
   (siehe [Abschnitt 9](#9-datenquellen-konfigurieren)).
 - **Spielminute, Karten und Tennis-Punktdetails liefert keine der beiden echten
-  Quellen.** Diese Felder bleiben leer statt geschätzt zu werden. Der
-  MockProvider liefert sie vollständig, damit die Verarbeitung bis in die
-  Telegram-Nachricht testbar ist.
+  Quellen.** Diese Felder bleiben leer statt geschätzt zu werden.
 
 **Erkennung**
 
