@@ -47,7 +47,7 @@ from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
-from backend.models.domain import Alert
+from backend.models.domain import Alert, now_ts
 from backend.models.enums import AlertKind, EventStatus
 
 if TYPE_CHECKING:  # pragma: no cover - nur für Typprüfer
@@ -95,6 +95,7 @@ REASON_LABELS: dict[str, str] = {
     "event_belegt": "für dieses Event steht schon eine bessere Wette",
     "liste_voll": "Liste bereits voll - schwächere Empfehlung ausgelassen",
     "alarm_unlesbar": "gespeicherter Alarm nicht lesbar - übersprungen",
+    "alarm_veraltet": "Alarm zu alt - der Preis steht so nicht mehr",
 }
 
 
@@ -141,6 +142,10 @@ class RecommendationConfig:
     #: Wie viele Wetten je Event höchstens. Zwei Selektionen desselben
     #: Spiels hängen zusammen - im Extremfall schließen sie einander aus.
     max_picks_per_event: int = 1
+    #: Ab diesem Alter ist ein Alarm keine Empfehlung mehr, sondern
+    #: Geschichte. Live-Quoten stehen keine Viertelstunde, und ein beendetes
+    #: Spiel meldet sein Ende nicht - es hört nur auf zu erscheinen.
+    max_alert_age: float = 180.0
 
 
 def config_from_settings(settings: Settings) -> RecommendationConfig:
@@ -157,6 +162,7 @@ def config_from_settings(settings: Settings) -> RecommendationConfig:
         min_bookmakers=settings.recommend_min_bookmakers,
         max_odds_age=settings.recommend_max_odds_age,
         max_picks_per_event=settings.recommend_max_picks_per_event,
+        max_alert_age=settings.event_stale_seconds,
     )
 
 
@@ -529,6 +535,7 @@ def build_slip(
     *,
     config: RecommendationConfig | None = None,
     limit: int = 10,
+    reference: float | None = None,
 ) -> Slip:
     """Aus vielen Alarmen eine widerspruchsfreie Liste machen.
 
@@ -545,13 +552,23 @@ def build_slip(
       Liste sonst Über *und* Unter empfehlen.
     * **Gesamtbudget.** Zehn gute Wetten sind nicht zehnmal so sicher wie
       eine - sie sind nur zehnmal so viel Einsatz.
+
+    Dazu die Frist: ein Alarm von vor einer Viertelstunde ist keine
+    Empfehlung mehr. Live-Quoten stehen nicht so lange, und ein beendetes
+    Spiel meldet sein Ende nicht - es hört einfach auf zu erscheinen. Ohne
+    diese Grenze stünde die Wette auf ein längst fertiges Match noch oben in
+    der Liste.
     """
     cfg = config or RecommendationConfig()
+    ref = reference if reference is not None else now_ts()
     slip = Slip()
     best: dict[tuple[str, str, str], Pick] = {}
 
     for alert, rec in pairs:
         slip.considered += 1
+        if cfg.max_alert_age > 0 and (ref - alert.detected_at) > cfg.max_alert_age:
+            slip.dropped["alarm_veraltet"] += 1
+            continue
         if not rec.playable:
             code = rec.reason_code if rec.grade is Grade.SKIP else "rest_zu_klein"
             slip.dropped[code] += 1

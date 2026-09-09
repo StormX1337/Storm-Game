@@ -137,6 +137,10 @@ a:hover { text-decoration: underline; }
 .table .num, .table th.num { text-align: right; font-family: var(--mono); white-space: nowrap; }
 .table .empty td, .list .empty { color: var(--text-dim); text-align: center; padding: 22px; }
 .row--new { animation: flash .9s ease-out 1; }
+/* Abgelaufene Alarme bleiben lesbar, sehen aber nicht mehr aus wie
+   ein Angebot - der Preis ist längst weg. */
+.row--stale { opacity: .45; }
+.row--stale:hover { opacity: .75; }
 @keyframes flash { from { background: rgba(77, 163, 255, .16); } to { background: transparent; } }
 
 /* ------------------------------------------------- Alarm-Herleitung */

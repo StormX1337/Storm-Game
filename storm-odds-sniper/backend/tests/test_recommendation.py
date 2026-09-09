@@ -26,7 +26,7 @@ from backend.core.recommendation import (
     recommend_all,
     reliability_weight,
 )
-from backend.models.domain import Alert, EventSnapshot, MarketKey, Selection
+from backend.models.domain import Alert, EventSnapshot, MarketKey, Selection, now_ts
 from backend.models.enums import AlertKind, EventStatus, MarketType, Period, SelectionCode, Sport
 
 
@@ -389,3 +389,47 @@ class TestReadmeTabelle:
 
     def test_absurder_wert_wird_abgelehnt(self):
         assert evaluate(make_alert(250.0)).grade is Grade.SKIP
+
+
+class TestVeralteteAlarme:
+    """Ein Alarm von vor einer Viertelstunde ist keine Empfehlung mehr.
+
+    Der Preis steht so nicht mehr - und ein beendetes Spiel meldet sein Ende
+    nicht, es hört nur auf zu erscheinen. Ohne diese Frist stünde die Wette
+    auf ein längst fertiges Match noch oben in der Liste.
+    """
+
+    def test_alter_alarm_kommt_nicht_in_die_liste(self):
+        alt = make_alert(11.0)
+        alt.detected_at = now_ts() - 16 * 60
+        slip = recommend_all([alt])
+        assert slip.picks == []
+        assert slip.dropped["alarm_veraltet"] == 1
+
+    def test_frischer_alarm_bleibt(self):
+        frisch = make_alert(11.0)
+        frisch.detected_at = now_ts() - 20
+        assert len(recommend_all([frisch]).picks) == 1
+
+    def test_grund_steht_im_klartext(self):
+        alt = make_alert(11.0)
+        alt.detected_at = now_ts() - 16 * 60
+        payload = recommend_all([alt]).to_json()
+        eintrag = next(e for e in payload["dropped"] if e["code"] == "alarm_veraltet")
+        assert "Preis steht so nicht mehr" in eintrag["label"]
+
+    def test_frist_ist_abschaltbar(self):
+        alt = make_alert(11.0)
+        alt.detected_at = now_ts() - 16 * 60
+        slip = recommend_all([alt], config=RecommendationConfig(max_alert_age=0))
+        assert len(slip.picks) == 1
+
+    def test_zeitpunkt_ist_vorgebbar(self):
+        """Ohne festen Bezugszeitpunkt wäre der Test von der Uhr abhängig."""
+        alert = make_alert(11.0)
+        alert.detected_at = 1000.0
+        from backend.core.recommendation import evaluate as bewerte
+
+        paare = [(alert, bewerte(alert))]
+        assert len(build_slip(paare, reference=1060.0).picks) == 1
+        assert build_slip(paare, reference=1400.0).picks == []

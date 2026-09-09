@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Query, Request
 
 from backend.api.deps import get_optional_repository
+from backend.core.config import get_settings
 from backend.core.filters import SUPPRESSION_LABELS
 from backend.core.logging import get_logger
 from backend.core.recommendation import GRADE_LABELS, PLAYABLE_GRADES
@@ -43,7 +44,7 @@ async def stats(
     followups_pending = 0
     if state is not None:
         try:
-            counters = await state.counters()
+            counters = await state.counters(max_age=get_settings().event_stale_seconds)
             providers = await state.get_provider_health()
             suppressed = await state.get_suppressions()
             verdicts = await state.get_verdicts()

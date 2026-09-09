@@ -163,6 +163,12 @@ class Settings(BaseSettings):
     #: Springt ein einzelnes Buch stärker als das, ohne dass der Markt folgt,
     #: führt es die Bewegung an - das ist kein Fehlpreis.
     market_shock_percent: float = 25.0
+    #: Ab diesem Alter gilt ein Event nicht mehr als live. Beendete Spiele
+    #: melden bei den meisten Quellen kein "beendet", sie verschwinden
+    #: einfach aus der Antwort - ohne diese Grenze stünden sie stundenlang
+    #: weiter im Dashboard. Es wird deshalb nicht FINISHED behauptet,
+    #: sondern nur aufgehört, LIVE zu behaupten.
+    event_stale_seconds: float = 180.0
     #: Bestätigungsintervall für unveränderte Quoten (Redis-Schreiblast).
     quote_refresh_seconds: float = 5.0
 

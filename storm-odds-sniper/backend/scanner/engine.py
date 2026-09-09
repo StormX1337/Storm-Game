@@ -973,6 +973,18 @@ class ScannerEngine:
                     grades = dict(self._grades)
                     self._grades.clear()
                     await self.state.add_grades(grades)
+                # Beendete Spiele melden kein "beendet" - sie hören auf zu
+                # erscheinen. Ohne diesen Schritt stünde ein fertiges Match
+                # bis zum Ablauf seines Schlüssels weiter als LIVE da.
+                stale = await self.state.prune_live_events(self.settings.event_stale_seconds)
+                if stale:
+                    for event_id in stale:
+                        self._events.pop(event_id, None)
+                    log.info(
+                        "events ohne frische daten - nicht mehr live",
+                        anzahl=len(stale),
+                        nach_sekunden=self.settings.event_stale_seconds,
+                    )
                 counters = await self.state.counters()
                 LIVE_EVENTS.set(counters["live_events"])
                 TRACKED_EVENTS.set(counters["tracked_events"])

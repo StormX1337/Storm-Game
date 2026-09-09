@@ -496,7 +496,11 @@ Das Dashboard zeigt:
   Ein Klick auf die Zeile klappt die Herleitung auf: verglichene Preise, die
   drei Modelle, die Signale des Error-Scores und, sobald vorhanden, die
   Nachkontrolle mit den Preisen davor und danach.
-- **Live-Events** mit Minute, Spielstand bzw. Satz, Games und Punkten
+- **Live-Events** mit Minute, Spielstand bzw. Satz, Games und Punkten. Ein
+  Event ohne frische Daten fliegt hier raus (siehe
+  [Abschnitt 15, Schritt 11](#15-wie-die-erkennung-funktioniert)); in der
+  Alarmtabelle steht bei jedem Alarm sein Alter, alte Zeilen sind
+  zurückgenommen — sie sind Historie, kein Angebot.
 - **Quotenbewegungen**
 - **Datenquellen** mit Status und fehlenden Zugangsdaten
 - **Buchmacher** nach Alarmhäufigkeit
@@ -936,6 +940,40 @@ PLAUSIBLE_EDGE_PERCENT=8.0     # größer = mehr Datenfehler in der Liste
 ABSURD_EDGE_PERCENT=60.0       # darüber ohne Rechnung abgelehnt
 ```
 
+### Schritt 11 — wann ein Event aufhört, live zu sein
+
+Ein beendetes Spiel meldet bei den üblichen Quellen **kein „beendet"**. Es
+verschwindet einfach aus der Antwort: SportsGameOdds wird mit
+`finalized=false` (und im Live-Modus `live=true`) abgefragt, ein fertiges
+Match fällt damit aus dem Ergebnis heraus. Es kommt also nie ein Snapshot mit
+`ended: true` an, aus dem sich der Status ableiten ließe.
+
+Ohne Gegenmaßnahme bleibt die Event-ID deshalb in der Live-Menge stehen, bis
+ihr Schlüssel abläuft — und das Dashboard zeigt ein fertiges Spiel **bis zu
+einer Stunde** als laufend. Genau das ist passiert.
+
+Die Lösung ist bewusst zurückhaltend: Ein Event, dessen Daten seit
+`EVENT_STALE_SECONDS` (Standard 180) nicht mehr bestätigt wurden, gilt nicht
+mehr als live. Der Status wird **nicht** auf `FINISHED` gesetzt — dass keine
+Daten mehr kommen, heißt nicht zwingend, dass das Spiel vorbei ist; es kann
+auch die Quelle sein. Behauptet wird nur das, was stimmt:
+
+* `GET /events` liefert je Event `seconds_since_update` und `stale`
+* `GET /events/live` lässt veraltete Events weg
+* der Scanner räumt sie im Health-Takt aus `ev:live` (Log: „events ohne
+  frische daten")
+* das Dashboard nimmt sie aus der Live-Liste und nennt in der leeren Kachel
+  die Anzahl — „beendet oder Quelle still"
+
+Dieselbe Frist gilt für die Empfehlungsliste: ein Alarm, der älter ist, wird
+mit dem Grund „Alarm zu alt — der Preis steht so nicht mehr" verworfen. Ohne
+das stünde die Wette auf ein längst beendetes Spiel weiter ganz oben.
+
+Die Alarmtabelle ist davon unberührt: sie ist eine **Historie**, alte Alarme
+gehören dazu. Sie dürfen nur nicht aussehen wie aktuelle Angebote, deshalb
+steht bei jeder Zeile das Alter („vor 16 Min") und alte Zeilen sind
+ausgegraut. Der Preis von vor einer Viertelstunde ist ohnehin weg.
+
 ---
 
 ## 16. API
@@ -954,7 +992,7 @@ Swagger UI: <http://localhost:8080/docs> · OpenAPI: `/openapi.json`
 | `GET /health/providers` | Status jeder Datenquelle, fehlende Zugangsdaten |
 | `GET /providers` | Katalog aller Adapter |
 | `GET /events` | beobachtete Events (`?sport=`, `?limit=`, `?offset=`) |
-| `GET /events/live` | nur laufende Events |
+| `GET /events/live` | nur laufende Events — ohne die, deren Daten veraltet sind |
 | `GET /events/{id}` | einzelnes Event |
 | `GET /odds?event_id=` | aktuelle Quoten aus Redis |
 | `GET /alerts` | Alarm-Historie (`?kind=`, `?sport=`, `?min_value=`, `?since_minutes=`, `?grade=`), je Alarm mit `recommendation`, `verdict` und `clv_percent` |

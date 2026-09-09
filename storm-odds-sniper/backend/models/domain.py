@@ -180,6 +180,16 @@ class EventSnapshot:
     def is_live(self) -> bool:
         return self.status is EventStatus.LIVE
 
+    def age(self, reference: float | None = None) -> float:
+        """Wie lange ist die letzte Bestätigung dieses Events her?
+
+        Wichtig, weil ein beendetes Spiel bei den meisten Quellen nicht
+        "beendet" meldet, sondern schlicht **aufhört zu erscheinen**. Ohne
+        das Alter stünde es weiter als LIVE im Dashboard, bis der Schlüssel
+        in Redis abläuft.
+        """
+        return max(0.0, (reference if reference is not None else now_ts()) - self.updated_at)
+
     @property
     def title(self) -> str:
         return f"{self.home} vs {self.away}"

@@ -85,6 +85,13 @@ class EventResponse(BaseModel):
     tennis: TennisStateModel | None = None
     provider: str = ""
     updated_at: float | None = None
+    #: Sekunden seit der letzten Bestätigung durch eine Quelle.
+    seconds_since_update: float | None = None
+    #: Seit ``EVENT_STALE_SECONDS`` keine Daten mehr. Der Status bleibt
+    #: stehen - behauptet wird nicht "beendet", sondern nur "wir wissen es
+    #: nicht mehr". Beendete Spiele verschwinden bei den üblichen Quellen
+    #: kommentarlos aus der Antwort.
+    stale: bool = False
 
 
 class OddsResponse(BaseModel):

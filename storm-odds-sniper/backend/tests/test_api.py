@@ -112,6 +112,67 @@ class TestEvents:
     async def test_unknown_event_is_404(self, client):
         assert (await client.get("/events/nope")).status_code == 404
 
+
+class TestAbgelaufeneEvents:
+    """Ein beendetes Spiel meldet bei den üblichen Quellen kein "beendet" -
+    es verschwindet einfach aus der Antwort. Dann darf es auch nicht weiter
+    als laufend im Dashboard stehen."""
+
+    @staticmethod
+    async def _veraltetes_live_event(redis_state, alter: float = 3600.0):
+        event = make_event(event_id="alt")
+        event.updated_at = now_ts() - alter
+        await redis_state.set_event(event)
+        return event
+
+    async def test_altes_event_faellt_aus_der_live_liste(self, client, redis_state):
+        await self._veraltetes_live_event(redis_state)
+        assert (await client.get("/events/live")).json() == []
+
+    async def test_es_wird_nicht_beendet_behauptet_sondern_alter_genannt(self, client, redis_state):
+        """Keine Daten mehr heißt nicht zwingend "Spiel vorbei" - es kann
+        auch die Quelle sein. Also nur sagen, was stimmt."""
+        await self._veraltetes_live_event(redis_state)
+        row = (await client.get("/events")).json()[0]
+        assert row["status"] == "LIVE"  # nichts erfunden
+        assert row["stale"] is True
+        assert row["seconds_since_update"] > 3000
+
+    async def test_frisches_event_bleibt_live(self, client, redis_state, repository):
+        await seed(redis_state, repository)
+        rows = (await client.get("/events/live")).json()
+        assert len(rows) == 2
+        assert all(row["stale"] is False for row in rows)
+        assert all(row["seconds_since_update"] < 60 for row in rows)
+
+    async def test_datenbank_springt_nicht_mit_alten_zeilen_ein(
+        self, client, redis_state, repository
+    ):
+        """Der Rückfall auf die Datenbank ist für den leeren Redis gedacht.
+        Kennt Redis das Event und ist es nur zu alt, wäre dieselbe Zeile aus
+        der Datenbank die falsche Antwort."""
+        event = await self._veraltetes_live_event(redis_state)
+        await repository.write_batch(events=[event])
+        assert (await client.get("/events/live")).json() == []
+
+    async def test_aufraeumer_nimmt_die_id_aus_der_live_menge(self, redis_state):
+        await self._veraltetes_live_event(redis_state)
+        frisch = make_event(event_id="frisch")
+        await redis_state.set_event(frisch)
+        assert set(await redis_state.live_event_ids()) == {"alt", "frisch"}
+
+        entfernt = await redis_state.prune_live_events(180.0)
+        assert entfernt == ["alt"]
+        assert await redis_state.live_event_ids() == ["frisch"]
+        assert (await redis_state.counters())["live_events"] == 1
+
+    async def test_leiche_ohne_snapshot_fliegt_auch_raus(self, redis_state):
+        """Der Event-Schlüssel läuft ab, die ID in der Live-Menge nicht -
+        ohne diesen Fall bliebe eine Karteileiche für immer stehen."""
+        await redis_state.client.sadd("ev:live", "verwaist")
+        assert await redis_state.prune_live_events(180.0) == ["verwaist"]
+        assert await redis_state.live_event_ids() == []
+
     async def test_invalid_sport_is_rejected(self, client):
         assert (await client.get("/events?sport=chess")).status_code == 422
 
@@ -397,3 +458,22 @@ class TestInfrastructure:
         # Health bleibt erreichbar, damit Monitoring nie ausgesperrt wird.
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as http:
             assert (await http.get("/health")).status_code == 200
+
+
+class TestKennzahlenBleibenWiderspruchsfrei:
+    """Die Kachel darf nicht "1 Live-Event" sagen, während die Liste
+    darunter "keine laufenden Events" zeigt - beides aus derselben Menge."""
+
+    async def test_veraltetes_event_zaehlt_nicht_als_live(self, client, redis_state):
+        event = make_event(event_id="alt")
+        event.updated_at = now_ts() - 3600
+        await redis_state.set_event(event)
+
+        body = (await client.get("/stats")).json()
+        assert body["live_events_redis"] == 0
+        assert body["tracked_events_redis"] == 1
+        assert (await client.get("/events/live")).json() == []
+
+    async def test_frisches_event_zaehlt(self, client, redis_state):
+        await redis_state.set_event(make_event(event_id="frisch"))
+        assert (await client.get("/stats")).json()["live_events_redis"] == 1

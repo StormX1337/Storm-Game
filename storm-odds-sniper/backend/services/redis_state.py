@@ -207,6 +207,11 @@ class RedisState:
             pipe.srem("ev:live", event.event_id)
         pipe.sadd("ev:all", event.event_id)
         pipe.expire("ev:all", self.ttl * 4)
+        # Auch die Live-Menge bekommt eine Frist. Ohne sie wüchse sie
+        # unbegrenzt: entfernt wird eine ID sonst nur, wenn ein *neuer*
+        # Snapshot mit anderem Status kommt - und genau der bleibt aus,
+        # wenn ein Spiel endet.
+        pipe.expire("ev:live", self.ttl * 4)
         await pipe.execute()
 
     async def get_event(self, event_id: str) -> EventSnapshot | None:
@@ -220,6 +225,35 @@ class RedisState:
     async def all_event_ids(self) -> list[str]:
         raw = await self.client.smembers("ev:all")
         return [k.decode() if isinstance(k, bytes) else k for k in raw]
+
+    async def prune_live_events(self, max_age: float) -> list[str]:
+        """Events ohne frische Daten aus der Live-Menge nehmen.
+
+        Ein beendetes Spiel meldet bei den üblichen Quellen kein "beendet" -
+        es verschwindet einfach aus der Antwort. Die ID bliebe dann bis zum
+        Ablauf ihres Schlüssels in ``ev:live`` stehen, und das Dashboard
+        zeigte ein fertiges Match stundenlang als laufend.
+
+        Bewusst wird der Status **nicht** auf FINISHED gesetzt: dass keine
+        Daten mehr kommen, heißt nicht zwingend, dass das Spiel vorbei ist -
+        es kann auch die Quelle sein. Behauptet wird deshalb nur das, was
+        stimmt: dieses Event gilt nicht mehr als live.
+        """
+        ids = await self.live_event_ids()
+        if not ids:
+            return []
+        reference = now_ts()
+        events = {event.event_id: event for event in await self.get_events(ids)}
+        stale = [
+            event_id
+            for event_id in ids
+            # Fehlender Snapshot heißt: der Schlüssel ist abgelaufen, die ID
+            # ist eine Leiche.
+            if (event := events.get(event_id)) is None or event.age(reference) > max_age
+        ]
+        if stale:
+            await self.client.srem("ev:live", *stale)
+        return stale
 
     async def get_events(self, event_ids: Iterable[str]) -> list[EventSnapshot]:
         ids = list(event_ids)
@@ -412,10 +446,24 @@ class RedisState:
         return out
 
     # ------------------------------------------------------------ Statistik
-    async def counters(self) -> dict[str, int]:
-        live = await self.client.scard("ev:live")
+    async def counters(self, *, max_age: float | None = None) -> dict[str, int]:
+        """Zählerstände. Mit ``max_age`` werden nur Events mit frischen Daten
+        als live gezählt.
+
+        Ohne das zeigte die Kachel "1 Live-Event", während die Liste darunter
+        "keine laufenden Events" sagt - beides aus derselben Menge, nur einmal
+        gezählt und einmal gefiltert. Der Aufräumer im Scanner holt das binnen
+        Sekunden nach; steht der Scanner, blieben die Zahlen dauerhaft
+        widersprüchlich.
+        """
         total = await self.client.scard("ev:all")
-        return {"live_events": int(live or 0), "tracked_events": int(total or 0)}
+        if max_age is None:
+            live = int(await self.client.scard("ev:live") or 0)
+        else:
+            reference = now_ts()
+            events = await self.get_events(await self.live_event_ids())
+            live = sum(1 for event in events if event.age(reference) <= max_age)
+        return {"live_events": live, "tracked_events": int(total or 0)}
 
     async def bump(self, key: str, amount: int = 1) -> None:
         await self.client.incrby(f"stat:{key}", amount)

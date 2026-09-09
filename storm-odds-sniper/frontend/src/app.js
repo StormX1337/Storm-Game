@@ -36,9 +36,26 @@
     return date.toLocaleTimeString("de-DE", { hour12: false }) +
       "." + String(date.getMilliseconds()).padStart(3, "0");
   };
+  /* Alter in Klartext. Auf dem Handy sieht man "09:33:19" und rechnet nicht
+     nach - "vor 16 Min" beantwortet dagegen sofort die eigentliche Frage:
+     ist das noch aktuell? */
+  const fmtAge = (seconds) => {
+    if (typeof seconds !== "number" || seconds < 0) return "";
+    if (seconds < 60) return `vor ${Math.round(seconds)} s`;
+    if (seconds < 3600) return `vor ${Math.round(seconds / 60)} Min`;
+    return `vor ${Math.round(seconds / 3600)} h`;
+  };
+  const ageOf = (value) => {
+    const ts = typeof value === "number" ? value : Date.parse(value) / 1000;
+    return Number.isNaN(ts) ? null : Date.now() / 1000 - ts;
+  };
   const fmtOdds = (value) => (typeof value === "number" ? value.toFixed(2) : "–");
   const fmtPct = (value) =>
     typeof value === "number" ? `${value >= 0 ? "+" : ""}${value.toFixed(1)}%` : "–";
+
+  /* Ab hier ist ein Alarm Geschichte, kein Angebot. Muss zu
+     EVENT_STALE_SECONDS im Backend passen. */
+  const ALERT_STALE_SECONDS = 180;
 
   const STATUS_TAG = { LIVE: "live", PRE_MATCH: "pre", SUSPENDED: "susp", FINISHED: "fin" };
   const SPORT_ICON = { football: "⚽", tennis: "🎾" };
@@ -95,8 +112,16 @@
       .map((a, index) => {
         const valueClass = a.value_percent >= 0 ? "pos" : "neg";
         const tag = STATUS_TAG[a.status] || "fin";
-        return `<tr class="row--clickable ${a.__fresh ? "row--new" : ""}" data-index="${index}">
-          <td class="mono dim">${esc(fmtTime(a.detected_at))}</td>
+        // Die Alarmtabelle ist eine Historie - alte Zeilen gehören dazu.
+        // Sie dürfen nur nicht aussehen wie aktuelle: der Preis von vor
+        // einer Viertelstunde ist längst weg.
+        const age = ageOf(a.detected_at);
+        const abgelaufen = age != null && age > ALERT_STALE_SECONDS;
+        return `<tr class="row--clickable ${a.__fresh ? "row--new" : ""} ${
+          abgelaufen ? "row--stale" : ""
+        }" data-index="${index}">
+          <td class="mono dim">${esc(fmtTime(a.detected_at))}
+            <div class="event-sub">${esc(fmtAge(age))}</div></td>
           <td>${SPORT_ICON[a.sport] || "🏟"} <span class="tag tag--${esc(a.kind)}">${
           KIND_LABEL[a.kind] || esc(a.kind)
         }</span></td>
@@ -280,12 +305,18 @@
 
   function renderEvents() {
     const list = $("live-list");
+    // Ein beendetes Spiel meldet kein "beendet" - es hört auf zu erscheinen.
+    // Der Server markiert solche Events als `stale`; hier fliegen sie aus der
+    // Live-Liste, statt als laufend weiterzustehen.
     const events = [...state.events.values()]
-      .filter((e) => e.status === "LIVE")
+      .filter((e) => e.status === "LIVE" && !e.stale)
       .sort((a, b) => (a.sport || "").localeCompare(b.sport || ""));
     $("live-count").textContent = String(events.length);
     if (!events.length) {
-      list.innerHTML = '<li class="empty">Keine laufenden Events</li>';
+      const veraltet = [...state.events.values()].filter((e) => e.stale).length;
+      list.innerHTML = veraltet
+        ? `<li class="empty">Keine laufenden Events — ${veraltet} ohne frische Daten (beendet oder Quelle still)</li>`
+        : '<li class="empty">Keine laufenden Events</li>';
       return;
     }
     list.innerHTML = events
