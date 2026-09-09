@@ -38,6 +38,16 @@ if [ -f .env ]; then
                 print key "=" val
             }
         }' .env
+    # Doppelte Schlüssel sind eine Falle: es gilt der LETZTE Wert. Wer den
+    # ersten ändert, wundert sich, dass nichts passiert.
+    dupes=$(grep -oE '^[[:space:]]*[A-Za-z_][A-Za-z0-9_]*=' .env \
+        | tr -d ' ' | sed 's/=$//' | sort | uniq -d)
+    if [ -n "$dupes" ]; then
+        echo
+        echo "ACHTUNG: diese Schlüssel stehen MEHRFACH in der .env."
+        echo "Es gilt jeweils der zuletzt genannte Wert:"
+        printf '%s\n' "$dupes" | sed 's/^/  /'
+    fi
 else
     echo "KEINE .env vorhanden - das ist die Ursache."
 fi

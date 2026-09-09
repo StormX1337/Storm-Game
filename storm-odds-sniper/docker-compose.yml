@@ -210,6 +210,9 @@ services:
     volumes:
       - ./frontend/src:/usr/share/nginx/html:ro
       - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      # Läuft vor nginx: Namensauflösung zur Laufzeit (sonst 502 nach einem
+      # Neuaufbau des api-Containers).
+      - ./docker/nginx/05-resolver.sh:/docker-entrypoint.d/05-resolver.sh:ro
       # Läuft vor nginx und erzeugt daraus die Zugangsschutz-Konfiguration.
       - ./docker/nginx/10-dashboard-auth.sh:/docker-entrypoint.d/10-dashboard-auth.sh:ro
     ports:

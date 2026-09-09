@@ -218,6 +218,35 @@ Deshalb rechnet `next_poll_delay()` die Untergrenze aus
 gilt, solange er darüber liegt; ein zu gieriger wird stillschweigend
 gedrosselt und beim Start mit der tatsächlichen Rate geloggt.
 
+## Warum in nginx kein statischer upstream-Block mehr steht
+
+Das Dashboard lieferte stundenlang 502 auf jeden `/api`-Pfad, während die API
+im Container einwandfrei mit 200 antwortete und `docker compose ps` sie als
+`healthy` führte. Im nginx-Log stand eine IP, die es nicht mehr gab.
+
+nginx (OSS) löst Servernamen in einem `upstream`-Block **einmal beim Start**
+auf. Jedes `docker compose up -d --build` erstellt den api-Container neu, er
+bekommt eine neue IP im Compose-Netz - und nginx, das gar nicht neu gestartet
+wurde, verbindet weiter zur alten. Der frontend-Container war 18 Stunden alt,
+api 47 Sekunden.
+
+Heimtückisch daran: jede naheliegende Prüfung sagt "alles in Ordnung". Der
+Container ist gesund, `wget http://api:8000/health` aus demselben Container
+funktioniert (frische Auflösung), nur nginx selbst hat die alte IP. Genau
+diese Diskrepanz - "nginx erreicht die API: ja" neben "502 von außen" - war
+im Diagnosebericht der entscheidende Hinweis.
+
+Behoben, indem der Name in einer Variablen steht: enthält `proxy_pass` eine
+Variable, löst nginx sie bei jeder Anfrage über den `resolver` auf. Der
+`upstream`-Block entfällt und damit auch dessen Keepalive - im Docker-Netz
+kostet ein Verbindungsaufbau nichts, ein stundenlang totes Dashboard schon.
+
+Der Nameserver kommt aus der `/etc/resolv.conf` des Containers (im
+Docker-Netz 127.0.0.11) und wird von `05-resolver.sh` beim Start
+geschrieben. Ist die Datei nicht lesbar, greift 127.0.0.11 als Rückfall -
+ohne `resolver`-Direktive startet nginx sonst gar nicht, und ein Dashboard,
+das überhaupt nicht mehr hochkommt, wäre der schlechtere Ausgang.
+
 ## Warum ein Cooldown *und* eine Duplikaterkennung
 
 Sie lösen verschiedene Probleme. Der Cooldown begrenzt die Frequenz je

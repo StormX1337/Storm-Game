@@ -1050,6 +1050,41 @@ Für die **laufenden Dienste** (Scanner, API) bleibt `--build` nötig:
 docker compose up -d --build
 ```
 
+### 502 auf allen `/api`-Pfaden, obwohl die API läuft
+
+Das Symptom: `docker compose ps` zeigt `api` als `healthy`, im Container
+antwortet `/health` mit 200 — aber das Dashboard bekommt auf **jeden**
+`/api`-Pfad ein 502, und im nginx-Log steht:
+
+```
+connect() failed (111: Connection refused) while connecting to upstream,
+upstream: "http://172.20.0.6:8000/health"
+```
+
+Die Ursache ist die IP in dieser Meldung. nginx (OSS) löst Namen aus einem
+`upstream`-Block **genau einmal beim Start** auf und behält die IP für seine
+ganze Laufzeit. Bei jedem `docker compose up -d --build` bekommt der
+`api`-Container eine neue IP — nginx läuft aber weiter gegen die alte. Ein
+Blick auf `docker compose ps` verrät es: der `frontend`-Container ist Stunden
+älter als `api`.
+
+Sofort behoben mit:
+
+```bash
+docker compose restart frontend
+```
+
+Ab dieser Version kann es nicht mehr auftreten: der Name steht in einer
+Variablen, und nginx löst ihn bei jeder Anfrage über den Docker-DNS neu auf.
+Der Preis ist die weggefallene Keepalive-Verbindung zum Upstream — im
+Docker-Netz vernachlässigbar.
+
+### Doppelte Schlüssel in der `.env`
+
+Steht ein Schlüssel mehrfach drin, gilt der **letzte**. Wer den ersten ändert,
+wundert sich, dass nichts passiert. `./scripts/diagnose.sh` meldet solche
+Dubletten inzwischen von selbst.
+
 ### Alles leer, roter Punkt, „Verbinde…"
 
 Das Dashboard lädt, aber **keine einzige** Kachel füllt sich und oben steht

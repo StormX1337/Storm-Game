@@ -540,3 +540,107 @@ class TestDiagnose:
         """Ein Diagnoseskript, das selbst abbricht, hilft niemandem."""
         assert self._run(tmp_path, self.SECRETS).returncode == 0
         assert self._run(tmp_path, None).returncode == 0
+
+
+class TestNginxNamensaufloesung:
+    """nginx muss den API-Namen zur Laufzeit auflösen.
+
+    Beobachtet auf dem Server: nginx lief 18 Stunden, der api-Container wurde
+    neu erstellt und bekam eine neue IP. Der ``upstream``-Block hatte den
+    Namen einmal beim Start aufgelöst - jede Anfrage endete danach in 502
+    "Connection refused", obwohl die API einwandfrei antwortete.
+    """
+
+    CONF = REPO / "docker" / "nginx" / "default.conf"
+    ENTRY = REPO / "docker" / "nginx" / "05-resolver.sh"
+
+    def test_no_static_upstream_block_remains(self):
+        text = self.CONF.read_text()
+        assert "upstream storm_api" not in text, "der Block cacht die IP wieder"
+
+    def test_every_proxy_pass_uses_a_variable(self):
+        """Nur mit Variable löst nginx bei jeder Anfrage neu auf."""
+        for line in self.CONF.read_text().splitlines():
+            stripped = line.strip()
+            if stripped.startswith("proxy_pass "):
+                assert "$" in stripped, f"ohne Variable: {stripped}"
+
+    def test_a_resolver_is_included(self):
+        assert "include /etc/nginx/resolver.conf;" in self.CONF.read_text()
+
+    def test_the_api_prefix_is_still_stripped(self):
+        """/api/health muss weiterhin als /health ankommen."""
+        text = self.CONF.read_text()
+        assert "rewrite ^/api/(.*)$ /$1 break;" in text
+
+    def test_the_entrypoint_writes_a_resolver(self, tmp_path):
+        script = tmp_path / "resolver.sh"
+        conf = tmp_path / "resolver.conf"
+        resolv = tmp_path / "resolv.conf"
+        resolv.write_text("nameserver 127.0.0.11\nnameserver fe80::1\n")
+        script.write_text(
+            self.ENTRY.read_text()
+            .replace("CONF=/etc/nginx/resolver.conf", f"CONF={conf}")
+            .replace("/etc/resolv.conf", str(resolv))
+        )
+        result = subprocess.run(  # noqa: S603 - festes Skript aus dem Repo
+            ["/bin/sh", str(script)], capture_output=True, text=True, check=False
+        )
+        assert result.returncode == 0, result.stderr
+        written = conf.read_text()
+        assert "resolver 127.0.0.11" in written
+        assert "valid=" in written
+        assert "fe80::1" not in written, "IPv6 müsste geklammert werden"
+
+    def test_it_falls_back_when_resolv_conf_is_unusable(self, tmp_path):
+        """Ohne resolver startet nginx nicht - dann lieber Dockers Standard."""
+        conf = tmp_path / "resolver.conf"
+        script = tmp_path / "resolver.sh"
+        script.write_text(
+            self.ENTRY.read_text()
+            .replace("CONF=/etc/nginx/resolver.conf", f"CONF={conf}")
+            .replace("/etc/resolv.conf", str(tmp_path / "gibtesnicht"))
+        )
+        result = subprocess.run(  # noqa: S603 - festes Skript aus dem Repo
+            ["/bin/sh", str(script)], capture_output=True, text=True, check=False
+        )
+        assert result.returncode == 0
+        assert "127.0.0.11" in conf.read_text()
+
+    def test_compose_mounts_the_entrypoint(self):
+        compose = (REPO / "docker-compose.yml").read_text()
+        assert "05-resolver.sh:/docker-entrypoint.d/05-resolver.sh" in compose
+
+
+class TestDoppelteSchluessel:
+    """Doppelte Schlüssel in der .env sind eine Falle: es gilt der letzte."""
+
+    def _run(self, tmp_path: Path, env_text: str) -> str:
+        (tmp_path / "scripts").mkdir(exist_ok=True)
+        shutil.copy(REPO / "scripts" / "diagnose.sh", tmp_path / "scripts" / "diagnose.sh")
+        (tmp_path / ".env").write_text(env_text)
+        fake = tmp_path / "fake"
+        fake.mkdir(exist_ok=True)
+        (fake / "docker").write_text("#!/bin/sh\nexit 1\n")
+        (fake / "docker").chmod(0o755)
+        env = dict(os.environ, PATH=f"{fake}:{os.environ['PATH']}")
+        return subprocess.run(  # noqa: S603 - festes Skript aus dem Repo
+            ["/bin/sh", str(tmp_path / "scripts" / "diagnose.sh")],
+            cwd=tmp_path,
+            capture_output=True,
+            text=True,
+            env=env,
+            check=False,
+        ).stdout
+
+    def test_duplicates_are_named(self, tmp_path):
+        out = self._run(
+            tmp_path,
+            "PROVIDERS=the_odds_api\nMIN_BOOKMAKERS=3\nPROVIDERS=sportsgameodds\n",
+        )
+        assert "MEHRFACH" in out
+        assert "PROVIDERS" in out
+
+    def test_a_clean_env_stays_quiet(self, tmp_path):
+        out = self._run(tmp_path, "PROVIDERS=sportsgameodds\nMIN_BOOKMAKERS=3\n")
+        assert "MEHRFACH" not in out
