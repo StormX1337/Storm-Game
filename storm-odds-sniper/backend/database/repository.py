@@ -19,9 +19,11 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from backend.core.betlog import BetStatus, Ledger, settle_profit, summarise
 from backend.core.logging import get_logger
 from backend.database.tables import (
     AlertRow,
+    Bet,
     Bookmaker,
     Event,
     Market,
@@ -705,6 +707,97 @@ class Repository:
             "odds_changes": chg.rowcount or 0,
             "alerts": alr.rowcount or 0,
         }
+
+    # ------------------------------------------------------- Wett-Tagebuch
+    async def create_bet(self, **values) -> Bet:
+        """Eine gespielte Wette festhalten."""
+        bet = Bet(**values)
+        async with self.session_factory() as session:
+            session.add(bet)
+            await session.commit()
+            await session.refresh(bet)
+        return bet
+
+    async def settle_bet(
+        self, bet_id: int, status: str, *, user_id: int | None = None
+    ) -> Bet | None:
+        """Eine Wette abrechnen. Der Gewinn folgt aus Ausgang, Einsatz, Quote.
+
+        ``user_id`` schränkt auf die eigenen Wetten ein - ohne das könnte ein
+        Nutzer die Wetten eines anderen abrechnen, sobald mehrere denselben
+        Bot benutzen.
+        """
+        if status not in {s.value for s in BetStatus}:
+            raise ValueError(f"unbekannter Ausgang: {status}")
+        async with self.session_factory() as session:
+            stmt = select(Bet).where(Bet.id == bet_id)
+            if user_id is not None:
+                stmt = stmt.where(Bet.user_id == user_id)
+            bet = (await session.execute(stmt)).scalar_one_or_none()
+            if bet is None:
+                return None
+            bet.status = status
+            bet.profit = settle_profit(status, stake=bet.stake, odds=bet.odds)
+            # Zurück auf "offen" heißt: das Ergebnis war ein Irrtum. Dann muss
+            # auch der Abrechnungszeitpunkt weg, sonst sieht die Zeile aus wie
+            # entschieden.
+            bet.settled_at = None if status == BetStatus.OPEN else datetime.now(UTC)
+            await session.commit()
+            await session.refresh(bet)
+        return bet
+
+    async def delete_bet(self, bet_id: int, *, user_id: int | None = None) -> bool:
+        async with self.session_factory() as session:
+            stmt = delete(Bet).where(Bet.id == bet_id)
+            if user_id is not None:
+                stmt = stmt.where(Bet.user_id == user_id)
+            result = await session.execute(stmt)
+            await session.commit()
+        return bool(result.rowcount)
+
+    async def list_bets(
+        self,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+        status: str | None = None,
+        user_id: int | None = None,
+        since: datetime | None = None,
+    ) -> list[Bet]:
+        stmt: Select = select(Bet).order_by(Bet.placed_at.desc()).limit(limit).offset(offset)
+        if status:
+            stmt = stmt.where(Bet.status == status)
+        if user_id is not None:
+            stmt = stmt.where(Bet.user_id == user_id)
+        if since is not None:
+            stmt = stmt.where(Bet.placed_at >= since)
+        async with self.session_factory() as session:
+            return list((await session.execute(stmt)).scalars().all())
+
+    async def bet_ledger(
+        self, *, user_id: int | None = None, since: datetime | None = None, unit: str = "Einheiten"
+    ) -> Ledger:
+        """Die Bilanz über alle passenden Wetten.
+
+        Bewusst über die Zeilen statt über Aggregate in SQL: die Rechnung
+        steht damit an einem Ort (``core/betlog.py``) und lässt sich gegen
+        handgeschriebene Fälle prüfen, ohne eine Datenbank zu starten. Bei
+        der Größenordnung eines Wett-Tagebuchs kostet das nichts.
+        """
+        stmt: Select = select(Bet)
+        if user_id is not None:
+            stmt = stmt.where(Bet.user_id == user_id)
+        if since is not None:
+            stmt = stmt.where(Bet.placed_at >= since)
+        async with self.session_factory() as session:
+            rows = list((await session.execute(stmt)).scalars().all())
+        return summarise(rows, unit=unit)
+
+    async def get_alert_by_fingerprint(self, fingerprint: str) -> AlertRow | None:
+        async with self.session_factory() as session:
+            return (
+                await session.execute(select(AlertRow).where(AlertRow.fingerprint == fingerprint))
+            ).scalar_one_or_none()
 
 
 def bulk_chunks(items: Iterable, size: int):

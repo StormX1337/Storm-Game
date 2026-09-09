@@ -19,6 +19,7 @@ MAIN_MENU = [
     ],
     [
         InlineKeyboardButton("📒 Bilanz", callback_data="view:scorecard"),
+        InlineKeyboardButton("💰 Kasse", callback_data="view:ledger"),
         InlineKeyboardButton("📊 Status", callback_data="view:status"),
     ],
     [
@@ -29,6 +30,33 @@ MAIN_MENU = [
 
 def main_menu() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(MAIN_MENU)
+
+
+def bet_button(fingerprint: str) -> InlineKeyboardMarkup:
+    """Ein Knopf am Alarm: "das habe ich gespielt".
+
+    Er setzt nichts - er hält fest. Ohne diesen Weg müsste man jede Wette
+    von Hand nachtragen, und dann führt niemand Buch.
+    """
+    return InlineKeyboardMarkup(
+        [[InlineKeyboardButton("✅ Gespielt", callback_data=f"bet:new:{fingerprint}")]]
+    )
+
+
+def bet_settle_buttons(bet_id: int) -> InlineKeyboardMarkup:
+    """Wie ist es ausgegangen?"""
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton("✅ Gewonnen", callback_data=f"bet:won:{bet_id}"),
+                InlineKeyboardButton("❌ Verloren", callback_data=f"bet:lost:{bet_id}"),
+            ],
+            [
+                InlineKeyboardButton("➖ Annulliert", callback_data=f"bet:void:{bet_id}"),
+                InlineKeyboardButton("🗑 Löschen", callback_data=f"bet:del:{bet_id}"),
+            ],
+        ]
+    )
 
 
 def settings_menu(settings_row) -> InlineKeyboardMarkup:

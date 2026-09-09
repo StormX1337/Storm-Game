@@ -1,8 +1,12 @@
 """FastAPI-Anwendung.
 
-Die API liest ausschließlich - sie schreibt keine Quoten und startet keinen
-Scanner. Dadurch können API und Scanner unabhängig neu gestartet und skaliert
-werden, ohne sich gegenseitig zu blockieren.
+Die API schreibt keine Quoten und startet keinen Scanner. Dadurch können API
+und Scanner unabhängig neu gestartet und skaliert werden, ohne sich
+gegenseitig zu blockieren.
+
+Die einzige Ausnahme vom Nur-Lesen ist das Wett-Tagebuch, und die ist
+standardmäßig zu: ``BETLOG_API_WRITES`` schaltet sie frei. Grund siehe
+``routes/bets.py`` - die API ist genau so geschützt wie das Dashboard davor.
 """
 
 from __future__ import annotations
@@ -20,7 +24,7 @@ from backend.api.middleware import (
     RequestContextMiddleware,
     SecurityHeadersMiddleware,
 )
-from backend.api.routes import alerts, events, health, odds, stats
+from backend.api.routes import alerts, bets, events, health, odds, stats
 from backend.api.ws import WebSocketHub
 from backend.core.config import Settings, get_settings
 from backend.core.logging import configure_logging, get_logger
@@ -78,6 +82,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             hub.start()
         app.state.hub = hub
         log.info("api bereit", version=settings.app_version, environment=settings.environment)
+        if settings.betlog_enabled and settings.betlog_api_writes:
+            # Kein Fehler, aber nichts, was man versehentlich anhaben will.
+            log.warning(
+                "WETT-TAGEBUCH: schreibzugriff über die API ist offen. "
+                "Er ist genau so geschützt wie das Dashboard davor - ohne "
+                "DASHBOARD_AUTH kann jeder im Netz Wetten eintragen.",
+                origins=settings.cors_origins,
+            )
 
         try:
             yield
@@ -99,16 +111,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         openapi_url="/openapi.json" if settings.api_docs_enabled else None,
     )
 
+    # Die Routen brauchen *diese* Settings, nicht die aus der Umgebung.
+    # Ohne das ließe sich eine App gar nicht abweichend konfigurieren - und
+    # Tests, die genau das tun, liefen stumm gegen die Standardwerte.
+    app.state.settings = settings
+
     # Reihenfolge zählt: zuerst registrierte Middleware läuft außen.
     app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(RateLimitMiddleware, limit_per_minute=settings.api_rate_limit_per_minute)
     app.add_middleware(RequestContextMiddleware)
+    # Schreibende Methoden nur, wenn das Wett-Tagebuch sie überhaupt
+    # annimmt - sonst bliebe eine offene Tür stehen, hinter der nichts ist.
+    methods = ["GET", "OPTIONS"]
+    if settings.betlog_enabled and settings.betlog_api_writes:
+        methods += ["POST", "DELETE"]
     app.add_middleware(
         CORSMiddleware,
         # Bewusst keine Wildcard: nur die konfigurierten Dashboard-Origins.
         allow_origins=settings.cors_origins,
         allow_credentials=False,
-        allow_methods=["GET", "OPTIONS"],
+        allow_methods=methods,
         allow_headers=["*"],
         max_age=600,
     )
@@ -117,6 +139,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(events.router)
     app.include_router(odds.router)
     app.include_router(alerts.router)
+    app.include_router(bets.router)
     app.include_router(stats.router)
 
     @app.get("/", include_in_schema=False)

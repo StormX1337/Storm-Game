@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 from datetime import UTC, datetime, timedelta
 
 from telegram import Update
@@ -13,6 +14,7 @@ from telegram.ext import (
     ContextTypes,
 )
 
+from backend.core.betlog import BetStatus, stake_from_recommendation
 from backend.core.config import get_settings
 from backend.core.logging import get_logger
 from backend.core.recommendation import Recommendation, build_slip, config_from_settings
@@ -23,6 +25,7 @@ from backend.services.redis_state import RedisState
 from backend.telegram import formatting as fmt
 from backend.telegram.keyboards import (
     back_to_menu,
+    bet_settle_buttons,
     main_menu,
     markets_menu,
     settings_menu,
@@ -89,6 +92,19 @@ async def _reply(update: Update, text: str, markup=None) -> None:
         await update.effective_message.reply_text(
             text, parse_mode=ParseMode.HTML, reply_markup=markup
         )
+
+
+async def _reply_new(update: Update, text: str, markup=None) -> None:
+    """Eine *neue* Nachricht schicken, statt die bestehende zu ersetzen.
+
+    Beim Abrechnen braucht jede Wette ihre eigene Nachricht mit eigenen
+    Knöpfen - würde man die alte überschreiben, bliebe genau eine übrig.
+    """
+    message = update.effective_message or (
+        update.callback_query.message if update.callback_query else None
+    )
+    if message is not None:
+        await message.reply_text(text, parse_mode=ParseMode.HTML, reply_markup=markup)
 
 
 # ------------------------------------------------------------------ Befehle
@@ -264,6 +280,145 @@ async def cmd_scorecard(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     await _reply(update, fmt.format_scorecard(data), back_to_menu())
 
 
+# ------------------------------------------------------------ Wett-Tagebuch
+
+
+def _bet_unit(settings) -> str:
+    return "Kontowährung" if settings.bankroll > 0 else "% der Bankroll"
+
+
+async def cmd_bets(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Gespielte Wetten - offene zuerst, mit Knöpfen zum Abrechnen."""
+    repo = _repo(context)
+    user = update.effective_user
+    if repo is None or user is None:
+        await _reply(update, "⚠️ Datenbank nicht verfügbar.")
+        return
+    offen = await repo.list_bets(limit=10, status=BetStatus.OPEN.value, user_id=user.id)
+    if not offen:
+        letzte = await repo.list_bets(limit=5, user_id=user.id)
+        if not letzte:
+            await _reply(
+                update,
+                "📓 <b>Wetten</b>\n\nNoch nichts eingetragen. Am Alarm steht "
+                "der Knopf ✅ Gespielt - damit landet er hier.",
+                back_to_menu(),
+            )
+            return
+        lines = ["📓 <b>Wetten</b>", "", "<i>Nichts offen. Zuletzt abgerechnet:</i>", ""]
+        lines += [fmt.format_bet_line(bet) for bet in letzte]
+        await _reply(update, "\n\n".join(lines), back_to_menu())
+        return
+
+    await _reply(
+        update,
+        "📓 <b>Offene Wetten</b>\n\n<i>Wie ist es ausgegangen? Ein Knopf je Wette.</i>",
+    )
+    for bet in offen:
+        await _reply_new(update, fmt.format_bet_line(bet), bet_settle_buttons(bet.id))
+
+
+async def cmd_ledger(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Die Kasse: was dabei herausgekommen ist."""
+    repo = _repo(context)
+    user = update.effective_user
+    if repo is None or user is None:
+        await _reply(update, "⚠️ Datenbank nicht verfügbar.")
+        return
+    settings = context.application.bot_data.get("settings") or get_settings()
+    try:
+        ledger = await repo.bet_ledger(user_id=user.id, unit=_bet_unit(settings))
+    except Exception as exc:  # noqa: BLE001 - eine Kennzahl darf den Bot nie stoppen
+        log.warning("kasse nicht lesbar", error=str(exc))
+        await _reply(update, "⚠️ Kasse gerade nicht abrufbar.")
+        return
+    await _reply(update, fmt.format_ledger(ledger, bankroll=settings.bankroll), back_to_menu())
+
+
+async def _bet_from_alert(update, context, fingerprint: str) -> None:
+    """Den Alarm hinter dem Knopf in eine Wette überführen."""
+    query = update.callback_query
+    repo = _repo(context)
+    user = update.effective_user
+    settings = context.application.bot_data.get("settings") or get_settings()
+    if repo is None or user is None:
+        await query.answer("Datenbank nicht verfügbar", show_alert=True)
+        return
+    if not settings.betlog_enabled:
+        await query.answer("Wett-Tagebuch ist abgeschaltet", show_alert=True)
+        return
+
+    row = await repo.get_alert_by_fingerprint(fingerprint)
+    if row is None:
+        await query.answer("Alarm nicht mehr da", show_alert=True)
+        return
+    try:
+        alert = Alert.from_json(row.payload or {})
+    except Exception as exc:  # noqa: BLE001 - defensiv gegen alte Payload-Formate
+        log.debug("alarm nicht lesbar", error=str(exc))
+        await query.answer("Alarm nicht lesbar", show_alert=True)
+        return
+
+    empfehlung = alert.recommendation or {}
+    # Ohne Bankroll ist der Einsatz ein Anteil, kein Betrag.
+    einsatz = stake_from_recommendation(empfehlung, bankroll=settings.bankroll)
+    if not einsatz:
+        await query.answer("Zu diesem Alarm gibt es keinen Einsatzvorschlag", show_alert=True)
+        return
+
+    bet = await repo.create_bet(
+        user_id=user.id,
+        alert_fingerprint=alert.fingerprint,
+        event_id=alert.event.event_id,
+        event_title=alert.event.title[:160],
+        sport=alert.event.sport.value,
+        market_key=alert.market.key,
+        market_label=alert.market.label[:128],
+        selection_key=alert.selection.key,
+        selection_label=alert.selection.display[:128],
+        bookmaker=alert.bookmaker,
+        odds=alert.odds,
+        stake=float(einsatz),
+        status=BetStatus.OPEN.value,
+        expected_edge_percent=empfehlung.get("credible_edge_percent"),
+    )
+    await query.answer("Eingetragen")
+    await _reply_new(
+        update,
+        "📓 <b>Eingetragen</b>\n\n"
+        + fmt.format_bet_line(bet)
+        + "\n\n<i>Die Quote ist die gemeldete. War deine anders, trag sie über "
+        "das Dashboard nach.</i>",
+        bet_settle_buttons(bet.id),
+    )
+
+
+async def _settle_bet(update, context, action: str, bet_id: int) -> None:
+    query = update.callback_query
+    repo = _repo(context)
+    user = update.effective_user
+    if repo is None or user is None:
+        await query.answer("Datenbank nicht verfügbar", show_alert=True)
+        return
+    if action == "del":
+        # Nur die eigenen - sonst räumt ein Nutzer im Tagebuch eines anderen auf.
+        if await repo.delete_bet(bet_id, user_id=user.id):
+            await query.answer("Gelöscht")
+            with contextlib.suppress(Exception):
+                await query.edit_message_text("🗑 <i>Gelöscht.</i>", parse_mode=ParseMode.HTML)
+        else:
+            await query.answer("Wette nicht gefunden", show_alert=True)
+        return
+
+    bet = await repo.settle_bet(bet_id, action, user_id=user.id)
+    if bet is None:
+        await query.answer("Wette nicht gefunden", show_alert=True)
+        return
+    await query.answer("Abgerechnet")
+    with contextlib.suppress(Exception):
+        await query.edit_message_text(fmt.format_bet_line(bet), parse_mode=ParseMode.HTML)
+
+
 async def cmd_pause(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     repo = _repo(context)
     user = update.effective_user
@@ -311,6 +466,7 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             "value": cmd_value,
             "sports": cmd_sports,
             "scorecard": cmd_scorecard,
+            "ledger": cmd_ledger,
         }
         if target == "prematch":
             await _prematch_view(update, context)
@@ -331,6 +487,17 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         handler = handlers.get(target)
         if handler is not None:
             await handler(update, context)
+        return
+
+    if data.startswith("bet:"):
+        _, action, rest = data.split(":", 2)
+        if action == "new":
+            await _bet_from_alert(update, context, rest)
+        else:
+            try:
+                await _settle_bet(update, context, action, int(rest))
+            except ValueError:
+                await query.answer()
         return
 
     if repo is None or user is None:
@@ -431,6 +598,9 @@ def register(application: Application) -> None:
     application.add_handler(CommandHandler("alerts", cmd_alerts))
     application.add_handler(CommandHandler("tipps", cmd_tips))
     application.add_handler(CommandHandler("tips", cmd_tips))
+    application.add_handler(CommandHandler("wetten", cmd_bets))
+    application.add_handler(CommandHandler("bets", cmd_bets))
+    application.add_handler(CommandHandler("kasse", cmd_ledger))
     application.add_handler(CommandHandler("bilanz", cmd_scorecard))
     application.add_handler(CommandHandler("scorecard", cmd_scorecard))
     application.add_handler(CommandHandler("pause", cmd_pause))

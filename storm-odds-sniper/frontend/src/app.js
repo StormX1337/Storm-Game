@@ -22,6 +22,8 @@
     filter: "all",
     socket: null,
     reconnectDelay: 1000,
+    // Nimmt die API Wetten an? Kommt aus /stats.
+    betlogWrites: false,
   };
 
   const $ = (id) => document.getElementById(id);
@@ -727,9 +729,25 @@
           </div>
           ${calcRows(r.math, a.odds)}
           ${warnings}
+          ${
+            // Der Knopf erscheint nur, wenn die API ihn auch annimmt -
+            // sonst wäre er eine Einladung in eine Fehlermeldung.
+            state.betlogWrites && a.fingerprint
+              ? `<button class="chip chip--action" data-bet="${esc(
+                  a.fingerprint
+                )}">✅ Gespielt</button>`
+              : ""
+          }
         </li>`;
       })
       .join("");
+
+    list.querySelectorAll("button[data-bet]").forEach((button) => {
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        logBet(button);
+      });
+    });
   }
 
   /* Die Rechnung in Zahlen, die man vor dem Setzen tatsächlich braucht.
@@ -775,6 +793,110 @@
       ).toFixed(1)} %</b></span>`
     );
     return `<div class="calc">${rows.join("")}</div>`;
+  }
+
+  const BET_ICON = { open: "⏳", won: "✅", lost: "❌", void: "➖" };
+
+  /* Das Wett-Tagebuch: was tatsächlich gespielt wurde.
+
+     Die Trefferbilanz misst, ob die *Alarme* etwas taugten. Hier steht die
+     andere Frage: hat es Geld gebracht? Eine Rendite aus einer Handvoll
+     Wetten ist allerdings Zufall - deshalb erscheint sie erst, wenn genug
+     dahintersteht, und bis dahin nur der Zählerstand. */
+  function renderLedger(ledger, bets) {
+    const badge = $("ledger-open");
+    const summary = $("ledger-summary");
+    const list = $("bets-list");
+    if (!badge || !summary || !list) return;
+
+    badge.textContent = `${ledger.open_count || 0} offen`;
+    const teile = [`<b>${ledger.total || 0}</b> Wetten`];
+    if (ledger.settled) {
+      teile.push(
+        `${ledger.wins}× gewonnen, ${ledger.losses}× verloren` +
+          (ledger.voids ? `, ${ledger.voids}× annulliert` : "")
+      );
+      teile.push(
+        `Ergebnis <b class="${ledger.profit >= 0 ? "pos" : "neg"}">${
+          ledger.profit >= 0 ? "+" : ""
+        }${ledger.profit.toFixed(2)}</b> auf ${ledger.staked.toFixed(2)} Einsatz`
+      );
+      if (ledger.reliable && ledger.roi_percent != null) {
+        teile.push(
+          `Rendite <b>${fmtPct(ledger.roi_percent)}</b>` +
+            (ledger.expected_roi_percent != null
+              ? ` (erwartet war ${fmtPct(ledger.expected_roi_percent)})`
+              : "")
+        );
+      } else if (ledger.settled) {
+        teile.push(
+          `<span class="dim">Rendite erst ab ${ledger.min_settled} abgerechneten Wetten — darunter ist sie Zufall.</span>`
+        );
+      }
+    } else {
+      teile.push("<span class=\"dim\">noch nichts abgerechnet</span>");
+    }
+    teile.push(`<span class="dim">Einsätze in ${esc(ledger.unit || "Einheiten")}.</span>`);
+    summary.innerHTML = teile.join(" · ");
+
+    const rows = bets || [];
+    if (!rows.length) {
+      list.innerHTML = `<li class="empty">Noch nichts eingetragen — ${
+        state.betlogWrites
+          ? "oben an einer Empfehlung steht „✅ Gespielt"
+          : "im Telegram-Bot steht am Alarm „✅ Gespielt"
+      }</li>`;
+      return;
+    }
+    list.innerHTML = rows
+      .slice(0, 12)
+      .map((bet) => {
+        const ergebnis =
+          bet.profit == null
+            ? '<span class="dim">läuft</span>'
+            : `<b class="${bet.profit >= 0 ? "pos" : "neg"}">${
+                bet.profit >= 0 ? "+" : ""
+              }${bet.profit.toFixed(2)}</b>`;
+        return `<li>
+          <div class="row">
+            <span>${BET_ICON[bet.status] || "•"} <b>${esc(bet.event_title || bet.event_id)}</b></span>
+            <span class="mono">${ergebnis}</span>
+          </div>
+          <div class="row">
+            <span class="event-sub">${esc(bet.selection_label || "")} · ${esc(
+          bet.bookmaker || ""
+        )}</span>
+            <span class="event-sub mono">${bet.stake.toFixed(2)} zu ${fmtOdds(bet.odds)}</span>
+          </div>
+        </li>`;
+      })
+      .join("");
+  }
+
+  /* Eintragen heißt festhalten, nicht setzen. Die Wette landet im Tagebuch;
+     platziert wird sie beim Buchmacher, von Hand, wie bisher. */
+  async function logBet(button) {
+    const fingerprint = button.dataset.bet;
+    button.disabled = true;
+    button.textContent = "…";
+    try {
+      const response = await fetch(`${API}/bets`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ alert_fingerprint: fingerprint }),
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.detail || `HTTP ${response.status}`);
+      }
+      button.textContent = "📓 Eingetragen";
+      refresh();
+    } catch (error) {
+      // Der Grund gehört an den Knopf, nicht nur in die Konsole.
+      button.textContent = "⚠️ ging nicht";
+      button.title = String(error.message || error);
+      console.warn("Wette eintragen fehlgeschlagen -", error);
+    }
   }
 
   function renderSystem(health, stats) {
@@ -955,6 +1077,8 @@
     events: ["live-list"],
     alerts: ["alerts-body", "alerts-cards", "moves-list", "books-list"],
     scorecard: ["scorecard-list"],
+    ledger: ["bets-list"],
+    bets: ["bets-list"],
     recommendations: ["picks-list"],
     health: ["system-list"],
   };
@@ -992,6 +1116,8 @@
       alerts: "/alerts?limit=80",
       scorecard: "/alerts/scorecard",
       recommendations: "/alerts/recommendations?window_minutes=30",
+      ledger: "/bets/ledger",
+      bets: "/bets?limit=12",
     };
     const names = Object.keys(requests);
     const settled = await Promise.allSettled(names.map((name) => fetchJson(requests[name])));
@@ -1018,7 +1144,8 @@
     // "Lade…" - und das sieht aus wie ein Fehler im Dashboard.
     reportApiDown(Object.keys(data).length === 0);
 
-    const { health, stats, providers, events, alerts, scorecard, recommendations } = data;
+    const { health, stats, providers, events, alerts, scorecard, recommendations, ledger, bets } =
+      data;
 
     if (stats) {
       $("kpi-live").textContent = stats.live_events_redis ?? stats.events_live ?? 0;
@@ -1028,6 +1155,7 @@
         stats.avg_value_percent != null ? fmtPct(stats.avg_value_percent) : "–";
       $("kpi-books").textContent = stats.bookmakers ?? 0;
       $("kpi-playable").textContent = stats.playable_alerts ?? "–";
+      state.betlogWrites = Boolean(stats.betlog_writes);
       $("kpi-providers").textContent = `${stats.providers_connected ?? 0}/${
         stats.providers_total ?? 0
       }`;
@@ -1035,6 +1163,7 @@
     }
 
     if (recommendations) renderRecommendations(recommendations);
+    if (ledger) renderLedger(ledger, bets || []);
 
     if (events) {
       state.events = new Map(events.map((e) => [e.event_id, e]));

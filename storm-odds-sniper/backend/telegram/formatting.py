@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from html import escape
 
+from backend.core.betlog import STATUS_ICONS, STATUS_LABELS
 from backend.core.recommendation import GRADE_LABELS
 from backend.core.recommendation import REASON_LABELS as RECOMMENDATION_REASONS
 from backend.core.verdict import VERDICT_LABELS
@@ -391,6 +392,65 @@ def format_slip(slip, *, window_minutes: int, bankroll: float = 0.0) -> str:
     return "\n".join(lines)
 
 
+def format_bet_line(bet, *, index: int | None = None) -> str:
+    """Eine Wette in einer Zeile."""
+    icon = STATUS_ICONS.get(bet.status, "•")
+    kopf = f"{index}. " if index is not None else ""
+    zeilen = [
+        f"{icon} {kopf}<b>{esc(bet.event_title or bet.event_id)}</b>",
+        f"    {esc(bet.market_label)} · <b>{esc(bet.selection_label)}</b> · {esc(bet.bookmaker)}",
+        f"    Einsatz <b>{bet.stake:.2f}</b> zu <code>{bet.odds:.2f}</code>",
+    ]
+    if bet.profit is not None:
+        zeilen.append(
+            f"    Ergebnis: <b>{bet.profit:+.2f}</b> ({esc(STATUS_LABELS.get(bet.status, bet.status))})"
+        )
+    return "\n".join(zeilen)
+
+
+def format_ledger(ledger, *, bankroll: float = 0.0) -> str:
+    """Die Kasse: was die gespielten Wetten gebracht haben.
+
+    Bewusst zuerst die Zählerstände, dann erst die Rendite - und die nur,
+    wenn genug Wetten dahinterstehen. Eine Prozentzahl aus fünf Wetten sieht
+    nach Können aus und ist Zufall.
+    """
+    data = ledger.to_json()
+    einheit = data["unit"]
+    lines = [
+        "💰 <b>Kasse</b>",
+        f"<i>Was tatsächlich gespielt wurde. Einsätze in {esc(einheit)}.</i>",
+        "",
+        f"📓 <b>Wetten</b>: {data['total']} ({data['open_count']} offen)",
+    ]
+    if data["settled"]:
+        lines += [
+            f"✅ {data['wins']} gewonnen · ❌ {data['losses']} verloren"
+            + (f" · ➖ {data['voids']} annulliert" if data["voids"] else ""),
+            f"💵 <b>Eingesetzt</b>: {data['staked']:.2f}",
+            f"📊 <b>Ergebnis</b>: <b>{data['profit']:+.2f}</b>",
+        ]
+        if data["hit_rate_percent"] is not None:
+            lines.append(f"🎯 <b>Trefferquote</b>: {data['hit_rate_percent']:.1f} %")
+        if data["reliable"] and data["roi_percent"] is not None:
+            lines.append(f"📈 <b>Rendite</b>: {data['roi_percent']:+.1f} % vom Einsatz")
+            if data["expected_roi_percent"] is not None:
+                lines.append(f"🔮 <b>Erwartet war</b>: {data['expected_roi_percent']:+.1f} %")
+    else:
+        lines.append("Noch nichts abgerechnet.")
+    if data["open_stake"]:
+        lines.append(f"⏳ <b>Im Spiel</b>: {data['open_stake']:.2f}")
+
+    for note in data["notes"]:
+        lines.append(f"ℹ️ {esc(note)}")
+    lines += [
+        "",
+        "<i>Eingetragen wird von Hand - der Bot setzt nichts und kennt keine",
+        "Ergebnisse. Er rechnet nur zusammen, was du ihm sagst.</i>",
+    ]
+    return "\n".join(lines)
+
+
 def format_event_line(event: EventSnapshot) -> str:
     """Eine Zeile je Event für /live."""
     icon = SPORT_ICON.get(event.sport, "🏟")
@@ -546,6 +606,8 @@ Ich überwache Fußball- und Tennisquoten mehrerer Anbieter und melde:
 /value — beste aktuelle Value-Alarme
 /alerts — letzte Alarme
 /tipps — was man jetzt spielen würde, mit Einsatz
+/wetten — gespielte Wetten, abrechnen per Knopf
+/kasse — was dabei herausgekommen ist
 /bilanz — Trefferbilanz: was aus den Alarmen wurde
 /pause — Benachrichtigungen pausieren
 /resume — Benachrichtigungen fortsetzen

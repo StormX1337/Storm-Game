@@ -596,3 +596,167 @@ class TestRechnungInDerNachricht:
 
         alert.recommendation = evaluate(alert).to_json()
         assert "Trefferquote" not in fmt.format_alert(alert)
+
+
+class TestWettTagebuchImBot:
+    """Der Knopf am Alarm, das Abrechnen, die Kasse."""
+
+    @staticmethod
+    def _update():
+        gesendet: list[tuple[str, object]] = []
+        beantwortet: list[str] = []
+
+        async def reply_text(text, **kwargs):
+            gesendet.append((text, kwargs.get("reply_markup")))
+
+        async def answer(text=None, **kwargs):
+            beantwortet.append(text or "")
+
+        async def edit_message_text(text, **kwargs):
+            gesendet.append((text, None))
+
+        message = SimpleNamespace(reply_text=reply_text)
+        query = SimpleNamespace(
+            data="", answer=answer, message=message, edit_message_text=edit_message_text
+        )
+        update = SimpleNamespace(
+            callback_query=None,
+            effective_message=message,
+            effective_user=SimpleNamespace(id=42, username="u", first_name="U"),
+        )
+        return update, query, gesendet, beantwortet
+
+    @staticmethod
+    def _context(repository, settings=None):
+        return SimpleNamespace(
+            application=SimpleNamespace(
+                bot_data={
+                    "repository": repository,
+                    "settings": settings or Settings(_env_file=None),
+                    "admin_ids": set(),
+                }
+            )
+        )
+
+    async def _alert_in_db(self, repository, *, bankroll=1000.0):
+        from backend.core.recommendation import RecommendationConfig, evaluate
+        from backend.tests.test_database import make_alert
+
+        alert = make_alert(kind=AlertKind.VALUE, odds=2.50, value_percent=11.0)
+        alert.recommendation = evaluate(alert, RecommendationConfig(bankroll=bankroll)).to_json()
+        await repository.write_batch(alerts=[alert])
+        return alert
+
+    async def test_knopf_traegt_die_wette_ein(self, repository):
+        from backend.telegram.handlers import _bet_from_alert
+
+        alert = await self._alert_in_db(repository)
+        update, query, gesendet, beantwortet = self._update()
+        update.callback_query = query
+        await _bet_from_alert(update, self._context(repository), alert.fingerprint)
+
+        assert beantwortet == ["Eingetragen"]
+        assert "Eingetragen" in gesendet[0][0]
+        bets = await repository.list_bets(user_id=42)
+        assert len(bets) == 1
+        assert bets[0].odds == pytest.approx(2.50)
+        assert bets[0].status == "open"
+        assert bets[0].expected_edge_percent is not None
+
+    async def test_alarm_ohne_einsatzvorschlag_traegt_nichts_ein(self, repository):
+        from backend.core.recommendation import evaluate
+        from backend.telegram.handlers import _bet_from_alert
+        from backend.tests.test_database import make_alert
+
+        alert = make_alert(value_percent=250.0)
+        alert.recommendation = evaluate(alert).to_json()
+        await repository.write_batch(alerts=[alert])
+
+        update, query, _, beantwortet = self._update()
+        update.callback_query = query
+        await _bet_from_alert(update, self._context(repository), alert.fingerprint)
+        assert "keinen Einsatzvorschlag" in beantwortet[0]
+        assert await repository.list_bets(user_id=42) == []
+
+    async def test_abrechnen_setzt_gewinn_und_meldet_es(self, repository):
+        from backend.telegram.handlers import _bet_from_alert, _settle_bet
+
+        alert = await self._alert_in_db(repository)
+        update, query, gesendet, beantwortet = self._update()
+        update.callback_query = query
+        await _bet_from_alert(update, self._context(repository), alert.fingerprint)
+        bet_id = (await repository.list_bets(user_id=42))[0].id
+
+        await _settle_bet(update, self._context(repository), "won", bet_id)
+        assert beantwortet[-1] == "Abgerechnet"
+        bet = (await repository.list_bets(user_id=42))[0]
+        assert bet.status == "won"
+        assert bet.profit == pytest.approx(bet.stake * 1.5)
+
+    async def test_fremde_wetten_lassen_sich_nicht_abrechnen(self, repository):
+        """Sonst räumt ein Nutzer im Tagebuch eines anderen auf."""
+        from backend.telegram.handlers import _settle_bet
+
+        bet = await repository.create_bet(
+            user_id=999, event_id="e1", odds=2.0, stake=5.0, status="open"
+        )
+        update, query, _, beantwortet = self._update()
+        update.callback_query = query
+        await _settle_bet(update, self._context(repository), "won", bet.id)
+        assert "nicht gefunden" in beantwortet[0]
+        assert (await repository.list_bets(user_id=999))[0].status == "open"
+
+    async def test_kasse_ohne_wetten_ist_verstaendlich(self, repository):
+        from backend.telegram.handlers import cmd_ledger
+
+        update, _, gesendet, _ = self._update()
+        await cmd_ledger(update, self._context(repository))
+        assert "Kasse" in gesendet[0][0]
+        assert "Noch nichts abgerechnet" in gesendet[0][0]
+
+    async def test_kasse_zeigt_das_ergebnis(self, repository):
+        from backend.telegram.handlers import cmd_ledger
+
+        for status in ("won", "lost"):
+            bet = await repository.create_bet(
+                user_id=42, event_id="e1", odds=2.50, stake=10.0, status="open"
+            )
+            await repository.settle_bet(bet.id, status, user_id=42)
+
+        update, _, gesendet, _ = self._update()
+        await cmd_ledger(update, self._context(repository))
+        text = gesendet[0][0]
+        assert "Ergebnis" in text
+        assert "+5.00" in text
+        # Zwei Wetten sind keine Rendite - als Kennzahl darf sie nicht
+        # auftauchen, als Warnung dagegen schon.
+        assert "<b>Rendite</b>" not in text
+        assert "Zufall" in text
+
+    async def test_wetten_liste_nennt_offene(self, repository):
+        from backend.telegram.handlers import cmd_bets
+
+        await repository.create_bet(
+            user_id=42,
+            event_id="e1",
+            event_title="A vs B",
+            odds=2.0,
+            stake=5.0,
+            status="open",
+        )
+        update, _, gesendet, _ = self._update()
+        await cmd_bets(update, self._context(repository))
+        assert "Offene Wetten" in gesendet[0][0]
+        assert "A vs B" in gesendet[1][0]
+        assert gesendet[1][1] is not None  # Knöpfe zum Abrechnen
+
+    async def test_alarm_mit_einsatz_bekommt_den_knopf(self):
+        from backend.core.recommendation import RecommendationConfig, evaluate
+        from backend.telegram.keyboards import bet_button
+
+        alert = football_alert(kind=AlertKind.VALUE, odds=2.50, value_percent=11.0)
+        alert.fingerprint = "abc"
+        alert.recommendation = evaluate(alert, RecommendationConfig(bankroll=1000)).to_json()
+        assert alert.recommendation["stake_percent"] > 0
+        markup = bet_button(alert.fingerprint)
+        assert markup.inline_keyboard[0][0].callback_data == "bet:new:abc"

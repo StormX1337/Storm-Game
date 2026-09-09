@@ -10,8 +10,7 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
-from backend.api.deps import get_optional_repository, get_state
-from backend.core.config import get_settings
+from backend.api.deps import app_settings, get_optional_repository, get_state
 from backend.models.domain import EventSnapshot, now_ts
 from backend.models.schemas import EventResponse
 
@@ -78,7 +77,7 @@ def _row_to_response(row, *, max_age: float) -> EventResponse:
 async def _load(
     request: Request, *, only_live: bool, sport: str | None, limit: int, offset: int
 ) -> list[EventResponse]:
-    max_age = get_settings().event_stale_seconds
+    max_age = app_settings(request).event_stale_seconds
     reference = now_ts()
     state = get_state(request)
     ids = await (state.live_event_ids() if only_live else state.all_event_ids())
@@ -137,7 +136,7 @@ async def list_live_events(
 
 @router.get("/{event_id}", response_model=EventResponse, summary="Ein Event")
 async def get_event(request: Request, event_id: str) -> EventResponse:
-    max_age = get_settings().event_stale_seconds
+    max_age = app_settings(request).event_stale_seconds
     state = get_state(request)
     event = await state.get_event(event_id)
     if event is not None:

@@ -166,6 +166,9 @@ class RecommendationModel(BaseModel):
 
 class AlertResponse(BaseModel):
     id: int | None = None
+    #: Eindeutige Kennung des Alarms - damit lässt sich eine Wette später
+    #: genau diesem Alarm zuordnen.
+    fingerprint: str = ""
     kind: str
     sport: str
     event_id: str
@@ -300,6 +303,89 @@ class StatsResponse(BaseModel):
     #: Wie die Alarme empfohlen wurden - je Grad.
     grades: list[SuppressionReason] = Field(default_factory=list)
     playable_alerts: int = 0
+    #: Darf das Dashboard Wetten eintragen? Ohne das zeigt es den Knopf gar
+    #: nicht erst an, statt ihn ins Leere laufen zu lassen.
+    betlog_writes: bool = False
+
+
+class BetResponse(BaseModel):
+    """Eine festgehaltene Wette."""
+
+    id: int
+    user_id: int | None = None
+    alert_fingerprint: str | None = None
+    event_id: str
+    event_title: str = ""
+    sport: str = ""
+    market_label: str = ""
+    selection_label: str = ""
+    bookmaker: str = ""
+    #: Der Preis, zu dem tatsächlich gespielt wurde.
+    odds: float
+    stake: float
+    status: str
+    status_label: str = ""
+    profit: float | None = None
+    expected_edge_percent: float | None = None
+    note: str = ""
+    placed_at: datetime
+    settled_at: datetime | None = None
+
+
+class LedgerResponse(BaseModel):
+    """Die Bilanz des Wett-Tagebuchs.
+
+    ``roi_percent`` ist erst ab ``min_settled`` abgerechneten Wetten eine
+    Kennzahl - darunter ist sie Zufall. ``reliable`` sagt, welcher Fall
+    vorliegt, damit die Oberfläche keine Prozentzahl hinstellt, die nach
+    Können aussieht.
+    """
+
+    total: int = 0
+    open_count: int = 0
+    settled: int = 0
+    wins: int = 0
+    losses: int = 0
+    voids: int = 0
+    staked: float = 0.0
+    open_stake: float = 0.0
+    profit: float = 0.0
+    #: Was die Empfehlungen für dieselben Wetten versprochen hatten.
+    expected_profit: float = 0.0
+    roi_percent: float | None = None
+    expected_roi_percent: float | None = None
+    hit_rate_percent: float | None = None
+    reliable: bool = False
+    min_settled: int = 20
+    #: "Einheiten" ohne hinterlegte Bankroll - dann sind Einsätze
+    #: Prozentpunkte der Bankroll, keine Beträge.
+    unit: str = "Einheiten"
+    notes: list[str] = Field(default_factory=list)
+    #: Ist der Schreibzugriff über die API offen?
+    writes_enabled: bool = False
+
+
+class BetCreateRequest(BaseModel):
+    """Eine Wette eintragen - entweder aus einem Alarm oder von Hand."""
+
+    #: Aus diesem Alarm werden Event, Markt, Quote und Einsatz übernommen.
+    alert_fingerprint: str | None = None
+    #: Überschreibt die Quote des Alarms - der Preis beim Klicken ist meist
+    #: ein anderer als der gemeldete, und genau das will man später sehen.
+    odds: float | None = Field(default=None, gt=1.0, le=1000.0)
+    stake: float | None = Field(default=None, gt=0.0, le=1_000_000.0)
+    note: str = Field(default="", max_length=200)
+    # ---------------------------------------------- nur ohne Alarm nötig
+    event_id: str | None = Field(default=None, max_length=64)
+    event_title: str = Field(default="", max_length=160)
+    sport: str | None = Field(default=None, pattern="^(football|tennis)$")
+    market_label: str = Field(default="", max_length=128)
+    selection_label: str = Field(default="", max_length=128)
+    bookmaker: str = Field(default="", max_length=64)
+
+
+class BetSettleRequest(BaseModel):
+    status: Literal["open", "won", "lost", "void"]
 
 
 class WsMessage(BaseModel):

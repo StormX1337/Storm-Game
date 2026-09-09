@@ -27,6 +27,15 @@ def get_optional_repository(request: Request) -> Repository | None:
     return getattr(request.app.state, "repository", None)
 
 
+def app_settings(request: Request) -> Settings:
+    """Die Settings *dieser* Anwendung.
+
+    ``get_settings()`` liest die Umgebung und ist prozessweit gecacht - eine
+    App mit abweichender Konfiguration käme damit nie zum Zug.
+    """
+    return getattr(request.app.state, "settings", None) or get_settings()
+
+
 def settings_dep() -> Settings:
     return get_settings()
 

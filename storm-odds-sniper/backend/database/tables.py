@@ -226,6 +226,57 @@ class AlertRow(Base):
     )
 
 
+class Bet(Base):
+    """Eine tatsächlich gespielte Wette.
+
+    Getrennt von ``alerts``: ein Alarm ist eine Beobachtung, eine Wette eine
+    Handlung. Die genommene Quote kann von der gemeldeten abweichen - meist
+    ist sie schlechter, weil der Preis zwischen Alarm und Klick gefallen ist.
+    Genau diese Differenz will man später sehen können.
+
+    Der Bot setzt nichts; hier wird nur Buch geführt.
+    """
+
+    __tablename__ = "bets"
+
+    id: Mapped[int] = mapped_column(BigIntType, primary_key=True, autoincrement=True)
+    #: Telegram-ID des Eintragenden. NULL = über das Dashboard eingetragen.
+    user_id: Mapped[int | None] = mapped_column(BigIntType, nullable=True, index=True)
+    #: Aus welchem Alarm die Wette entstand. NULL = von Hand eingetragen.
+    alert_fingerprint: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+
+    event_id: Mapped[str] = mapped_column(String(64), index=True)
+    event_title: Mapped[str] = mapped_column(String(160), default="")
+    sport: Mapped[str] = mapped_column(String(16), default="")
+    market_key: Mapped[str] = mapped_column(String(96), default="")
+    market_label: Mapped[str] = mapped_column(String(128), default="")
+    selection_key: Mapped[str] = mapped_column(String(96), default="")
+    selection_label: Mapped[str] = mapped_column(String(128), default="")
+    bookmaker: Mapped[str] = mapped_column(String(64), default="")
+
+    #: Der Preis, zu dem tatsächlich gespielt wurde.
+    odds: Mapped[float] = mapped_column(Float)
+    #: Einsatz. Ohne hinterlegte Bankroll in Prozentpunkten der Bankroll -
+    #: die Einheit steht in der Bilanz dabei, damit niemand Euro liest, wo
+    #: keine Euro gemeint sind.
+    stake: Mapped[float] = mapped_column(Float)
+    #: open | won | lost | void
+    status: Mapped[str] = mapped_column(String(8), default="open", index=True)
+    #: Netto, erst beim Abrechnen gesetzt.
+    profit: Mapped[float | None] = mapped_column(Float, nullable=True)
+    #: Was die Empfehlung versprochen hatte - für den Vergleich hinterher.
+    expected_edge_percent: Mapped[float | None] = mapped_column(Float, nullable=True)
+    note: Mapped[str] = mapped_column(String(200), default="")
+
+    placed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    settled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index("ix_bets_user_status", "user_id", "status"),
+        Index("ix_bets_status_placed", "status", "placed_at"),
+    )
+
+
 class User(Base):
     __tablename__ = "users"
 

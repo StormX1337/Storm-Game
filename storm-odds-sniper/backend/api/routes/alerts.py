@@ -6,8 +6,7 @@ from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Query, Request
 
-from backend.api.deps import get_optional_repository
-from backend.core.config import get_settings
+from backend.api.deps import app_settings, get_optional_repository
 from backend.core.recommendation import (
     REASON_LABELS,
     Recommendation,
@@ -43,6 +42,7 @@ def _row_to_response(row) -> AlertResponse:
         score_text = f"{score['home']}:{score['away']}"
     return AlertResponse(
         id=row.id,
+        fingerprint=row.fingerprint,
         kind=row.kind,
         sport=row.sport,
         event_id=row.event_id,
@@ -87,6 +87,7 @@ def _alert_to_response(alert: Alert) -> AlertResponse:
     """
     score = alert.event.score
     return AlertResponse(
+        fingerprint=alert.fingerprint,
         kind=alert.kind.value,
         sport=alert.event.sport.value,
         event_id=alert.event.event_id,
@@ -207,7 +208,7 @@ async def recommendations(
         default=300, ge=1, le=500, description="Wie viele Alarme höchstens geprüft werden."
     ),
 ) -> RecommendationsResponse:
-    settings = get_settings()
+    settings = app_settings(request)
     config = config_from_settings(settings)
     response = RecommendationsResponse(
         window_minutes=window_minutes,

@@ -65,6 +65,7 @@ deutlich abweicht — inklusive Bewertung, wie belastbar das Signal ist.
 | 🤖 **Telegram** | Alarme in Echtzeit, persönliche Filter je Nutzer, Inline-Menü |
 | 📊 **Dashboard** | Dark-Mode-Oberfläche mit Live-WebSocket |
 | 🎯 **Empfehlung** | Aus jedem Alarm wird eine Handlungsempfehlung: spielen, kleiner Einsatz, beobachten oder sein lassen — mit Einsatzgröße nach fraktionalem Kelly |
+| 📓 **Wett-Tagebuch** | Was du wirklich gespielt hast: Einsatz, Quote, Ausgang — daraus Gewinn/Verlust, Trefferquote und der Vergleich gegen das, was die Empfehlung versprach |
 | 📒 **Trefferbilanz** | Jeder Alarm wird nachkontrolliert: hat der Buchmacher korrigiert, oder ist nur der Markt nachgezogen? Ohne zusätzlichen API-Aufruf |
 | 🔌 **Austauschbare Quellen** | Drei Adapter hinter einer gemeinsamen Schnittstelle: SportsGameOdds (Live-Filter), The Odds API, Betfair Exchange |
 
@@ -525,6 +526,8 @@ klappt in die Karte selbst auf.
 - **Datenquellen** mit Status und fehlenden Zugangsdaten
 - **Buchmacher** nach Alarmhäufigkeit
 - **Warum keine Alarme?** — Zähler je Grund, in Klartext
+- **Wett-Tagebuch** — was du wirklich gespielt hast und was dabei herauskam
+  (siehe [Abschnitt 15, Schritt 12](#15-wie-die-erkennung-funktioniert))
 - **Trefferbilanz** — was aus den Alarmen wurde, mit dem Abstand zum späteren
   Markt (siehe [Abschnitt 15, Schritt 9](#15-wie-die-erkennung-funktioniert))
 - **Systemstatus** (Redis, Datenbank, Laufzeit, Snapshots)
@@ -579,6 +582,8 @@ Dem Bot `/start` schreiben.
 | `/value` | beste aktuelle Value-Alarme |
 | `/alerts` | letzte Alarme |
 | `/tipps` | Was man jetzt spielen würde — mit Einsatzvorschlag |
+| `/wetten` | Gespielte Wetten, abrechnen per Knopf |
+| `/kasse` | Was dabei herausgekommen ist |
 | `/bilanz` | Trefferbilanz: was aus den Alarmen wurde |
 | `/pause` | Benachrichtigungen pausieren |
 | `/resume` | Benachrichtigungen fortsetzen |
@@ -1013,6 +1018,55 @@ gehören dazu. Sie dürfen nur nicht aussehen wie aktuelle Angebote, deshalb
 steht bei jeder Zeile das Alter („vor 16 Min") und alte Zeilen sind
 ausgegraut. Der Preis von vor einer Viertelstunde ist ohnehin weg.
 
+### Schritt 12 — hat es Geld gebracht?
+
+Die Trefferbilanz aus Schritt 9 misst, ob die **Alarme** etwas taugten. Das
+ist eine andere Frage als die, um die es am Ende geht. Ein Alarm kann sauber
+gewesen sein, und der Preis war trotzdem weg, als du geklickt hast.
+Umgekehrt sagt ein positiver Closing Line Value nichts darüber, ob die Wette
+gewonnen hat.
+
+Das **Wett-Tagebuch** rechnet deshalb nur mit dem, was wirklich passiert
+ist: Einsatz, genommene Quote, Ausgang. Eintragen geht über den Knopf
+`✅ Gespielt` — im Telegram-Bot an jedem Alarm mit Einsatzvorschlag, im
+Dashboard an jeder Empfehlung. Abgerechnet wird per Knopf (`/wetten`) oder
+über die API.
+
+Was dabei herauskommt (`/kasse`, Panel „Wett-Tagebuch"):
+
+| | |
+|---|---|
+| Wetten | 24 (3 offen) |
+| Ergebnis | +38,40 auf 141,00 Einsatz |
+| Trefferquote | 47,6 % |
+| Rendite | +27,2 % |
+| Erwartet war | +5,1 % |
+
+Drei Dinge, die dieses Modul bewusst *nicht* tut:
+
+* **Es setzt nichts** und kennt keine Ergebnisse. Der Mensch trägt ein, wie
+  es ausgegangen ist. Automatisch abzurechnen ginge nur über Resultatdaten,
+  die diese Quellen für beendete Spiele gar nicht mehr liefern (siehe
+  Schritt 11) — geraten wird hier nichts.
+* **Annullierte Wetten verzerren nichts.** Sie zählen weder als Treffer noch
+  als Fehlschlag und nicht in den riskierten Einsatz. Würde man sie
+  mitzählen, sähe jede Rendite besser aus, als sie war.
+* **Eine Rendite aus fünf Wetten wird nicht als Rendite ausgegeben.**
+  Unterhalb von 20 abgerechneten Wetten steht dort der Zählerstand und der
+  Hinweis, dass die Prozentzahl Zufall wäre — dieselbe Haltung wie bei der
+  Trefferbilanz.
+
+Ohne `BANKROLL` sind Einsätze **Prozentpunkte der Bankroll**, keine Beträge;
+die Einheit steht überall dabei, damit niemand Euro liest, wo keine gemeint
+sind.
+
+> **Zum Schreibzugriff über die API:** `BETLOG_API_WRITES` ist standardmäßig
+> **aus**. Die API ist genau so geschützt wie das Dashboard davor — steht das
+> offen im Netz, könnte jeder Fremde Wetten in dein Tagebuch eintragen. Erst
+> `./scripts/set-dashboard-password.sh` laufen lassen, dann einschalten. Über
+> Telegram geht es auch ohne: dort ist der Absender bekannt, und jeder sieht
+> nur seine eigenen Wetten.
+
 ---
 
 ## 16. API
@@ -1037,6 +1091,9 @@ Swagger UI: <http://localhost:8080/docs> · OpenAPI: `/openapi.json`
 | `GET /alerts` | Alarm-Historie (`?kind=`, `?sport=`, `?min_value=`, `?since_minutes=`, `?grade=`), je Alarm mit `recommendation`, `verdict` und `clv_percent` |
 | `GET /alerts/scorecard` | Trefferbilanz: was aus den Alarmen wurde (`?window_hours=`) |
 | `GET /alerts/recommendations` | Was man jetzt spielen würde (`?window_minutes=`, `?limit=`, `?sport=`) — entdoppelt, mit Einsatz und Gesamtbudget |
+| `GET /bets` | Gespielte Wetten (`?status=`, `?since_hours=`) |
+| `GET /bets/ledger` | Bilanz: Gewinn/Verlust, Trefferquote, erwartet vs. eingetreten |
+| `POST /bets` · `POST /bets/{id}/settle` · `DELETE /bets/{id}` | Eintragen, abrechnen, löschen — **nur mit `BETLOG_API_WRITES=true`** |
 | `GET /stats` | Kennzahlen |
 | `GET /metrics` | Prometheus |
 | `WS /ws` | Live-Stream (Alarme, Events, Bewegungen) |
@@ -1088,6 +1145,7 @@ Abgedeckt sind unter anderem:
 | Urteil und Closing Line Value | `test_verdict.py` |
 | Nachkontrolle vom Alarm bis zur Bilanz | `test_followup.py` |
 | Empfehlung: Grad, Kelly-Einsatz, Entdopplung | `test_recommendation.py` |
+| Wett-Tagebuch: Abrechnung und Bilanz | `test_betlog.py` |
 | Secret-Redaction im Logging | `test_logging.py` |
 
 Linting:
@@ -1502,6 +1560,7 @@ storm-odds-sniper/
 │   │   ├── filters.py        False-Positive-Schutz
 │   │   ├── verdict.py        Nachkontrolle: Urteil und Closing Line Value
 │   │   ├── recommendation.py Empfehlung: Grad, Kelly-Einsatz, Bestenliste
+│   │   ├── betlog.py         Wett-Tagebuch: Abrechnung und Bilanz
 │   │   ├── backoff.py        exponentielles Backoff
 │   │   └── metrics.py        Prometheus
 │   ├── models/

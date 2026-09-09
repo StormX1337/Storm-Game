@@ -28,6 +28,7 @@ from backend.models.enums import AlertKind
 from backend.services.redis_state import RedisState
 from backend.telegram import formatting as fmt
 from backend.telegram.handlers import register
+from backend.telegram.keyboards import bet_button
 
 log = get_logger("telegram.bot")
 
@@ -109,12 +110,21 @@ class AlertDispatcher:
     # ------------------------------------------------------------ Versand
     async def dispatch(self, alert: Alert) -> int:
         text = fmt.format_alert(alert)
+        # Der Knopf erscheint nur, wo es etwas zu spielen gibt. An einem
+        # Alarm ohne Einsatzvorschlag wäre er eine Einladung zum Unfug.
+        markup = None
+        if (
+            self.settings.betlog_enabled
+            and alert.fingerprint
+            and (alert.recommendation or {}).get("stake_percent", 0) > 0
+        ):
+            markup = bet_button(alert.fingerprint)
         sent = 0
         for chat_id, user_settings in await self.recipients():
             if not self.matches(alert, user_settings):
                 self.skipped += 1
                 continue
-            if await self._send(chat_id, text):
+            if await self._send(chat_id, text, markup=markup):
                 sent += 1
         if sent and self.repository is not None and alert.fingerprint:
             with contextlib.suppress(Exception):
@@ -122,7 +132,7 @@ class AlertDispatcher:
         self.sent += sent
         return sent
 
-    async def _send(self, chat_id: int, text: str) -> bool:
+    async def _send(self, chat_id: int, text: str, *, markup=None) -> bool:
         for attempt in range(3):
             try:
                 await self.bot.send_message(
@@ -130,6 +140,7 @@ class AlertDispatcher:
                     text=text,
                     parse_mode=ParseMode.HTML,
                     disable_web_page_preview=True,
+                    reply_markup=markup,
                 )
                 return True
             except RetryAfter as exc:

@@ -9,6 +9,7 @@ import pytest_asyncio
 from backend.api.app import create_app
 from backend.core.config import Settings
 from backend.models.domain import now_ts
+from backend.models.enums import AlertKind
 from backend.tests.conftest import make_event, make_quote, make_tennis_event
 
 
@@ -477,3 +478,145 @@ class TestKennzahlenBleibenWiderspruchsfrei:
     async def test_frisches_event_zaehlt(self, client, redis_state):
         await redis_state.set_event(make_event(event_id="frisch"))
         assert (await client.get("/stats")).json()["live_events_redis"] == 1
+
+
+class TestWettTagebuch:
+    """Lesen ist offen, Schreiben nicht - und die Bilanz rechnet mit dem,
+    was wirklich passiert ist."""
+
+    @pytest_asyncio.fixture
+    async def schreib_client(self, redis_state, repository):
+        """Eigene App mit freigeschaltetem Schreibzugriff."""
+        settings = Settings(
+            _env_file=None,
+            api_rate_limit_per_minute=1000,
+            log_json=False,
+            betlog_api_writes=True,
+            bankroll=1000.0,
+        )
+        app = create_app(settings)
+        app.state.redis = redis_state
+        app.state.repository = repository
+        app.state.hub = None
+        app.state.started_at = now_ts()
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as http:
+            yield http
+
+    async def test_schreiben_ist_standardmaessig_zu(self, client, repository):
+        response = await client.post("/bets", json={"event_id": "e1", "odds": 2.0, "stake": 10.0})
+        assert response.status_code == 403
+        assert "Dashboard" in response.json()["detail"]
+
+    async def test_lesen_geht_auch_ohne_schreibrecht(self, client):
+        assert (await client.get("/bets")).status_code == 200
+        assert (await client.get("/bets/ledger")).json()["total"] == 0
+
+    async def test_wette_von_hand_eintragen(self, schreib_client):
+        response = await schreib_client.post(
+            "/bets",
+            json={
+                "event_id": "e1",
+                "event_title": "A vs B",
+                "odds": 2.50,
+                "stake": 10.0,
+                "bookmaker": "bet365",
+            },
+        )
+        assert response.status_code == 201
+        body = response.json()
+        assert body["status"] == "open"
+        assert body["status_label"] == "offen"
+        assert body["profit"] is None
+
+    async def test_wette_aus_einem_alarm_uebernimmt_alles(self, schreib_client, repository):
+        from backend.core.recommendation import RecommendationConfig, evaluate
+        from backend.tests.test_database import make_alert
+
+        alert = make_alert(kind=AlertKind.VALUE, odds=2.50, value_percent=11.0)
+        alert.recommendation = evaluate(alert, RecommendationConfig(bankroll=1000.0)).to_json()
+        await repository.write_batch(alerts=[alert])
+
+        body = (
+            await schreib_client.post("/bets", json={"alert_fingerprint": alert.fingerprint})
+        ).json()
+        assert body["event_title"] == "Bayern München vs Borussia Dortmund"
+        assert body["bookmaker"] == "examplebookie"
+        assert body["odds"] == pytest.approx(2.50)
+        assert body["stake"] > 0
+        # Was die Empfehlung versprach, wird mitgeschrieben - sonst lässt
+        # sich später nicht vergleichen.
+        assert body["expected_edge_percent"] is not None
+
+    async def test_genommene_quote_darf_abweichen(self, schreib_client, repository):
+        """Der Preis beim Klicken ist meist ein anderer als der gemeldete."""
+        from backend.core.recommendation import evaluate
+        from backend.tests.test_database import make_alert
+
+        alert = make_alert(kind=AlertKind.VALUE, odds=2.50, value_percent=11.0)
+        alert.recommendation = evaluate(alert).to_json()
+        await repository.write_batch(alerts=[alert])
+        body = (
+            await schreib_client.post(
+                "/bets",
+                json={"alert_fingerprint": alert.fingerprint, "odds": 2.30, "stake": 10.0},
+            )
+        ).json()
+        assert body["odds"] == pytest.approx(2.30)
+
+    async def test_unbekannter_alarm_ist_404(self, schreib_client):
+        response = await schreib_client.post("/bets", json={"alert_fingerprint": "gibtsnicht"})
+        assert response.status_code == 404
+
+    async def test_ohne_alarm_braucht_es_die_eckdaten(self, schreib_client):
+        assert (await schreib_client.post("/bets", json={"note": "nichts"})).status_code == 422
+
+    async def test_abrechnen_setzt_den_gewinn(self, schreib_client):
+        bet_id = (
+            await schreib_client.post("/bets", json={"event_id": "e1", "odds": 2.50, "stake": 10.0})
+        ).json()["id"]
+
+        gewonnen = (
+            await schreib_client.post(f"/bets/{bet_id}/settle", json={"status": "won"})
+        ).json()
+        assert gewonnen["profit"] == pytest.approx(15.0)
+        assert gewonnen["settled_at"] is not None
+
+        ledger = (await schreib_client.get("/bets/ledger")).json()
+        assert ledger["profit"] == pytest.approx(15.0)
+        assert ledger["staked"] == pytest.approx(10.0)
+        assert ledger["roi_percent"] == pytest.approx(150.0)
+        # Eine Rendite aus einer Wette ist keine Rendite.
+        assert ledger["reliable"] is False
+        assert ledger["notes"]
+
+    async def test_zurueck_auf_offen_loescht_die_abrechnung(self, schreib_client):
+        bet_id = (
+            await schreib_client.post("/bets", json={"event_id": "e1", "odds": 2.0, "stake": 5.0})
+        ).json()["id"]
+        await schreib_client.post(f"/bets/{bet_id}/settle", json={"status": "lost"})
+        wieder = (
+            await schreib_client.post(f"/bets/{bet_id}/settle", json={"status": "open"})
+        ).json()
+        assert wieder["profit"] is None
+        assert wieder["settled_at"] is None
+
+    async def test_unbekannter_ausgang_wird_abgelehnt(self, schreib_client):
+        response = await schreib_client.post("/bets/1/settle", json={"status": "vielleicht"})
+        assert response.status_code == 422
+
+    async def test_loeschen(self, schreib_client):
+        bet_id = (
+            await schreib_client.post("/bets", json={"event_id": "e1", "odds": 2.0, "stake": 5.0})
+        ).json()["id"]
+        assert (await schreib_client.delete(f"/bets/{bet_id}")).status_code == 204
+        assert (await schreib_client.delete(f"/bets/{bet_id}")).status_code == 404
+
+    async def test_einheit_haengt_an_der_bankroll(self, client, schreib_client):
+        """Ohne Bankroll sind Einsätze Anteile, keine Beträge."""
+        assert (await client.get("/bets/ledger")).json()["unit"] == "% der Bankroll"
+        assert (await schreib_client.get("/bets/ledger")).json()["unit"] == "Kontowährung"
+
+    async def test_kennzahlen_verraten_ob_der_knopf_sinn_hat(self, client, schreib_client):
+        assert (await client.get("/stats")).json()["betlog_writes"] is False
+        assert (await schreib_client.get("/stats")).json()["betlog_writes"] is True

@@ -215,6 +215,17 @@ class Settings(BaseSettings):
     #: Wie viele Empfehlungen die Bestenliste höchstens enthält.
     recommend_limit: int = 10
 
+    # -------------------------------------------------------- Wett-Tagebuch
+    #: Festhalten, was tatsächlich gespielt wurde - und was dabei herauskam.
+    #: Der Bot setzt weiterhin nichts; er führt Buch.
+    betlog_enabled: bool = True
+    #: Schreibzugriff über die HTTP-API (Dashboard-Knopf "Gespielt").
+    #: Standard aus: die API ist genau so geschützt wie das Dashboard, und
+    #: das steht bei vielen offen im Netz. Über Telegram geht es immer -
+    #: dort ist der Absender bekannt. Vor dem Einschalten bitte
+    #: ./scripts/set-dashboard-password.sh laufen lassen.
+    betlog_api_writes: bool = False
+
     # -------------------------------------------------------------- scanner
     scanner_queue_size: int = 20000
     scanner_workers: int = 4

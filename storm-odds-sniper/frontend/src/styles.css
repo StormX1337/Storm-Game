@@ -137,6 +137,10 @@ a:hover { text-decoration: underline; }
 }
 .chip:hover { color: var(--text); }
 .chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Ein Knopf, der etwas festhält - nicht setzt. */
+.chip--action { margin-top: 8px; border-color: rgba(52, 211, 153, .4); color: var(--good); }
+.chip--action:hover { background: rgba(52, 211, 153, .12); }
+.chip--action[disabled] { opacity: .6; cursor: default; }
 .chip--on { background: var(--accent); border-color: var(--accent); color: #05121f; font-weight: 600; }
 
 /* --------------------------------------------------------------- Tabelle */

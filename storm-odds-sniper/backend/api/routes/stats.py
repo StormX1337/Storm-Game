@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Query, Request
 
-from backend.api.deps import get_optional_repository
-from backend.core.config import get_settings
+from backend.api.deps import app_settings, get_optional_repository
 from backend.core.filters import SUPPRESSION_LABELS
 from backend.core.logging import get_logger
 from backend.core.recommendation import GRADE_LABELS, PLAYABLE_GRADES
@@ -20,6 +19,7 @@ router = APIRouter(tags=["stats"])
 async def stats(
     request: Request, window_hours: int = Query(default=24, ge=1, le=168)
 ) -> StatsResponse:
+    settings = app_settings(request)
     repo = get_optional_repository(request)
     base = {
         "events_total": 0,
@@ -44,7 +44,7 @@ async def stats(
     followups_pending = 0
     if state is not None:
         try:
-            counters = await state.counters(max_age=get_settings().event_stale_seconds)
+            counters = await state.counters(max_age=settings.event_stale_seconds)
             providers = await state.get_provider_health()
             suppressed = await state.get_suppressions()
             verdicts = await state.get_verdicts()
@@ -83,6 +83,7 @@ async def stats(
             SuppressionReason(code=code, label=GRADE_LABELS.get(code, code), count=count)
             for code, count in sorted(grades.items(), key=lambda kv: kv[1], reverse=True)
         ],
+        betlog_writes=settings.betlog_enabled and settings.betlog_api_writes,
         playable_alerts=sum(
             count for code, count in grades.items() if code in {g.value for g in PLAYABLE_GRADES}
         ),
