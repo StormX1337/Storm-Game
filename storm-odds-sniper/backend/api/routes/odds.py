@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+
 from fastapi import APIRouter, Query, Request
 
-from backend.api.deps import get_state
+from backend.api.deps import get_optional_repository, get_state
 from backend.models.domain import now_ts
-from backend.models.schemas import OddsResponse
+from backend.models.schemas import OddsHistoryPoint, OddsHistoryResponse, OddsResponse
 
 router = APIRouter(prefix="/odds", tags=["odds"])
 
@@ -49,3 +51,54 @@ async def list_odds(
             )
     out.sort(key=lambda q: (q.market, q.selection, q.price), reverse=False)
     return out
+
+
+@router.get(
+    "/history",
+    response_model=OddsHistoryResponse,
+    summary="Preisverlauf einer Quotenzeile",
+    description=(
+        "Wie sich ein Preis in den letzten Minuten bewegt hat — aus den "
+        "gespeicherten Snapshots, ohne zusätzlichen Abruf beim Anbieter.\n\n"
+        "Eine Quote, die seit zehn Minuten unverändert steht, während der "
+        "Markt abrutscht, ist etwas ganz anderes als eine, die eben erst "
+        "dort angekommen ist. Genau das zeigt der Verlauf."
+    ),
+)
+async def odds_history(
+    request: Request,
+    event_id: str = Query(..., max_length=64),
+    market: str = Query(..., max_length=96, description="z. B. over_under|2.5|full_time"),
+    selection: str = Query(..., max_length=96),
+    bookmaker: str | None = Query(default=None, max_length=64),
+    minutes: int = Query(default=30, ge=1, le=1440),
+    limit: int = Query(default=120, ge=2, le=500),
+) -> OddsHistoryResponse:
+    antwort = OddsHistoryResponse(
+        event_id=event_id,
+        market=market,
+        selection=selection,
+        bookmaker=bookmaker,
+        minutes=minutes,
+    )
+    repo = get_optional_repository(request)
+    if repo is None:
+        return antwort
+    rows = await repo.odds_history(
+        event_id=event_id,
+        market_key=market,
+        selection_key=selection,
+        bookmaker=bookmaker,
+        since=datetime.now(UTC) - timedelta(minutes=minutes),
+        limit=limit,
+    )
+    antwort.points = [
+        OddsHistoryPoint(ts=row["ts"], price=row["price"], suspended=row["suspended"])
+        for row in rows
+    ]
+    if antwort.points:
+        antwort.first_price = antwort.points[0].price
+        antwort.last_price = antwort.points[-1].price
+        if antwort.first_price:
+            antwort.change_percent = (antwort.last_price / antwort.first_price - 1.0) * 100.0
+    return antwort

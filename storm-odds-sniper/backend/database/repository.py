@@ -708,6 +708,53 @@ class Repository:
             "alerts": alr.rowcount or 0,
         }
 
+    async def odds_history(
+        self,
+        *,
+        event_id: str,
+        market_key: str,
+        selection_key: str,
+        bookmaker: str | None = None,
+        since: datetime | None = None,
+        limit: int = 200,
+    ) -> list[dict[str, Any]]:
+        """Preisverlauf einer Quotenzeile, älteste zuerst.
+
+        Beantwortet die Frage, die eine einzelne Zahl nicht beantwortet:
+        *fällt* die Quote gerade, steht sie, oder ist sie eben gesprungen?
+        Ein Preis, der seit zehn Minuten unverändert bei 4.20 steht, während
+        der Markt abrutscht, ist etwas ganz anderes als einer, der gerade
+        erst dort angekommen ist.
+        """
+        stmt = (
+            select(Bookmaker.key, OddsSnapshot.price, OddsSnapshot.ts, OddsSnapshot.suspended)
+            # Ohne explizite linke Seite ist der FROM mehrdeutig - die
+            # Auswahl beginnt bei Bookmaker, die Kette aber bei Market.
+            .select_from(Market)
+            .join(SelectionRow, SelectionRow.market_id == Market.id)
+            .join(OddsSnapshot, OddsSnapshot.selection_id == SelectionRow.id)
+            .join(Bookmaker, Bookmaker.id == OddsSnapshot.bookmaker_id)
+            .where(
+                Market.event_id == event_id,
+                Market.market_key == market_key,
+                SelectionRow.selection_key == selection_key,
+            )
+            # Neueste zuerst holen und danach umdrehen: bei langen Verläufen
+            # will man das jüngste Fenster, nicht den Anfang der Zeitreihe.
+            .order_by(OddsSnapshot.ts.desc())
+            .limit(limit)
+        )
+        if bookmaker:
+            stmt = stmt.where(Bookmaker.key == bookmaker)
+        if since is not None:
+            stmt = stmt.where(OddsSnapshot.ts >= since)
+        async with self.session_factory() as session:
+            rows = (await session.execute(stmt)).all()
+        return [
+            {"bookmaker": row[0], "price": row[1], "ts": row[2], "suspended": row[3]}
+            for row in reversed(rows)
+        ]
+
     # ------------------------------------------------------- Wett-Tagebuch
     async def create_bet(self, **values) -> Bet:
         """Eine gespielte Wette festhalten."""

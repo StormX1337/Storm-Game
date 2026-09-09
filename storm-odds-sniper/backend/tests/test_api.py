@@ -714,3 +714,89 @@ class TestSichereWetten:
     async def test_abkuehlzeit_meldet_nur_einmal(self, redis_state):
         assert await redis_state.claim_arbitrage("e1|m", cooldown=60) is True
         assert await redis_state.claim_arbitrage("e1|m", cooldown=60) is False
+
+
+class TestQuotenverlauf:
+    """Eine einzelne Zahl sagt nicht, ob die Quote fällt, steht oder eben
+    gesprungen ist. Genau das entscheidet aber, ob ein Alarm etwas wert ist.
+    """
+
+    @staticmethod
+    async def _verlauf(repository, preise, *, bookmaker="b1"):
+        from backend.models.domain import OddsChange
+        from backend.tests.conftest import make_event, make_quote
+
+        event = make_event()
+        await repository.write_batch(events=[event])
+        vorher = None
+        for index, preis in enumerate(preise):
+            quote = make_quote(bookmaker=bookmaker, price=preis)
+            quote.ts = now_ts() - (len(preise) - index) * 10
+            quote.received_at = quote.ts
+            quote.confirmed_at = quote.ts
+            await repository.write_batch(
+                changes=[OddsChange(quote=quote, previous_price=vorher, previous_ts=None)]
+            )
+            vorher = preis
+        return event, quote
+
+    async def test_verlauf_kommt_in_zeitlicher_reihenfolge(self, client, repository):
+        event, quote = await self._verlauf(repository, [2.30, 2.10, 1.95])
+        body = (
+            await client.get(
+                "/odds/history",
+                params={
+                    "event_id": event.event_id,
+                    "market": quote.market.key,
+                    "selection": quote.selection.key,
+                    "bookmaker": "b1",
+                },
+            )
+        ).json()
+        assert [point["price"] for point in body["points"]] == [2.30, 2.10, 1.95]
+        assert body["first_price"] == pytest.approx(2.30)
+        assert body["last_price"] == pytest.approx(1.95)
+        assert body["change_percent"] == pytest.approx((1.95 / 2.30 - 1) * 100, abs=0.01)
+
+    async def test_ohne_verlauf_bleibt_es_leer(self, client):
+        body = (
+            await client.get(
+                "/odds/history",
+                params={"event_id": "gibtsnicht", "market": "m", "selection": "s"},
+            )
+        ).json()
+        assert body["points"] == []
+        assert body["change_percent"] is None
+
+    async def test_buchmacher_laesst_sich_eingrenzen(self, client, repository):
+        event, quote = await self._verlauf(repository, [2.30, 2.10], bookmaker="b1")
+        await self._verlauf(repository, [1.80], bookmaker="b2")
+        nur_b1 = (
+            await client.get(
+                "/odds/history",
+                params={
+                    "event_id": event.event_id,
+                    "market": quote.market.key,
+                    "selection": quote.selection.key,
+                    "bookmaker": "b1",
+                },
+            )
+        ).json()
+        assert all(point["price"] in (2.30, 2.10) for point in nur_b1["points"])
+
+    async def test_fenster_wird_eingehalten(self, client, repository):
+        """Ein Verlauf von gestern beantwortet die Frage von jetzt nicht."""
+        event, quote = await self._verlauf(repository, [2.30, 2.10, 1.95])
+        body = (
+            await client.get(
+                "/odds/history",
+                params={
+                    "event_id": event.event_id,
+                    "market": quote.market.key,
+                    "selection": quote.selection.key,
+                    "minutes": 1,
+                },
+            )
+        ).json()
+        assert body["minutes"] == 1
+        assert len(body["points"]) <= 3

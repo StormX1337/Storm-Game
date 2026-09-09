@@ -499,9 +499,12 @@ Das Dashboard zeigt:
   Sportart.
   Ein Klick auf die Zeile klappt die Herleitung auf: der **Preis im Feld**
   (wo die gemeldete Quote zwischen allen Vergleichsquoten liegt, mit der
-  fairen Quote als Bezugslinie), die Empfehlung, die verglichenen Preise, die
-  drei Modelle, die Signale des Error-Scores und, sobald vorhanden, die
-  Nachkontrolle mit den Preisen davor und danach.
+  fairen Quote als Bezugslinie), der **Verlauf** der letzten 30 Minuten als
+  Kurve, die Empfehlung mit ausgeschriebener Rechnung, die verglichenen
+  Preise, die drei Modelle, die Signale des Error-Scores und, sobald
+  vorhanden, die Nachkontrolle mit den Preisen davor und danach. Der Verlauf
+  wird erst beim Aufklappen geholt — für achtzig Alarme im Voraus wäre er
+  Ballast.
 - Filter **🟢 Spielbar** zeigt nur Alarme mit Einsatzvorschlag — die Frage
   „was davon lohnt sich?" in einem Klick.
 - Antwortet ein einzelner Endpunkt nicht, sagt **seine** Kachel das
@@ -1055,7 +1058,11 @@ System sagt das an drei Stellen offen:
   beteiligten Quote steht überall dabei.
 
 Zusätzliche API-Aufrufe kostet das **keine**: der Markt liegt beim Prüfen
-ohnehin schon vollständig vor. Gefunden wird selten — die Dashboard-Karte
+ohnehin schon vollständig vor. Dasselbe gilt für den **Quotenverlauf** in
+der Alarm-Herleitung: er kommt aus den ohnehin gespeicherten Snapshots.
+Eine Quote, die seit zehn Minuten unverändert dasteht, während der Markt
+abrutscht, ist der klassische vergessene Preis — und das sieht man in einer
+Kurve sofort, in einer einzelnen Zahl nie. Gefunden wird selten — die Dashboard-Karte
 bleibt verborgen, solange es nichts gibt, statt eine dauerhaft leere Kachel
 zu zeigen.
 
@@ -1131,6 +1138,7 @@ Swagger UI: <http://localhost:8080/docs> · OpenAPI: `/openapi.json`
 | `GET /events/live` | nur laufende Events — ohne die, deren Daten veraltet sind |
 | `GET /events/{id}` | einzelnes Event |
 | `GET /odds?event_id=` | aktuelle Quoten aus Redis |
+| `GET /odds/history` | Preisverlauf einer Quotenzeile (`?event_id=`, `?market=`, `?selection=`, `?bookmaker=`, `?minutes=`) |
 | `GET /alerts` | Alarm-Historie (`?kind=`, `?sport=`, `?min_value=`, `?since_minutes=`, `?grade=`), je Alarm mit `recommendation`, `verdict` und `clv_percent` |
 | `GET /alerts/scorecard` | Trefferbilanz: was aus den Alarmen wurde (`?window_hours=`) |
 | `GET /alerts/recommendations` | Was man jetzt spielen würde (`?window_minutes=`, `?limit=`, `?sport=`) — entdoppelt, mit Einsatz und Gesamtbudget |

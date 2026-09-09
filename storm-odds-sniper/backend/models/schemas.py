@@ -164,6 +164,31 @@ class RecommendationModel(BaseModel):
     math: CalculationModel | None = None
 
 
+class OddsHistoryPoint(BaseModel):
+    ts: datetime
+    price: float
+    suspended: bool = False
+
+
+class OddsHistoryResponse(BaseModel):
+    """Preisverlauf einer Quotenzeile.
+
+    Beantwortet, was eine einzelne Zahl nicht beantwortet: fällt die Quote
+    gerade, steht sie, oder ist sie eben gesprungen?
+    """
+
+    event_id: str
+    market: str
+    selection: str
+    bookmaker: str | None = None
+    points: list[OddsHistoryPoint] = Field(default_factory=list)
+    #: Erste und letzte Beobachtung im Fenster.
+    first_price: float | None = None
+    last_price: float | None = None
+    change_percent: float | None = None
+    minutes: int = 30
+
+
 class AlertResponse(BaseModel):
     id: int | None = None
     #: Eindeutige Kennung des Alarms - damit lässt sich eine Wette später

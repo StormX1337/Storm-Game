@@ -227,6 +227,7 @@
     document.querySelectorAll(".acard .detail").forEach((el) => el.remove());
     if (!alert) return;
     card.insertAdjacentHTML("beforeend", detailHtml(alert));
+    loadHistory(card, alert);
   }
 
   /* Was aus dem Alarm folgt. Ein Alarm ohne Empfehlung ist ein alter Alarm -
@@ -339,6 +340,67 @@
     </div>`;
   }
 
+  /* Der Preisverlauf als Sparkline.
+
+     Eine einzelne Zahl sagt nicht, ob die Quote gerade fällt, steht oder
+     eben gesprungen ist. Genau das entscheidet aber, ob ein Alarm etwas
+     wert ist: ein Preis, der seit zehn Minuten unverändert dasteht, während
+     der Markt abrutscht, ist der klassische vergessene Preis.
+
+     Eine Linie, keine Legende - die Überschrift nennt das Buch. */
+  function sparkline(points) {
+    const werte = points.filter((p) => !p.suspended).map((p) => p.price);
+    if (werte.length < 2) return "";
+    const min = Math.min(...werte);
+    const max = Math.max(...werte);
+    const spanne = max - min || 1;
+    // Etwas Luft oben und unten, sonst klebt die Linie am Rand.
+    const y = (preis) => 26 - ((preis - min) / spanne) * 22;
+    const x = (index) => (index / (werte.length - 1)) * 100;
+    const d = werte.map((preis, i) => `${i ? "L" : "M"}${x(i).toFixed(2)} ${y(preis).toFixed(2)}`).join(" ");
+    const steigend = werte[werte.length - 1] >= werte[0];
+    return `<svg class="spark" viewBox="0 0 100 30" preserveAspectRatio="none" aria-hidden="true">
+      <path d="${d}" class="spark__line ${steigend ? "spark__line--up" : "spark__line--down"}"
+        vector-effect="non-scaling-stroke" />
+    </svg>`;
+  }
+
+  async function loadHistory(root, alert) {
+    const box = root.querySelector("[data-history]");
+    if (!box || !alert.market || !alert.selection) return;
+    const params = new URLSearchParams({
+      event_id: alert.event_id,
+      market: alert.market,
+      selection: alert.selection,
+      minutes: "30",
+    });
+    if (alert.bookmaker) params.set("bookmaker", alert.bookmaker);
+    try {
+      const data = await fetchJson(`/odds/history?${params}`);
+      const points = data.points || [];
+      if (points.length < 2) {
+        box.innerHTML =
+          '<h4>Verlauf</h4><div class="event-sub">Noch kein Verlauf gespeichert — der Preis wurde erst einmal gesehen.</div>';
+        return;
+      }
+      const richtung = data.change_percent >= 0 ? "pos" : "neg";
+      box.innerHTML = `<h4>Verlauf · ${esc(alert.bookmaker || "")} · ${data.minutes} Min</h4>
+        ${sparkline(points)}
+        <div class="row">
+          <span class="event-sub mono">${fmtOdds(data.first_price)} → ${fmtOdds(
+        data.last_price
+      )}</span>
+          <span class="event-sub mono ${richtung}">${fmtPct(data.change_percent)}</span>
+        </div>
+        <div class="event-sub">${points.length} Beobachtungen</div>`;
+    } catch (error) {
+      // Ohne Datenbank gibt es keinen Verlauf - das ist kein Defekt.
+      box.innerHTML =
+        '<h4>Verlauf</h4><div class="event-sub">Nicht abrufbar.</div>';
+      console.warn("Verlauf nicht abrufbar -", error);
+    }
+  }
+
   /* Die Herleitung eines Alarms - einmal gebaut, von Tabelle und Karte
      gleichermaßen benutzt. Zwei Fassungen desselben Inhalts liefen sonst
      auseinander, sobald jemand nur eine davon pflegt. */
@@ -370,6 +432,7 @@
     return `<div class="detail">
       ${block("Bewegung", movement)}
       ${block("Preis im Feld", strip, "detail__block--wide")}
+      <div class="detail__block" data-history="1"><h4>Verlauf</h4><div class="event-sub">Lade…</div></div>
       ${block("Empfehlung", recommendationDetail(alert))}
       ${block("Rechnung", calcRows((alert.recommendation || {}).math, alert.odds))}
       ${block("Verglichen mit", refs.length
@@ -454,6 +517,9 @@
     tr.className = "row--detail";
     tr.innerHTML = `<td colspan="12">${detailHtml(alert)}</td>`;
     row.after(tr);
+    // Der Verlauf kommt aus der Datenbank und wird erst geholt, wenn jemand
+    // die Zeile aufklappt - für achtzig Alarme im Voraus wäre er Ballast.
+    loadHistory(tr, alert);
   }
 
   /* Balkenbreiten per CSSOM setzen statt über style="…".
