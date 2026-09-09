@@ -54,16 +54,24 @@
     <article class="kpi"><span class="kpi__label">Buchmacher</span><strong id="kpi-books">–</strong></article>
     <article class="kpi"><span class="kpi__label">Provider aktiv</span><strong id="kpi-providers">–</strong></article>
     <article class="kpi" title="Abstand der gemeldeten Preise zum später beobachteten Marktkonsens. Kein Gewinn."><span class="kpi__label">Ø vs. Markt</span><strong id="kpi-clv">–</strong></article>
-    <article class="kpi" title="Alarme, aus denen eine spielbare Empfehlung wurde. Der Rest ist geprüft und verworfen."><span class="kpi__label">Spielbar</span><strong id="kpi-playable">–</strong></article>
+    <!-- Bewusst mit Zeitraum beschriftet: die Leitzahl der Empfehlungskarte
+         zählt, was JETZT spielbar ist. Zwei Kacheln namens "Spielbar" mit
+         verschiedenen Zahlen wären genau der Widerspruch, den dieses
+         Dashboard nicht mehr haben soll. -->
+    <article class="kpi" title="Alarme, aus denen über die letzten sieben Tage eine spielbare Empfehlung wurde. Was gerade spielbar ist, steht in der Empfehlungskarte."><span class="kpi__label">Spielbar</span><strong id="kpi-playable">–</strong><span class="kpi__note">7 Tage kumuliert</span></article>
   </section>
 
   <main class="grid">
-    <section class="card card--wide">
+    <section class="card card--wide card--lead">
       <header class="card__head">
         <h2>Empfehlungen — was jetzt spielen?</h2>
         <span class="badge" id="picks-stake" title="Summe der vorgeschlagenen Einsätze">0 %</span>
       </header>
-      <p class="tagline" style="padding: 0 14px 6px;">
+      <p class="lead-figure">
+        <strong id="picks-count">–</strong>
+        <span id="picks-caption">spielbare Wetten gerade</span>
+      </p>
+      <p class="card__lede">
         Sortiert nach dem <b>realistischen</b> Vorteil, nicht nach der gemeldeten Value-Zahl.
         Eine Quote weit jenseits des Marktes ist fast immer ein Datenfehler — solche Alarme
         werden abgewertet statt nach oben sortiert.
@@ -71,7 +79,7 @@
       <ul class="list" id="picks-list">
         <li class="empty">Lade…</li>
       </ul>
-      <p class="tagline" style="padding: 6px 14px 12px;">
+      <p class="card__foot">
         Schätzung aus öffentlich abrufbaren Quoten. Keine Wettberatung, keine Gewinngarantie.
         Preise vor dem Setzen selbst prüfen — es wird nichts automatisch gesetzt.
       </p>
@@ -85,6 +93,7 @@
           <button class="chip" data-filter="fixed_error">🎯 Fixed Error</button>
           <button class="chip" data-filter="value">💎 Value</button>
           <button class="chip" data-filter="odds_move">📈 Bewegung</button>
+          <button class="chip" data-filter="playable" title="Nur Alarme mit Einsatzvorschlag">🟢 Spielbar</button>
           <button class="chip" data-filter="football">⚽ Fußball</button>
           <button class="chip" data-filter="tennis">🎾 Tennis</button>
         </div>
@@ -102,6 +111,14 @@
             <tr class="empty"><td colspan="12">Warte auf Alarme…</td></tr>
           </tbody>
         </table>
+      </div>
+      <!-- Dieselben Alarme fürs Handy. Eine Tabelle mit zwölf Spalten bricht
+           dort jedes Wort einzeln um; CSS entscheidet, welche Form sichtbar
+           ist. -->
+      <div class="cards">
+        <ul class="cards__list" id="alerts-cards">
+          <li class="empty">Warte auf Alarme…</li>
+        </ul>
       </div>
     </section>
 

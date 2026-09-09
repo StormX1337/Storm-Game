@@ -98,6 +98,12 @@
     const f = state.filter;
     if (f === "all") return true;
     if (f === "football" || f === "tennis") return alert.sport === f;
+    // "Spielbar" ist kein Alarmtyp, sondern das Ergebnis der Empfehlung -
+    // die Frage "was davon lohnt sich?" in einem Klick.
+    if (f === "playable") {
+      const r = alert.recommendation;
+      return Boolean(r && r.stake_percent > 0);
+    }
     return alert.kind === f;
   }
 
@@ -148,10 +154,77 @@
       })
       .join("");
     applyMeterWidths(body);
+    renderAlertCards(rows);
     state.alerts.forEach((a) => delete a.__fresh);
     body.querySelectorAll("tr[data-index]").forEach((tr) => {
       tr.addEventListener("click", () => toggleDetail(tr, rows[Number(tr.dataset.index)]));
     });
+  }
+
+  /* Dieselben Alarme als Karten. Auf einem 430px breiten Bildschirm bricht
+     eine Tabelle mit zwölf Spalten jedes Wort einzeln um - "Ben Shelton vs
+     Carlos Alcaraz" wird dort zu sieben Zeilen. Das ist keine Tabelle mehr,
+     das ist eine Spalte aus Silben. */
+  function renderAlertCards(rows) {
+    const list = $("alerts-cards");
+    if (!list) return;
+    if (!rows.length) {
+      list.innerHTML = '<li class="empty">Keine Alarme für diesen Filter.</li>';
+      return;
+    }
+    list.innerHTML = rows
+      .map((a, index) => {
+        const age = ageOf(a.detected_at);
+        const abgelaufen = age != null && age > ALERT_STALE_SECONDS;
+        const tag = STATUS_TAG[a.status] || "fin";
+        const valueClass = a.value_percent >= 0 ? "pos" : "neg";
+        return `<li class="acard ${abgelaufen ? "acard--stale" : ""}" data-index="${index}">
+          <div class="acard__top">
+            <span class="tag tag--${esc(a.kind)}">${KIND_LABEL[a.kind] || esc(a.kind)}</span>
+            <span class="tag tag--${tag}">${esc(a.status || "?")}</span>
+            ${gradeCell(a)}
+            <span class="acard__time">${esc(fmtAge(age))}</span>
+          </div>
+          <div class="acard__title">${SPORT_ICON[a.sport] || "🏟"} ${esc(a.event_title)}</div>
+          <div class="acard__sub">${esc(a.league || "")}${
+          a.score ? " · " + esc(a.score) : ""
+        }</div>
+          <div class="acard__sub">${esc(a.market_label)} · <b>${esc(
+          a.selection_label
+        )}</b> · ${esc(a.bookmaker)}</div>
+          <div class="acard__figures">
+            <span class="acard__fig"><span>Quote</span><b>${fmtOdds(a.odds)}</b></span>
+            <span class="acard__fig"><span>Fair</span><b class="dim">${fmtOdds(
+              a.fair_odds
+            )}</b></span>
+            <span class="acard__fig"><span>Value</span><b class="${valueClass}">${fmtPct(
+          a.value_percent
+        )}</b></span>
+          </div>
+          <div class="acard__foot">
+            <span class="event-sub">Confidence ${a.confidence ?? "–"}/100</span>
+            <span class="event-sub">·</span>
+            <span class="event-sub">${verdictCell(a)}</span>
+          </div>
+        </li>`;
+      })
+      .join("");
+    list.querySelectorAll("li[data-index]").forEach((li) => {
+      li.addEventListener("click", () => toggleCardDetail(li, rows[Number(li.dataset.index)]));
+    });
+  }
+
+  /* Auf der Karte klappt die Herleitung in die Karte selbst auf - eine
+     zusätzliche Zeile wie in der Tabelle gibt es hier nicht. */
+  function toggleCardDetail(card, alert) {
+    const open = card.querySelector(".detail");
+    if (open) {
+      open.remove();
+      return;
+    }
+    document.querySelectorAll(".acard .detail").forEach((el) => el.remove());
+    if (!alert) return;
+    card.insertAdjacentHTML("beforeend", detailHtml(alert));
   }
 
   /* Was aus dem Alarm folgt. Ein Alarm ohne Empfehlung ist ein alter Alarm -
@@ -198,21 +271,82 @@
   /* Herleitung eines Alarms: gegen welche Preise verglichen wurde, was die
      drei Modelle sagten und welche Signale den Error-Score getragen haben.
      Ohne das muss man dem Ergebnis blind vertrauen. */
-  function toggleDetail(row, alert) {
-    const existing = row.nextElementSibling;
-    if (existing && existing.classList.contains("row--detail")) {
-      existing.remove();
-      return;
-    }
-    document.querySelectorAll(".row--detail").forEach((el) => el.remove());
-    if (!alert) return;
+  /* Preisstreifen: wo lag der gemeldete Preis im Feld?
 
+     Form ist Betonung, nicht Kategorie - ein Preis ist der Punkt, alle
+     anderen sind Kontext. Deshalb ein Akzent und sonst Grau. Ohne dieses
+     Bild muss man aus einer Zeile Zahlen im Kopf rekonstruieren, ob der
+     Alarm plausibel ist; mit ihm sieht man es.
+
+     Die Zahlen stehen in der Legende, nicht als schwebende Marken am
+     Streifen: eine Marke am äußersten Preis ragt sonst über den Rand
+     hinaus, und genau dort steht der interessante Fall. */
+  function priceStrip(alert) {
+    const refs = Object.entries(alert.references || {});
+    if (refs.length < 2 || typeof alert.odds !== "number") return "";
+    const values = refs.map(([, p]) => p).concat([alert.odds]);
+    if (typeof alert.fair_odds === "number" && alert.kind !== "odds_move") {
+      values.push(alert.fair_odds);
+    }
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const span = max - min;
+    // Alle Preise gleich: dann gibt es keine Streuung zu zeigen, und eine
+    // Division durch null wäre der Anfang von NaN im Markup.
+    if (!(span > 0)) return "";
+    const at = (value) => `${((value - min) / span) * 100}%`;
+
+    const dots = refs
+      .sort((a, b) => a[1] - b[1])
+      .map(
+        ([name, price]) =>
+          `<span class="strip__dot" style="left:${at(price)}" title="${esc(name)} ${price.toFixed(
+            2
+          )}"></span>`
+      )
+      .join("");
+    const hatFair = alert.kind !== "odds_move" && typeof alert.fair_odds === "number";
+    const fair = hatFair
+      ? `<i class="strip__fair" style="left:${at(alert.fair_odds)}" title="faire Quote ${alert.fair_odds.toFixed(
+          2
+        )}"></i>`
+      : "";
+
+    return `<div class="strip">
+      <div class="strip__track">
+        ${dots}
+        ${fair}
+        <span class="strip__flag" style="left:${at(alert.odds)}" title="${esc(
+      alert.bookmaker
+    )} ${alert.odds.toFixed(2)}"></span>
+      </div>
+      <div class="strip__scale"><span>${min.toFixed(2)}</span><span>${max.toFixed(2)}</span></div>
+      <div class="strip__legend">
+        <span><i class="strip__key strip__key--flag"></i>${esc(
+          alert.bookmaker
+        )} <b>${alert.odds.toFixed(2)}</b></span>
+        <span><i class="strip__key strip__key--other"></i>${refs.length} andere Bücher</span>
+        ${
+          hatFair
+            ? `<span><i class="strip__key strip__key--fair"></i>fair <b>${alert.fair_odds.toFixed(
+                2
+              )}</b></span>`
+            : ""
+        }
+      </div>
+    </div>`;
+  }
+
+  /* Die Herleitung eines Alarms - einmal gebaut, von Tabelle und Karte
+     gleichermaßen benutzt. Zwei Fassungen desselben Inhalts liefen sonst
+     auseinander, sobald jemand nur eine davon pflegt. */
+  function detailHtml(alert) {
     const refs = Object.entries(alert.references || {}).sort((a, b) => a[1] - b[1]);
     const models = Object.entries(alert.fair_models || {}).filter(([, v]) => v);
     const comps = Object.entries(alert.score_components || {}).sort((a, b) => b[1] - a[1]);
 
-    const block = (title, inner) =>
-      inner ? `<div class="detail__block"><h4>${title}</h4>${inner}</div>` : "";
+    const block = (title, inner, extra = "") =>
+      inner ? `<div class="detail__block ${extra}"><h4>${title}</h4>${inner}</div>` : "";
 
     // Bewegungsmeldungen haben keine faire Quote und damit keine Referenzen -
     // dort ist die Bewegung selbst die Information.
@@ -229,10 +363,12 @@
            }">${fmtPct(alert.deviation_percent)}</span></div>`
         : "";
 
-    const tr = document.createElement("tr");
-    tr.className = "row--detail";
-    tr.innerHTML = `<td colspan="11"><div class="detail">
+    const strip = priceStrip(alert);
+
+    return `<div class="detail">
       ${block("Bewegung", movement)}
+      ${block("Preis im Feld", strip, "detail__block--wide")}
+      ${block("Empfehlung", recommendationDetail(alert))}
       ${block("Verglichen mit", refs.length
         ? `<div class="chips">${refs
             .map(([n, p]) => `<span class="chip-static">${esc(n)} <b>${p.toFixed(2)}</b></span>`)
@@ -271,7 +407,49 @@
       ${block("Hinweise", (alert.notes || []).length
         ? `<ul class="notes">${alert.notes.map((n) => `<li>${esc(n)}</li>`).join("")}</ul>`
         : "")}
-    </div></td>`;
+    </div>`;
+  }
+
+  /* Die Empfehlung in der Herleitung: was folgt aus dem Alarm, und warum
+     nicht mehr. */
+  function recommendationDetail(alert) {
+    const r = alert.recommendation;
+    if (!r || r.reason_code === "keine_referenz") return "";
+    const g = GRADE[r.grade] || { icon: "•", short: r.grade, tag: "fin" };
+    const rows = [
+      `<div class="row"><span class="dim">Urteil</span>
+        <span class="tag tag--${g.tag}">${g.icon} ${esc(r.label || g.short)}</span></div>`,
+    ];
+    if (r.stake_percent > 0) {
+      rows.push(`<div class="row"><span class="dim">Einsatz</span>
+        <span class="mono">${r.stake_percent.toFixed(1)} %${
+        r.stake_amount ? ` (${r.stake_amount.toFixed(2)})` : ""
+      }</span></div>`);
+      rows.push(`<div class="row"><span class="dim">Realistischer Vorteil</span>
+        <span class="mono pos">${fmtPct(r.credible_edge_percent)}</span></div>`);
+    } else if (r.reason_label) {
+      rows.push(`<div class="row"><span class="dim">Grund</span><span>${esc(
+        r.reason_label
+      )}</span></div>`);
+    }
+    (r.warnings || []).slice(0, 2).forEach((w) => {
+      rows.push(`<div class="event-sub">⚠️ ${esc(w)}</div>`);
+    });
+    return rows.join("");
+  }
+
+  function toggleDetail(row, alert) {
+    const existing = row.nextElementSibling;
+    if (existing && existing.classList.contains("row--detail")) {
+      existing.remove();
+      return;
+    }
+    document.querySelectorAll(".row--detail").forEach((el) => el.remove());
+    if (!alert) return;
+
+    const tr = document.createElement("tr");
+    tr.className = "row--detail";
+    tr.innerHTML = `<td colspan="12">${detailHtml(alert)}</td>`;
     row.after(tr);
   }
 
@@ -502,6 +680,14 @@
     const badge = $("picks-stake");
     const picks = data.picks || [];
     badge.textContent = `${(data.total_stake_percent || 0).toFixed(1)} %`;
+    // Genau eine Leitzahl je Ansicht - und zwar die, für die es das
+    // Dashboard gibt: wie viele Wetten gerade übrig bleiben.
+    $("picks-count").textContent = String(picks.length);
+    $("picks-caption").textContent = picks.length
+      ? `spielbare ${picks.length === 1 ? "Wette" : "Wetten"} · ${
+          data.considered || 0
+        } Alarme geprüft`
+      : `von ${data.considered || 0} geprüften Alarmen`;
 
     if (!picks.length) {
       const reasons = (data.dropped || [])

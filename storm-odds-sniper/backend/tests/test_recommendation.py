@@ -433,3 +433,23 @@ class TestVeralteteAlarme:
         paare = [(alert, bewerte(alert))]
         assert len(build_slip(paare, reference=1060.0).picks) == 1
         assert build_slip(paare, reference=1400.0).picks == []
+
+
+class TestWarnungenBleibenSelten:
+    """Eine Warnung an jedem Eintrag ist Tapete - und Tapete liest niemand
+    mehr, wenn es einmal wirklich darauf ankommt."""
+
+    def test_massvolle_abweichung_warnt_nicht(self):
+        result = evaluate(make_alert(11.0))
+        assert result.grade in PLAYABLE_GRADES
+        assert not any("real erreichbare" in w for w in result.warnings)
+
+    def test_deutliche_abweichung_warnt_weiterhin(self):
+        result = evaluate(make_alert(20.0))
+        assert any("real erreichbare" in w for w in result.warnings)
+
+    def test_beide_zahlen_stehen_ohnehin_nebeneinander(self):
+        """Auch ohne Warnung ist der Unterschied nicht versteckt."""
+        result = evaluate(make_alert(11.0))
+        assert result.raw_edge_percent > result.credible_edge_percent
+        assert any("gemeldet" in reason for reason in result.reasons)

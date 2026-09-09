@@ -487,15 +487,27 @@ docker compose exec api python /app/scripts/smoke_test.py http://127.0.0.1:8000
 
 Das Dashboard zeigt:
 
-- **Empfehlungen — was jetzt spielen?** ganz oben: Wette, Buchmacher, Quote
-  und ein Einsatzvorschlag in Prozent der Bankroll. Bleibt die Liste leer,
-  steht dort **warum** (siehe [Abschnitt 15, Schritt 10](#15-wie-die-erkennung-funktioniert)).
+- **Empfehlungen — was jetzt spielen?** ganz oben, mit der einen Leitzahl des
+  Dashboards: wie viele Wetten gerade spielbar sind. Darunter Wette,
+  Buchmacher, Quote und ein Einsatzvorschlag in Prozent der Bankroll. Bleibt
+  die Liste leer, steht dort **warum**
+  (siehe [Abschnitt 15, Schritt 10](#15-wie-die-erkennung-funktioniert)).
 - **Alarme** mit Zeit, Sport, Event, Markt, Buchmacher, Quote, fairer Quote,
   Value, Confidence, **Tipp**, Status und **Urteil** — filterbar nach Art und
   Sportart.
-  Ein Klick auf die Zeile klappt die Herleitung auf: verglichene Preise, die
+  Ein Klick auf die Zeile klappt die Herleitung auf: der **Preis im Feld**
+  (wo die gemeldete Quote zwischen allen Vergleichsquoten liegt, mit der
+  fairen Quote als Bezugslinie), die Empfehlung, die verglichenen Preise, die
   drei Modelle, die Signale des Error-Scores und, sobald vorhanden, die
   Nachkontrolle mit den Preisen davor und danach.
+- Filter **🟢 Spielbar** zeigt nur Alarme mit Einsatzvorschlag — die Frage
+  „was davon lohnt sich?" in einem Klick.
+
+**Auf dem Handy** wird aus der Alarmtabelle eine Karte je Alarm. Eine Tabelle
+mit zwölf Spalten bricht auf 390 px jedes Wort einzeln um — „Ben Shelton vs
+Carlos Alcaraz" wird dort zu sieben Zeilen. Dieselben Daten, dieselbe
+Reihenfolge, nur eine Form, die auf den Bildschirm passt; die Herleitung
+klappt in die Karte selbst auf.
 - **Live-Events** mit Minute, Spielstand bzw. Satz, Games und Punkten. Ein
   Event ohne frische Daten fliegt hier raus (siehe
   [Abschnitt 15, Schritt 11](#15-wie-die-erkennung-funktioniert)); in der

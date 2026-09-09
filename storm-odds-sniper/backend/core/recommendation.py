@@ -389,7 +389,11 @@ def evaluate(alert: Alert, config: RecommendationConfig | None = None) -> Recomm
     credible = raw * reliability * plausibility
 
     warnings = list(notes)
-    if plausibility < 0.5:
+    # Erst warnen, wenn die Schrumpfung wirklich etwas ändert. Beide Zahlen
+    # stehen ohnehin nebeneinander ("Vorteil +3.3 %, gemeldet +11.0 %") -
+    # eine Warnung an jedem einzelnen Eintrag wäre Tapete, und Tapete liest
+    # niemand mehr, wenn es einmal wirklich darauf ankommt.
+    if plausibility < 0.25:
         warnings.append(
             f"gemeldete {raw:.0f} % sind größer als real erreichbare Vorteile "
             f"- gerechnet wird mit {credible:.1f} %"
