@@ -1050,6 +1050,33 @@ Für die **laufenden Dienste** (Scanner, API) bleibt `--build` nötig:
 docker compose up -d --build
 ```
 
+### Alles leer, roter Punkt, „Verbinde…"
+
+Das Dashboard lädt, aber **keine einzige** Kachel füllt sich und oben steht
+ein roter Punkt? Dann antwortet die API gar nicht — meist läuft ihr Container
+nicht. Seit dieser Version sagt das Dashboard das auch selbst statt stumm auf
+„Lade…" zu stehen.
+
+Zustand einsammeln:
+
+```bash
+./scripts/diagnose.sh              # auf den Bildschirm
+./scripts/diagnose.sh > bericht.txt   # zum Verschicken
+```
+
+Der Bericht zeigt Containerzustände, die letzten Fehler aus jedem Log, ob
+nginx die API erreicht und welche Einstellungen aktiv sind. **Passwörter,
+Schlüssel und Tokens erscheinen nicht** — von ihnen steht nur die Länge da,
+der Bericht kann also unbesehen verschickt werden.
+
+Der häufigste Auslöser ist ein fehlgeschlagener Neubau:
+
+```bash
+docker compose up -d --build
+docker compose ps          # laufen alle Dienste?
+docker compose logs api --tail 50
+```
+
 ### Dashboard bleibt auf „Lade…" nach einem Update
 
 Kacheln leer, aber oben steht „Live verbunden"? Dann läuft eine **API, die
@@ -1291,6 +1318,7 @@ storm-odds-sniper/
 ├── frontend/src/             Dashboard (HTML, CSS, JS)
 ├── docker/nginx/             nginx-Konfiguration
 ├── scripts/
+│   ├── diagnose.sh           Zustand einsammeln (ohne Geheimnisse)
 │   ├── set-dashboard-password.sh  Zugangsschutz fürs Dashboard
 │   ├── setup-provider.sh     echte Datenquelle prüfen und übernehmen
 │   ├── setup_provider.py     die eigentliche Prüflogik

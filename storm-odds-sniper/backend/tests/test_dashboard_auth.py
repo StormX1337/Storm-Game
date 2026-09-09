@@ -469,3 +469,74 @@ class TestBuildHinweise:
     def test_the_readme_says_build_is_mandatory(self):
         readme = (REPO / "README.md").read_text()
         assert "`--build` ist Pflicht" in readme
+
+
+class TestDiagnose:
+    """``diagnose.sh`` sammelt den Zustand ein - und darf dabei nichts
+    Geheimes ausgeben. Der Bericht ist zum Verschicken gedacht."""
+
+    SCRIPT = REPO / "scripts" / "diagnose.sh"
+
+    def _run(self, tmp_path: Path, env_text: str, docker_ok: bool = False):
+        (tmp_path / "scripts").mkdir(exist_ok=True)
+        shutil.copy(self.SCRIPT, tmp_path / "scripts" / self.SCRIPT.name)
+        if env_text is not None:
+            (tmp_path / ".env").write_text(env_text)
+        fake = tmp_path / "fake"
+        fake.mkdir(exist_ok=True)
+        (fake / "docker").write_text("#!/bin/sh\n" + ("exit 0\n" if docker_ok else "exit 1\n"))
+        (fake / "docker").chmod(0o755)
+        env = dict(os.environ, PATH=f"{fake}:{os.environ['PATH']}")
+        return subprocess.run(  # noqa: S603 - festes Skript aus dem Repo
+            ["/bin/sh", str(tmp_path / "scripts" / self.SCRIPT.name)],
+            cwd=tmp_path,
+            capture_output=True,
+            text=True,
+            env=env,
+            check=False,
+        )
+
+    SECRETS = (
+        "PROVIDERS=sportsgameodds\n"
+        "SGO_API_KEY=750e0b8889875848739ad4b8a6f02d8b\n"
+        "POSTGRES_PASSWORD=supergeheim123\n"
+        "TELEGRAM_BOT_TOKEN=123456:AAaaBBbbCCcc\n"
+        "DASHBOARD_AUTH=admin:$apr1$xy$zzz\n"
+        "DATABASE_URL=postgresql://storm:pw@postgres/storm\n"
+        "MIN_BOOKMAKERS=3\n"
+    )
+
+    def test_no_secret_value_is_printed(self, tmp_path):
+        out = self._run(tmp_path, self.SECRETS).stdout
+        for secret in (
+            "750e0b8889875848739ad4b8a6f02d8b",
+            "supergeheim123",
+            "AAaaBBbbCCcc",
+            "apr1",
+            "pw@postgres",
+        ):
+            assert secret not in out, f"Geheimnis im Bericht: {secret}"
+
+    def test_the_keys_are_still_visible(self, tmp_path):
+        """Ohne die Namen wäre der Bericht wertlos."""
+        out = self._run(tmp_path, self.SECRETS).stdout
+        assert "SGO_API_KEY=<32 Zeichen>" in out
+        assert "POSTGRES_PASSWORD=" in out
+
+    def test_harmless_values_stay_readable(self, tmp_path):
+        out = self._run(tmp_path, self.SECRETS).stdout
+        assert "PROVIDERS=sportsgameodds" in out
+        assert "MIN_BOOKMAKERS=3" in out
+
+    def test_a_missing_env_is_named_as_the_cause(self, tmp_path):
+        out = self._run(tmp_path, None).stdout
+        assert "KEINE .env" in out
+
+    def test_a_dead_docker_daemon_is_named(self, tmp_path):
+        out = self._run(tmp_path, self.SECRETS).stdout
+        assert "Docker-Daemon nicht erreichbar" in out
+
+    def test_it_never_fails(self, tmp_path):
+        """Ein Diagnoseskript, das selbst abbricht, hilft niemandem."""
+        assert self._run(tmp_path, self.SECRETS).returncode == 0
+        assert self._run(tmp_path, None).returncode == 0

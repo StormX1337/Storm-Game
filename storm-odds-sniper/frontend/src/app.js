@@ -574,6 +574,29 @@
     banner.hidden = false;
   }
 
+  /* Die API antwortet auf keine einzige Anfrage. */
+  function reportApiDown(down) {
+    const banner = $("api-down");
+    if (banner) banner.hidden = !down;
+    if (down) {
+      ["kpi-live", "kpi-tracked", "kpi-alerts", "kpi-value", "kpi-books",
+       "kpi-providers", "kpi-clv"].forEach((id) => {
+        const el = $(id);
+        if (el) el.textContent = "–";
+      });
+      const providers = $("providers-list");
+      if (providers) {
+        providers.innerHTML =
+          '<li class="empty">API antwortet nicht — siehe Hinweis oben</li>';
+      }
+      const system = $("system-list");
+      if (system) {
+        system.innerHTML =
+          '<li class="empty">API antwortet nicht — siehe Hinweis oben</li>';
+      }
+    }
+  }
+
   async function refresh() {
     // Bewusst allSettled statt all: ein einzelner fehlschlagender Endpunkt
     // darf nicht das ganze Dashboard leeren. Genau das ist passiert - eine
@@ -603,6 +626,10 @@
       console.warn(`Aktualisierung: ${name} fehlgeschlagen -`, error.message || error);
     });
     reportVersionMismatch(missing);
+    // Schlägt *alles* fehl, ist nicht das Dashboard schuld, sondern die API
+    // steht nicht. Ohne diesen Hinweis bleiben alle Kacheln stumm auf
+    // "Lade…" - und das sieht aus wie ein Fehler im Dashboard.
+    reportApiDown(Object.keys(data).length === 0);
 
     const { health, stats, providers, events, alerts, scorecard } = data;
 

@@ -25,6 +25,16 @@
     </div>
   </header>
 
+  <div id="api-down" class="banner banner--warn" role="status" hidden>
+    <strong>⚠️ Die API antwortet nicht</strong>
+    <span>
+      Das Dashboard wird ausgeliefert, aber keine einzige Datenabfrage kommt
+      durch. Meist läuft der <code>api</code>-Container nicht. Zustand
+      einsammeln mit <code>./scripts/diagnose.sh</code>, neu bauen mit
+      <code>docker compose up -d --build</code>.
+    </span>
+  </div>
+
   <div id="stale-api" class="banner banner--warn" role="status" hidden>
     <strong>⚠️ API ist älter als das Dashboard</strong>
     <span>
