@@ -204,6 +204,10 @@ a:hover { text-decoration: underline; }
 
 /* ---------------------------------------------------------------- Listen */
 .list { list-style: none; margin: 0; padding: 0; max-height: 340px; overflow-y: auto; }
+/* Die Empfehlungskarte ist der Kopf der Seite - sie in ein 340px-Fenster zu
+   sperren, schnitt die dritte Empfehlung mitten im Satz ab. Begrenzt ist die
+   Liste ohnehin durch RECOMMEND_LIMIT. */
+#picks-list { max-height: none; overflow: visible; }
 .list li { padding: 10px 14px; border-bottom: 1px solid rgba(35, 44, 61, .55); }
 .list li:last-child { border-bottom: none; }
 .list--dense li { padding: 7px 14px; font-size: 13px; }
@@ -262,6 +266,19 @@ a:hover { text-decoration: underline; }
 .strip__key--other { background: var(--text-dim); opacity: .8; }
 .strip__key--fair { width: 12px; height: 2px; border-radius: 1px; background: var(--good); vertical-align: middle; }
 
+/* ---------------------------------------------------------- Rechnung */
+/* Zwei Spalten aus Bezeichnung und Betrag. Tabellenziffern, weil hier
+   Zahlen untereinander stehen und ausrichten sollen. */
+.calc {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px 14px; margin-top: 8px; padding-top: 8px;
+  border-top: 1px solid rgba(35, 44, 61, .55);
+}
+.calc__row { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; }
+.calc__row > span { color: var(--text-dim); }
+.calc__row > b { font-family: var(--mono); font-variant-numeric: tabular-nums; font-weight: 600; }
+@media (max-width: 480px) { .calc { grid-template-columns: 1fr; } }
+
 /* ------------------------------------------------------- Alarm-Karten */
 /* Auf dem Handy ist eine Tabelle mit zwölf Spalten unlesbar - dort bricht
    jedes Wort einzeln um. Dieselben Daten als Karte, gleiche Reihenfolge. */
@@ -284,11 +301,31 @@ a:hover { text-decoration: underline; }
 .acard__foot { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
 
 @media (max-width: 900px) {
+  /* Auf dem Handy standen acht Kacheln vor allem Nützlichen - man scrollte
+     an einer Wand aus Zahlen vorbei, um zu sehen, was zu spielen ist.
+     Deshalb: Empfehlungen zuerst, Kennzahlen danach und flach. */
+  body { display: flex; flex-direction: column; }
+  .topbar { order: 1; }
+  .banner { order: 2; }
+  main.grid { order: 3; }
+  .kpis { order: 4; padding-top: 4px; }
+  .footer { order: 5; }
+
   .topbar { flex-direction: column; align-items: flex-start; gap: 8px; }
   .grid, .kpis { padding-inline: 12px; }
-  .kpis { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
-  .kpi { padding: 10px 12px; }
-  .kpi strong { font-size: 20px; }
+  /* Bezeichnung links, Wert rechts: halbe Höhe je Kachel, und die Werte
+     stehen untereinander in einer Spalte statt verstreut. */
+  .kpis { grid-template-columns: 1fr; gap: 0; }
+  .kpi {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+    padding: 9px 12px; border-radius: 0; border-width: 0 0 1px;
+  }
+  .kpi:first-child { border-radius: var(--radius) var(--radius) 0 0; border-width: 1px 0 1px; }
+  .kpi:last-child { border-radius: 0 0 var(--radius) var(--radius); border-width: 0 0 1px; }
+  /* Reihenfolge in der Zeile: Bezeichnung, Zusatz, dann rechts der Wert. */
+  .kpi__label { margin-bottom: 0; order: 1; }
+  .kpi__note { margin: 0; order: 2; }
+  .kpi strong { order: 3; margin-left: auto; font-size: 17px; font-family: var(--mono); }
   /* Tabelle raus, Karten rein - nicht bloß seitlich scrollen lassen. */
   .table-wrap { display: none; }
   .cards { display: block; }
@@ -301,7 +338,6 @@ a:hover { text-decoration: underline; }
 }
 
 @media (max-width: 420px) {
-  .kpis { grid-template-columns: repeat(2, 1fr); }
   .acard__figures { grid-template-columns: repeat(2, 1fr); }
 }
 

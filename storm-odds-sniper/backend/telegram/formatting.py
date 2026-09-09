@@ -228,6 +228,8 @@ def recommendation_block(alert: Alert, *, compact: bool = False) -> list[str]:
         if reason:
             lines.append(f"↳ {esc(reason)}")
 
+    lines.extend(calculation_lines(data))
+
     if compact:
         return lines
 
@@ -236,6 +238,38 @@ def recommendation_block(alert: Alert, *, compact: bool = False) -> list[str]:
     if stake > 0:
         for item in list(data.get("checklist") or [])[:2]:
             lines.append(f"☑️ {esc(item)}")
+    return lines
+
+
+def calculation_lines(data: dict) -> list[str]:
+    """Die Rechnung in Klartext: was kostet es, was kommt zurück?
+
+    Ohne hinterlegte Bankroll bleiben die Beträge weg - eine Zahl in Euro zu
+    nennen, die niemand festgelegt hat, wäre erfunden. Die Verhältnisse
+    gelten trotzdem, die stehen dann allein da.
+    """
+    math = data.get("math") or {}
+    if not math:
+        return []
+    lines: list[str] = []
+    einsatz = math.get("stake_amount")
+    auszahlung = math.get("payout_amount")
+    if einsatz and auszahlung:
+        gewinn = math.get("profit_amount") or 0.0
+        lines.append(
+            f"🧮 <b>Rechnung</b>: {float(einsatz):.2f} → "
+            f"{float(auszahlung):.2f} (Gewinn {float(gewinn):+.2f})"
+        )
+        erwartung = math.get("expected_value_amount")
+        if erwartung is not None:
+            lines.append(f"📈 <b>Erwartungswert</b>: {float(erwartung):+.2f} je Wette")
+    noetig = math.get("break_even_percent")
+    geschaetzt = math.get("credible_probability")
+    if noetig is not None and geschaetzt is not None:
+        lines.append(
+            f"🎯 <b>Trefferquote</b>: {float(noetig):.1f} % nötig · "
+            f"{float(geschaetzt) * 100:.1f} % geschätzt"
+        )
     return lines
 
 
@@ -330,8 +364,20 @@ def format_slip(slip, *, window_minutes: int, bankroll: float = 0.0) -> str:
             f"    💵 <b>{rec.stake_percent:.1f} %</b> der Bankroll{betrag} · "
             f"Vorteil {rec.credible_edge_percent:+.1f} % "
             f"(gemeldet {rec.raw_edge_percent:+.1f} %)",
-            "",
         ]
+        math = rec.math
+        if math is not None:
+            if math.stake_amount and math.payout_amount:
+                lines.append(
+                    f"    🧮 {math.stake_amount:.2f} → {math.payout_amount:.2f} "
+                    f"(Gewinn {math.profit_amount:+.2f}, "
+                    f"Erwartungswert {math.expected_value_amount:+.2f})"
+                )
+            lines.append(
+                f"    🎯 {math.break_even_percent:.1f} % Trefferquote nötig · "
+                f"{math.credible_probability * 100:.1f} % geschätzt"
+            )
+        lines.append("")
 
     lines.append(f"<b>Gesamteinsatz</b>: {slip.total_stake_percent:.1f} % der Bankroll")
     if not bankroll:

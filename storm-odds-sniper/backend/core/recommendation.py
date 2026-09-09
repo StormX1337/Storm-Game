@@ -167,6 +167,89 @@ def config_from_settings(settings: Settings) -> RecommendationConfig:
 
 
 @dataclass(slots=True)
+class Calculation:
+    """Die ausgeschriebene Rechnung zu einer Empfehlung.
+
+    Prozentwerte allein beantworten die Frage nicht, die man sich vor dem
+    Setzen stellt: *was kostet das, was kommt zurück, und wie oft muss ich
+    recht behalten?* Alles hier folgt exakt aus Quote, Einsatz und dem
+    glaubwürdigen Vorteil - es wird nichts geraten und nichts gerundet, was
+    die Aussage verschiebt.
+
+    Ohne hinterlegte Bankroll bleiben die Beträge ``None``: einen Einsatz in
+    Euro zu nennen, den niemand festgelegt hat, wäre eine erfundene Zahl.
+    """
+
+    #: Was der Buchmacher mit seiner Quote behauptet: 1 / Quote.
+    implied_probability: float
+    #: Was wir nach Abzug aller Unsicherheit annehmen: (1 + Vorteil) / Quote.
+    credible_probability: float
+    #: Trefferquote, ab der die Wette bei dieser Quote aufgeht - dieselbe
+    #: Zahl wie die implizite Wahrscheinlichkeit, nur anders gelesen.
+    break_even_percent: float
+    #: Erwartungswert je eingesetzter Einheit, in Prozent.
+    expected_value_percent: float
+    #: Nettogewinn je eingesetzter Einheit, wenn die Wette aufgeht.
+    profit_per_unit: float
+    # ------------------------------------------------ nur mit Bankroll
+    stake_amount: float | None = None
+    payout_amount: float | None = None
+    profit_amount: float | None = None
+    expected_value_amount: float | None = None
+
+    def to_json(self) -> dict[str, Any]:
+        return {
+            "implied_probability": round(self.implied_probability, 4),
+            "credible_probability": round(self.credible_probability, 4),
+            "break_even_percent": round(self.break_even_percent, 2),
+            "expected_value_percent": round(self.expected_value_percent, 2),
+            "profit_per_unit": round(self.profit_per_unit, 3),
+            "stake_amount": _round_money(self.stake_amount),
+            "payout_amount": _round_money(self.payout_amount),
+            "profit_amount": _round_money(self.profit_amount),
+            "expected_value_amount": _round_money(self.expected_value_amount),
+        }
+
+    @classmethod
+    def from_json(cls, data: dict[str, Any]) -> Calculation:
+        return cls(
+            implied_probability=float(data.get("implied_probability", 0.0)),
+            credible_probability=float(data.get("credible_probability", 0.0)),
+            break_even_percent=float(data.get("break_even_percent", 0.0)),
+            expected_value_percent=float(data.get("expected_value_percent", 0.0)),
+            profit_per_unit=float(data.get("profit_per_unit", 0.0)),
+            stake_amount=data.get("stake_amount"),
+            payout_amount=data.get("payout_amount"),
+            profit_amount=data.get("profit_amount"),
+            expected_value_amount=data.get("expected_value_amount"),
+        )
+
+
+def _round_money(value: float | None) -> float | None:
+    return round(value, 2) if value is not None else None
+
+
+def calculate(
+    *, odds: float, credible_edge_percent: float, stake_percent: float, bankroll: float = 0.0
+) -> Calculation:
+    """Die Rechnung zu einer Empfehlung ausschreiben."""
+    implied = 1.0 / odds if odds > 0 else 0.0
+    credible = implied * (1.0 + credible_edge_percent / 100.0)
+    stake = bankroll * stake_percent / 100.0 if bankroll > 0 and stake_percent > 0 else None
+    return Calculation(
+        implied_probability=implied,
+        credible_probability=credible,
+        break_even_percent=implied * 100.0,
+        expected_value_percent=credible_edge_percent,
+        profit_per_unit=max(0.0, odds - 1.0),
+        stake_amount=stake,
+        payout_amount=stake * odds if stake else None,
+        profit_amount=stake * (odds - 1.0) if stake else None,
+        expected_value_amount=stake * credible_edge_percent / 100.0 if stake else None,
+    )
+
+
+@dataclass(slots=True)
 class Recommendation:
     """Was mit einem Alarm zu tun ist."""
 
@@ -194,6 +277,9 @@ class Recommendation:
     checklist: list[str] = field(default_factory=list)
     #: Ein Satz: was genau man spielen würde.
     play: str = ""
+    #: Die ausgeschriebene Rechnung. ``None`` bei allem, was nicht gespielt
+    #: wird - dort gibt es nichts auszurechnen.
+    math: Calculation | None = None
 
     @property
     def label(self) -> str:
@@ -224,6 +310,7 @@ class Recommendation:
             "warnings": list(self.warnings),
             "checklist": list(self.checklist),
             "play": self.play,
+            "math": self.math.to_json() if self.math else None,
         }
 
     @classmethod
@@ -242,6 +329,7 @@ class Recommendation:
             warnings=list(data.get("warnings", [])),
             checklist=list(data.get("checklist", [])),
             play=data.get("play", ""),
+            math=Calculation.from_json(data["math"]) if data.get("math") else None,
         )
 
 
@@ -451,6 +539,12 @@ def evaluate(alert: Alert, config: RecommendationConfig | None = None) -> Recomm
 
     stake = round(stake, 2)
     amount = round(cfg.bankroll * stake / 100.0, 2) if cfg.bankroll > 0 and stake > 0 else None
+    math = calculate(
+        odds=alert.odds,
+        credible_edge_percent=credible,
+        stake_percent=stake,
+        bankroll=cfg.bankroll,
+    )
 
     return Recommendation(
         grade=grade,
@@ -466,6 +560,7 @@ def evaluate(alert: Alert, config: RecommendationConfig | None = None) -> Recomm
         warnings=warnings,
         checklist=checklist,
         play=_play_text(alert, stake, cfg),
+        math=math,
     )
 
 
@@ -531,6 +626,14 @@ def _with_stake(
         stake_amount=amount,
         warnings=warnings,
         play=_play_text(alert, stake, config),
+        # Die Rechnung hängt am Einsatz - eine stehengebliebene Auszahlung
+        # zu einem gekürzten Einsatz wäre schlicht falsch.
+        math=calculate(
+            odds=alert.odds,
+            credible_edge_percent=rec.credible_edge_percent,
+            stake_percent=stake,
+            bankroll=config.bankroll,
+        ),
     )
 
 

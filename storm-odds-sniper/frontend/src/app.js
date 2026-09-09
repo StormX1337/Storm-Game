@@ -369,6 +369,7 @@
       ${block("Bewegung", movement)}
       ${block("Preis im Feld", strip, "detail__block--wide")}
       ${block("Empfehlung", recommendationDetail(alert))}
+      ${block("Rechnung", calcRows((alert.recommendation || {}).math, alert.odds))}
       ${block("Verglichen mit", refs.length
         ? `<div class="chips">${refs
             .map(([n, p]) => `<span class="chip-static">${esc(n)} <b>${p.toFixed(2)}</b></span>`)
@@ -724,10 +725,56 @@
           r.credible_edge_percent
         )}</b> <span class="dim">(gemeldet ${fmtPct(r.raw_edge_percent)})</span>
           </div>
+          ${calcRows(r.math, a.odds)}
           ${warnings}
         </li>`;
       })
       .join("");
+  }
+
+  /* Die Rechnung in Zahlen, die man vor dem Setzen tatsächlich braucht.
+     Prozentwerte beantworten nicht, was das kostet und was zurückkommt. */
+  function calcRows(math, odds) {
+    if (!math) return "";
+    const rows = [];
+    if (math.stake_amount && math.payout_amount) {
+      rows.push(
+        `<span class="calc__row"><span>Einsatz</span><b>${math.stake_amount.toFixed(
+          2
+        )}</b></span>`,
+        `<span class="calc__row"><span>bei Gewinn zurück</span><b>${math.payout_amount.toFixed(
+          2
+        )}</b></span>`,
+        `<span class="calc__row"><span>davon Gewinn</span><b class="pos">+${math.profit_amount.toFixed(
+          2
+        )}</b></span>`,
+        `<span class="calc__row"><span>Erwartungswert</span><b class="${
+          math.expected_value_amount >= 0 ? "pos" : "neg"
+        }">${math.expected_value_amount >= 0 ? "+" : ""}${math.expected_value_amount.toFixed(
+          2
+        )}</b></span>`
+      );
+    } else {
+      // Ohne Bankroll keine erfundenen Beträge - die Verhältnisse gelten
+      // trotzdem und stehen dann allein da.
+      rows.push(
+        `<span class="calc__row"><span>Gewinn je 1 Einsatz</span><b class="pos">+${math.profit_per_unit.toFixed(
+          2
+        )}</b></span>`,
+        `<span class="calc__row"><span>Erwartungswert</span><b class="pos">${fmtPct(
+          math.expected_value_percent
+        )}</b></span>`
+      );
+    }
+    rows.push(
+      `<span class="calc__row"><span>Trefferquote nötig</span><b>${math.break_even_percent.toFixed(
+        1
+      )} %</b></span>`,
+      `<span class="calc__row"><span>geschätzt</span><b class="pos">${(
+        math.credible_probability * 100
+      ).toFixed(1)} %</b></span>`
+    );
+    return `<div class="calc">${rows.join("")}</div>`;
   }
 
   function renderSystem(health, stats) {
@@ -900,6 +947,38 @@
     }
   }
 
+  /* Welcher Endpunkt füllt welche Kachel. Ohne diese Zuordnung müsste man
+     raten, wo ein Ausfall sichtbar wird. */
+  const PANEL_OF = {
+    stats: ["suppressed-list"],
+    providers: ["providers-list"],
+    events: ["live-list"],
+    alerts: ["alerts-body", "alerts-cards", "moves-list", "books-list"],
+    scorecard: ["scorecard-list"],
+    recommendations: ["picks-list"],
+    health: ["system-list"],
+  };
+
+  function reportFailures(failed) {
+    failed.forEach((name) => {
+      (PANEL_OF[name] || []).forEach((id) => {
+        const el = $(id);
+        // Nur ersetzen, was noch nie gefüllt war - alte, echte Daten sind
+        // immer noch besser als eine Fehlermeldung.
+        if (!el || !el.querySelector(".empty")) return;
+        const text = "Nicht abrufbar — API antwortet auf diesen Punkt nicht";
+        el.innerHTML =
+          el.tagName === "TBODY"
+            ? `<tr class="empty"><td colspan="12">${text}</td></tr>`
+            : `<li class="empty">${text}</li>`;
+      });
+    });
+    if (failed.includes("recommendations")) {
+      const count = $("picks-count");
+      if (count && count.textContent === "–") $("picks-caption").textContent = "nicht abrufbar";
+    }
+  }
+
   async function refresh() {
     // Bewusst allSettled statt all: ein einzelner fehlschlagender Endpunkt
     // darf nicht das ganze Dashboard leeren. Genau das ist passiert - eine
@@ -930,6 +1009,10 @@
       console.warn(`Aktualisierung: ${name} fehlgeschlagen -`, error.message || error);
     });
     reportVersionMismatch(missing);
+    // Eine Kachel, die für immer "Lade…" zeigt, sieht aus wie beschäftigt -
+    // dabei ist sie kaputt. Jeder gescheiterte Endpunkt sagt das jetzt in
+    // seiner eigenen Kachel.
+    reportFailures(names.filter((name) => !(name in data)));
     // Schlägt *alles* fehl, ist nicht das Dashboard schuld, sondern die API
     // steht nicht. Ohne diesen Hinweis bleiben alle Kacheln stumm auf
     // "Lade…" - und das sieht aus wie ein Fehler im Dashboard.

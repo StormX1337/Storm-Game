@@ -502,8 +502,16 @@ Das Dashboard zeigt:
   Nachkontrolle mit den Preisen davor und danach.
 - Filter **🟢 Spielbar** zeigt nur Alarme mit Einsatzvorschlag — die Frage
   „was davon lohnt sich?" in einem Klick.
+- Antwortet ein einzelner Endpunkt nicht, sagt **seine** Kachel das
+  („Nicht abrufbar"). Vorher blieb sie auf „Lade…" stehen und sah aus wie
+  beschäftigt statt wie kaputt.
 
-**Auf dem Handy** wird aus der Alarmtabelle eine Karte je Alarm. Eine Tabelle
+**Auf dem Handy** steht die Empfehlungskarte ganz oben und die Kennzahlen
+ganz unten: acht Kacheln vor allem Nützlichen bedeuteten, dass man an einer
+Wand aus Zahlen vorbeiscrollt, um zu sehen, was zu spielen ist. Die Kacheln
+sind dort flach — Bezeichnung links, Wert rechts, halbe Höhe.
+
+Aus der Alarmtabelle wird eine Karte je Alarm. Eine Tabelle
 mit zwölf Spalten bricht auf 390 px jedes Wort einzeln um — „Ben Shelton vs
 Carlos Alcaraz" wird dort zu sieben Zeilen. Dieselben Daten, dieselbe
 Reihenfolge, nur eine Form, die auf den Bildschirm passt; die Herleitung
@@ -905,6 +913,24 @@ Der Rechenweg je Alarm:
 5. **Einsatz** — fraktionaler Kelly auf genau diesen Vorteil, nie auf den
    Rohwert: `Einsatz = KELLY_FRACTION × Vorteil / (Quote − 1)`, gedeckelt
    durch `MAX_STAKE_PERCENT`.
+6. **Die Rechnung ausschreiben.** Prozentwerte beantworten die Frage nicht,
+   die man sich vor dem Setzen stellt. Also steht sie da:
+
+   | | |
+   |---|---:|
+   | Einsatz | 6,80 |
+   | bei Gewinn zurück | 15,10 |
+   | davon Gewinn | +8,30 |
+   | Erwartungswert | +0,23 |
+   | Trefferquote nötig | 45,0 % |
+   | geschätzt | 46,5 % |
+
+   Alles folgt exakt aus Quote, Einsatz und dem glaubwürdigen Vorteil:
+   Auszahlung `= Einsatz × Quote`, nötige Trefferquote `= 1 / Quote`,
+   geschätzte `= (1 + Vorteil) / Quote`. **Ohne `BANKROLL` bleiben die
+   Beträge weg** — einen Einsatz in Euro zu nennen, den niemand festgelegt
+   hat, wäre eine erfundene Zahl. Die Verhältnisse gelten trotzdem und
+   stehen dann allein da.
 
 Die Liste selbst ist zusätzlich entdoppelt, weil Alarme **nicht unabhängig**
 sind:
@@ -924,8 +950,9 @@ zählt `dropped` jeden Ablehnungsgrund mit, im Dashboard, in `/tipps` und in
 
 Zu sehen ist das an vier Stellen:
 
-* **Dashboard** — Karte „Empfehlungen — was jetzt spielen?" und die Spalte
-  *Tipp* in der Alarmtabelle
+* **Dashboard** — Karte „Empfehlungen — was jetzt spielen?" (mit der
+  ausgeschriebenen Rechnung je Vorschlag) und die Spalte *Tipp* in der
+  Alarmtabelle
 * **Telegram** — `/tipps`, dazu ein Empfehlungsblock in jeder Alarmnachricht
 * **API** — `GET /alerts/recommendations`, `GET /alerts?grade=strong`, sowie
   `recommendation` an jedem Alarm

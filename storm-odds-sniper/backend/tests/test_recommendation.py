@@ -18,6 +18,7 @@ from backend.core.recommendation import (
     Recommendation,
     RecommendationConfig,
     build_slip,
+    calculate,
     config_from_settings,
     evaluate,
     kelly_stake_percent,
@@ -453,3 +454,77 @@ class TestWarnungenBleibenSelten:
         result = evaluate(make_alert(11.0))
         assert result.raw_edge_percent > result.credible_edge_percent
         assert any("gemeldet" in reason for reason in result.reasons)
+
+
+class TestAusgeschriebeneRechnung:
+    """Prozentwerte beantworten die Frage nicht, die man sich vor dem Setzen
+    stellt: was kostet das, was kommt zurück, wie oft muss ich recht behalten?
+    """
+
+    def test_beträge_folgen_aus_quote_und_einsatz(self):
+        result = evaluate(make_alert(11.0, odds=2.50), RecommendationConfig(bankroll=1000.0))
+        math = result.math
+        einsatz = 1000.0 * result.stake_percent / 100.0
+        assert math.stake_amount == pytest.approx(einsatz, abs=0.01)
+        assert math.payout_amount == pytest.approx(einsatz * 2.50, abs=0.01)
+        assert math.profit_amount == pytest.approx(einsatz * 1.50, abs=0.01)
+        # Auszahlung ist Einsatz plus Gewinn - sonst stimmt die Rechnung nicht.
+        assert math.payout_amount == pytest.approx(math.stake_amount + math.profit_amount, abs=0.01)
+
+    def test_erwartungswert_ist_der_vorteil_auf_den_einsatz(self):
+        result = evaluate(make_alert(11.0, odds=2.50), RecommendationConfig(bankroll=2000.0))
+        math = result.math
+        assert math.expected_value_percent == pytest.approx(result.credible_edge_percent)
+        assert math.expected_value_amount == pytest.approx(
+            math.stake_amount * result.credible_edge_percent / 100.0, abs=0.01
+        )
+
+    def test_noetige_trefferquote_ist_die_implizite_wahrscheinlichkeit(self):
+        """Bei Quote 4.00 geht die Wette ab 25 % Trefferquote auf."""
+        math = calculate(odds=4.00, credible_edge_percent=0.0, stake_percent=1.0)
+        assert math.break_even_percent == pytest.approx(25.0)
+        assert math.implied_probability == pytest.approx(0.25)
+
+    def test_geschaetzte_wahrscheinlichkeit_liegt_ueber_der_impliziten(self):
+        math = calculate(odds=2.00, credible_edge_percent=4.0, stake_percent=1.0)
+        assert math.implied_probability == pytest.approx(0.50)
+        assert math.credible_probability == pytest.approx(0.52)
+        assert math.credible_probability > math.implied_probability
+
+    def test_ohne_bankroll_keine_erfundenen_betraege(self):
+        result = evaluate(make_alert(11.0), RecommendationConfig())
+        assert result.math.stake_amount is None
+        assert result.math.payout_amount is None
+        assert result.math.expected_value_amount is None
+        # Die Verhältnisse gelten trotzdem - sie hängen nicht am Konto.
+        assert result.math.break_even_percent > 0
+        assert result.math.profit_per_unit > 0
+
+    def test_gekuerzter_einsatz_rechnet_neu(self):
+        """Eine stehengebliebene Auszahlung zu einem gekürzten Einsatz wäre
+        schlicht falsch."""
+        config = RecommendationConfig(max_total_stake_percent=0.4, bankroll=1000.0)
+        alerts = [make_alert(11.0, event_id=f"e{i}") for i in range(3)]
+        slip = recommend_all(alerts, config=config)
+        for pick in slip.picks:
+            rec = pick.recommendation
+            assert rec.math.stake_amount == pytest.approx(
+                1000.0 * rec.stake_percent / 100.0, abs=0.01
+            )
+            assert rec.math.payout_amount == pytest.approx(
+                rec.math.stake_amount * pick.alert.odds, abs=0.01
+            )
+
+    def test_json_geht_hin_und_zurueck(self):
+        result = evaluate(make_alert(11.0), RecommendationConfig(bankroll=500.0))
+        wieder = Recommendation.from_json(result.to_json())
+        # Die JSON-Fassung ist bewusst auf zwei Stellen gerundet - alles
+        # andere täuschte eine Genauigkeit vor, die die Schätzung nicht hat.
+        assert wieder.math.payout_amount == pytest.approx(result.math.payout_amount, abs=0.01)
+        assert wieder.math.break_even_percent == pytest.approx(
+            result.math.break_even_percent, abs=0.01
+        )
+
+    def test_nicht_gespielte_alarme_bekommen_keine_luftrechnung(self):
+        result = evaluate(make_alert(250.0))
+        assert result.math is None

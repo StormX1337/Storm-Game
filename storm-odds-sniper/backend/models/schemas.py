@@ -109,6 +109,29 @@ class OddsResponse(BaseModel):
     is_exchange: bool = False
 
 
+class CalculationModel(BaseModel):
+    """Die ausgeschriebene Rechnung zu einer Empfehlung.
+
+    Alles folgt exakt aus Quote, Einsatz und dem glaubwürdigen Vorteil.
+    Die Beträge sind ``null``, solange keine Bankroll hinterlegt ist - einen
+    Einsatz in Euro zu nennen, den niemand festgelegt hat, wäre erfunden.
+    """
+
+    #: Was die Quote des Buchmachers behauptet: 1 / Quote.
+    implied_probability: float = 0.0
+    #: Was nach Abzug aller Unsicherheit angenommen wird.
+    credible_probability: float = 0.0
+    #: Trefferquote, ab der die Wette bei dieser Quote aufgeht.
+    break_even_percent: float = 0.0
+    expected_value_percent: float = 0.0
+    #: Nettogewinn je eingesetzter Einheit.
+    profit_per_unit: float = 0.0
+    stake_amount: float | None = None
+    payout_amount: float | None = None
+    profit_amount: float | None = None
+    expected_value_amount: float | None = None
+
+
 class RecommendationModel(BaseModel):
     """Die Handlungsempfehlung zu einem Alarm.
 
@@ -136,6 +159,9 @@ class RecommendationModel(BaseModel):
     warnings: list[str] = Field(default_factory=list)
     checklist: list[str] = Field(default_factory=list)
     play: str = ""
+    #: ``null`` bei allem, was nicht gespielt wird - dort gibt es nichts
+    #: auszurechnen.
+    math: CalculationModel | None = None
 
 
 class AlertResponse(BaseModel):

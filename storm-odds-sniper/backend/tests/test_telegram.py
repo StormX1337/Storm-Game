@@ -555,3 +555,44 @@ class TestBewegungsalarmOhneUrteil:
         text = fmt.format_alert(alert)
         assert "Empfehlung" not in text
         assert "Nicht spielen" not in text
+
+
+class TestRechnungInDerNachricht:
+    """Was kostet es, was kommt zurück, wie oft muss ich recht behalten?"""
+
+    @staticmethod
+    def _alert(bankroll=0.0):
+        from backend.core.recommendation import RecommendationConfig, evaluate
+
+        alert = football_alert(kind=AlertKind.VALUE, odds=2.50, value_percent=11.0)
+        alert.recommendation = evaluate(alert, RecommendationConfig(bankroll=bankroll)).to_json()
+        return alert
+
+    def test_mit_bankroll_stehen_die_betraege_da(self):
+        text = fmt.format_alert(self._alert(bankroll=1000.0))
+        assert "Rechnung" in text
+        assert "→" in text
+        assert "Erwartungswert" in text
+        assert "Trefferquote" in text
+
+    def test_ohne_bankroll_werden_keine_betraege_erfunden(self):
+        text = fmt.format_alert(self._alert())
+        assert "Rechnung" not in text
+        # Die Verhältnisse hängen nicht am Konto - die stehen trotzdem da.
+        assert "Trefferquote" in text
+
+    def test_bestenliste_rechnet_mit(self):
+        from backend.core.recommendation import RecommendationConfig, recommend_all
+
+        alert = football_alert(kind=AlertKind.VALUE, odds=2.50, value_percent=11.0)
+        slip = recommend_all([alert], config=RecommendationConfig(bankroll=1000.0))
+        text = fmt.format_slip(slip, window_minutes=20, bankroll=1000.0)
+        assert "🧮" in text
+        assert "Trefferquote nötig" in text
+
+    def test_bewegungsalarm_bekommt_keine_rechnung(self):
+        alert = football_alert(kind=AlertKind.ODDS_MOVE, odds=2.10, value_percent=0.0)
+        from backend.core.recommendation import evaluate
+
+        alert.recommendation = evaluate(alert).to_json()
+        assert "Trefferquote" not in fmt.format_alert(alert)
