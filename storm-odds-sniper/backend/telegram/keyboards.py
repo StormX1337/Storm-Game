@@ -20,6 +20,7 @@ MAIN_MENU = [
     [
         InlineKeyboardButton("📒 Bilanz", callback_data="view:scorecard"),
         InlineKeyboardButton("💰 Kasse", callback_data="view:ledger"),
+        InlineKeyboardButton("🔒 Sicher", callback_data="view:arbitrage"),
         InlineKeyboardButton("📊 Status", callback_data="view:status"),
     ],
     [

@@ -388,6 +388,55 @@ class BetSettleRequest(BaseModel):
     status: Literal["open", "won", "lost", "void"]
 
 
+class ArbitrageLeg(BaseModel):
+    """Ein Bein der Wette: ein Ausgang bei einem Buchmacher."""
+
+    selection: str
+    selection_label: str = ""
+    bookmaker: str
+    odds: float
+    #: Anteil des Gesamteinsatzes, damit jeder Ausgang gleich viel zurückgibt.
+    stake_share: float = 0.0
+    stake_percent: float = 0.0
+    age: float = 0.0
+
+
+class ArbitrageItem(BaseModel):
+    event_id: str
+    event_title: str = ""
+    sport: str = ""
+    market: str = ""
+    market_label: str = ""
+    legs: list[ArbitrageLeg] = Field(default_factory=list)
+    #: Summe der Gegenwahrscheinlichkeiten. Unter 1 heißt: es geht auf.
+    total_probability: float = 1.0
+    profit_percent: float = 0.0
+    bookmakers: list[str] = Field(default_factory=list)
+    max_age: float = 0.0
+    #: Zu gut, um wahr zu sein - praktisch immer ein Datenfehler.
+    suspicious: bool = False
+    detected_at: float = 0.0
+
+
+class ArbitrageResponse(BaseModel):
+    """Aktuelle sichere Wetten.
+
+    Die Liste ist absichtlich kurzlebig: Funde laufen in Redis nach
+    ``ARBITRAGE_TTL_SECONDS`` ab. Eine sichere Wette, die es nicht mehr
+    gibt, ist wertloser als gar keine.
+    """
+
+    enabled: bool = True
+    found: int = 0
+    #: Wie viele Funde als Datenfehlerverdacht ausgeblendet wurden.
+    suspicious_hidden: int = 0
+    items: list[ArbitrageItem] = Field(default_factory=list)
+    disclaimer: str = (
+        "Arithmetik, kein Selbstläufer: beide Preise müssen stehen bleiben, "
+        "bis beide Wetten platziert sind. Es wird nichts automatisch gesetzt."
+    )
+
+
 class WsMessage(BaseModel):
     """Nachrichtenformat des Dashboard-WebSockets."""
 

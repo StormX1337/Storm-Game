@@ -65,6 +65,7 @@ deutlich abweicht — inklusive Bewertung, wie belastbar das Signal ist.
 | 🤖 **Telegram** | Alarme in Echtzeit, persönliche Filter je Nutzer, Inline-Menü |
 | 📊 **Dashboard** | Dark-Mode-Oberfläche mit Live-WebSocket |
 | 🎯 **Empfehlung** | Aus jedem Alarm wird eine Handlungsempfehlung: spielen, kleiner Einsatz, beobachten oder sein lassen — mit Einsatzgröße nach fraktionalem Kelly |
+| 🔒 **Sichere Wetten** | Widersprechen sich die Bücher, ist der Gewinn Arithmetik statt Schätzung — inklusive Einsatzverteilung je Ausgang |
 | 📓 **Wett-Tagebuch** | Was du wirklich gespielt hast: Einsatz, Quote, Ausgang — daraus Gewinn/Verlust, Trefferquote und der Vergleich gegen das, was die Empfehlung versprach |
 | 📒 **Trefferbilanz** | Jeder Alarm wird nachkontrolliert: hat der Buchmacher korrigiert, oder ist nur der Markt nachgezogen? Ohne zusätzlichen API-Aufruf |
 | 🔌 **Austauschbare Quellen** | Drei Adapter hinter einer gemeinsamen Schnittstelle: SportsGameOdds (Live-Filter), The Odds API, Betfair Exchange |
@@ -526,8 +527,11 @@ klappt in die Karte selbst auf.
 - **Datenquellen** mit Status und fehlenden Zugangsdaten
 - **Buchmacher** nach Alarmhäufigkeit
 - **Warum keine Alarme?** — Zähler je Grund, in Klartext
-- **Wett-Tagebuch** — was du wirklich gespielt hast und was dabei herauskam
+- **Sichere Wetten** — Widersprüche zwischen Büchern, mit Einsatzverteilung.
+  Die Karte erscheint nur, wenn es etwas gibt
   (siehe [Abschnitt 15, Schritt 12](#15-wie-die-erkennung-funktioniert))
+- **Wett-Tagebuch** — was du wirklich gespielt hast und was dabei herauskam
+  (siehe [Abschnitt 15, Schritt 13](#15-wie-die-erkennung-funktioniert))
 - **Trefferbilanz** — was aus den Alarmen wurde, mit dem Abstand zum späteren
   Markt (siehe [Abschnitt 15, Schritt 9](#15-wie-die-erkennung-funktioniert))
 - **Systemstatus** (Redis, Datenbank, Laufzeit, Snapshots)
@@ -584,6 +588,7 @@ Dem Bot `/start` schreiben.
 | `/tipps` | Was man jetzt spielen würde — mit Einsatzvorschlag |
 | `/wetten` | Gespielte Wetten, abrechnen per Knopf |
 | `/kasse` | Was dabei herausgekommen ist |
+| `/arb` | Sichere Wetten: Widersprüche zwischen Büchern |
 | `/bilanz` | Trefferbilanz: was aus den Alarmen wurde |
 | `/pause` | Benachrichtigungen pausieren |
 | `/resume` | Benachrichtigungen fortsetzen |
@@ -1018,7 +1023,45 @@ gehören dazu. Sie dürfen nur nicht aussehen wie aktuelle Angebote, deshalb
 steht bei jeder Zeile das Alter („vor 16 Min") und alte Zeilen sind
 ausgegraut. Der Preis von vor einer Viertelstunde ist ohnehin weg.
 
-### Schritt 12 — hat es Geld gebracht?
+### Schritt 12 — wenn die Bücher sich widersprechen
+
+Der Rest dieses Projekts **schätzt**. Die faire Quote ist ein Modell, der
+Vorteil eine Annahme, die Empfehlung eine Rechnung auf beides. Hier nicht:
+
+```
+Über 2.5  bei A zu 2.10   ->  1/2.10 = 47,6 %
+Unter 2.5 bei B zu 2.15   ->  1/2.15 = 46,5 %
+                              ------------
+                                       94,1 %
+```
+
+Zusammen unter 100 %. Also lässt sich jeder Ausgang so kaufen, dass mehr
+zurückkommt als eingesetzt wurde — **egal wie das Spiel ausgeht**. Bei 1000
+Einsatz: 505,90 auf Über, 494,10 auf Unter, Rückfluss 1062,39 in beiden
+Fällen. Das ist keine Prognose, sondern Arithmetik.
+
+Der Haken liegt nicht in der Rechnung, sondern in der Wirklichkeit, und das
+System sagt das an drei Stellen offen:
+
+* **Ein einziger Buchmacher ist keine Arbitrage.** Widerspricht sich ein
+  Buch in sich selbst, ist das fast immer eine falsche Linie oder ein
+  veralteter Preis — kein Geschenk. Solche Funde fallen raus.
+* **Zu schön ist verdächtig.** Reale Widersprüche liegen bei 0,5–3 %. Alles
+  jenseits von `ARBITRAGE_MAX_PROFIT_PERCENT` wird als Datenfehlerverdacht
+  markiert und standardmäßig gar nicht erst angezeigt.
+* **Preise sind flüchtig.** Beide Seiten müssen frisch sein, und selbst dann
+  kann eine davon weg sein, bevor die zweite Wette steht. Wer nur eine Seite
+  bekommt, hat eine ungewollte Einzelwette. Das Alter der ältesten
+  beteiligten Quote steht überall dabei.
+
+Zusätzliche API-Aufrufe kostet das **keine**: der Markt liegt beim Prüfen
+ohnehin schon vollständig vor. Gefunden wird selten — die Dashboard-Karte
+bleibt verborgen, solange es nichts gibt, statt eine dauerhaft leere Kachel
+zu zeigen.
+
+---
+
+### Schritt 13 — hat es Geld gebracht?
 
 Die Trefferbilanz aus Schritt 9 misst, ob die **Alarme** etwas taugten. Das
 ist eine andere Frage als die, um die es am Ende geht. Ein Alarm kann sauber
@@ -1091,6 +1134,7 @@ Swagger UI: <http://localhost:8080/docs> · OpenAPI: `/openapi.json`
 | `GET /alerts` | Alarm-Historie (`?kind=`, `?sport=`, `?min_value=`, `?since_minutes=`, `?grade=`), je Alarm mit `recommendation`, `verdict` und `clv_percent` |
 | `GET /alerts/scorecard` | Trefferbilanz: was aus den Alarmen wurde (`?window_hours=`) |
 | `GET /alerts/recommendations` | Was man jetzt spielen würde (`?window_minutes=`, `?limit=`, `?sport=`) — entdoppelt, mit Einsatz und Gesamtbudget |
+| `GET /arbitrage` | Sichere Wetten (`?include_suspicious=`) |
 | `GET /bets` | Gespielte Wetten (`?status=`, `?since_hours=`) |
 | `GET /bets/ledger` | Bilanz: Gewinn/Verlust, Trefferquote, erwartet vs. eingetreten |
 | `POST /bets` · `POST /bets/{id}/settle` · `DELETE /bets/{id}` | Eintragen, abrechnen, löschen — **nur mit `BETLOG_API_WRITES=true`** |
@@ -1146,6 +1190,7 @@ Abgedeckt sind unter anderem:
 | Nachkontrolle vom Alarm bis zur Bilanz | `test_followup.py` |
 | Empfehlung: Grad, Kelly-Einsatz, Entdopplung | `test_recommendation.py` |
 | Wett-Tagebuch: Abrechnung und Bilanz | `test_betlog.py` |
+| Sichere Wetten: Erkennung und Einsatzverteilung | `test_arbitrage.py` |
 | Secret-Redaction im Logging | `test_logging.py` |
 
 Linting:
@@ -1561,6 +1606,7 @@ storm-odds-sniper/
 │   │   ├── verdict.py        Nachkontrolle: Urteil und Closing Line Value
 │   │   ├── recommendation.py Empfehlung: Grad, Kelly-Einsatz, Bestenliste
 │   │   ├── betlog.py         Wett-Tagebuch: Abrechnung und Bilanz
+│   │   ├── arbitrage.py      Sichere Wetten: Widersprüche zwischen Büchern
 │   │   ├── backoff.py        exponentielles Backoff
 │   │   └── metrics.py        Prometheus
 │   ├── models/

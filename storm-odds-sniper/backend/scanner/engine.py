@@ -25,6 +25,7 @@ import contextlib
 from collections import Counter
 from dataclasses import dataclass
 
+from backend.core.arbitrage import ArbitrageConfig, find_arbitrage
 from backend.core.config import Settings, get_settings
 from backend.core.filters import (
     AlertGate,
@@ -147,6 +148,14 @@ class ScannerEngine:
         #: berechnet und mitgeschrieben, damit Dashboard, Telegram und
         #: API dieselbe Zahl zeigen - statt drei eigene Rechnungen.
         self.recommendation_config = recommendation_config(self.settings)
+        #: Sichere Wetten sind reine Arithmetik - keine Schätzung, kein
+        #: Modell. Sie laufen im selben Durchgang mit, weil die Preise
+        #: ohnehin schon beisammen sind.
+        self.arbitrage_config = ArbitrageConfig(
+            min_profit_percent=self.settings.arbitrage_min_profit_percent,
+            max_profit_percent=self.settings.arbitrage_max_profit_percent,
+            max_age=self.settings.arbitrage_max_age,
+        )
 
         self._queue: asyncio.Queue[ProviderMessage] = asyncio.Queue(
             maxsize=self.settings.scanner_queue_size
@@ -180,6 +189,7 @@ class ScannerEngine:
             "alerts": 0,
             "dropped": 0,
             "resolved": 0,
+            "arbitrage": 0,
         }
 
     # ------------------------------------------------------------- Lifecycle
@@ -416,6 +426,8 @@ class ScannerEngine:
 
         alerts: list[Alert] = []
         reference = now_ts()
+        if self.settings.arbitrage_enabled:
+            await self._check_arbitrage(book, event, reference)
         by_selection: dict[str, list[OddsChange]] = {}
         for change in changes:
             by_selection.setdefault(change.quote.selection.key, []).append(change)
@@ -433,6 +445,55 @@ class ScannerEngine:
 
         ANALYSIS_LATENCY.observe(max(0.0, now_ts() - started))
         return alerts
+
+    async def _check_arbitrage(
+        self, book: MarketBook, event: EventSnapshot, reference: float
+    ) -> None:
+        """Widersprechen sich die Bücher in diesem Markt?
+
+        Kostet keinen zusätzlichen Abruf: der Markt liegt ohnehin schon
+        vollständig vor. Gefunden wird selten - deshalb ist der Normalfall
+        ein einziger Vergleich und danach nichts.
+        """
+        try:
+            arb = find_arbitrage(
+                book,
+                event_title=event.title,
+                sport=event.sport.value,
+                reference=reference,
+                config=self.arbitrage_config,
+            )
+        except Exception as exc:  # noqa: BLE001 - darf die Analyse nie stoppen
+            log.debug("arbitrage-prüfung fehlgeschlagen", error=str(exc))
+            return
+        if arb is None:
+            return
+
+        payload = arb.to_json()
+        with contextlib.suppress(Exception):
+            await self.state.set_arbitrage(
+                arb.key, payload, ttl=self.settings.arbitrage_ttl_seconds
+            )
+        self.stats["arbitrage"] += 1
+        # Melden nur einmal je Markt und Abkühlzeit - ein Widerspruch, der
+        # eine Minute steht, wäre sonst dreißig Nachrichten.
+        neu = True
+        with contextlib.suppress(Exception):
+            neu = await self.state.claim_arbitrage(
+                arb.key, cooldown=self.settings.arbitrage_cooldown_seconds
+            )
+        if not neu:
+            return
+        with contextlib.suppress(Exception):
+            await self.state.publish(self.settings.channel_arbitrage, payload)
+        log.info(
+            "SICHERE WETTE",
+            title=arb.event_title,
+            market=arb.market.label,
+            gewinn=f"{arb.profit_percent:.2f}%",
+            buecher=",".join(arb.bookmakers),
+            verdaechtig=arb.suspicious,
+        )
 
     def _candidates(
         self,

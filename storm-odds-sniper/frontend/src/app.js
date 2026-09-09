@@ -795,6 +795,52 @@
     return `<div class="calc">${rows.join("")}</div>`;
   }
 
+  /* Sichere Wetten. Anders als überall sonst wird hier nicht geschätzt -
+     die Rechnung geht auf, egal wie das Spiel ausgeht. Was nicht aufgeht,
+     ist die Annahme, dass beide Preise stehen bleiben, bis beide Wetten
+     platziert sind. Deshalb steht das Alter der ältesten Quote dabei.
+
+     Die Karte bleibt verborgen, solange es nichts gibt: eine dauerhaft
+     leere Kachel für den Normalfall wäre nur Fläche. */
+  function renderArbitrage(data) {
+    const card = $("arb-card");
+    const list = $("arb-list");
+    const badge = $("arb-count");
+    if (!card || !list || !badge) return;
+
+    const items = (data && data.items) || [];
+    if (!data || !data.enabled || !items.length) {
+      card.hidden = true;
+      return;
+    }
+    card.hidden = false;
+    badge.textContent = String(items.length);
+    list.innerHTML = items
+      .slice(0, 8)
+      .map((item) => {
+        const legs = (item.legs || [])
+          .map(
+            (leg) => `<span class="chip-static">${esc(
+              leg.selection_label || leg.selection
+            )} · ${esc(leg.bookmaker)} <b>${leg.odds.toFixed(2)}</b> · ${leg.stake_percent.toFixed(
+              1
+            )} %</span>`
+          )
+          .join("");
+        return `<li>
+          <div class="row">
+            <span class="event-main">🔒 ${esc(item.event_title || item.event_id)}</span>
+            <span class="mono pos"><b>${fmtPct(item.profit_percent)}</b></span>
+          </div>
+          <div class="event-sub">${esc(item.market_label || item.market)} · ${esc(
+          (item.bookmakers || []).join(" + ")
+        )} · älteste Quote ${Math.round(item.max_age || 0)}s</div>
+          <div class="chips" style="margin-top:6px">${legs}</div>
+        </li>`;
+      })
+      .join("");
+  }
+
   const BET_ICON = { open: "⏳", won: "✅", lost: "❌", void: "➖" };
 
   /* Das Wett-Tagebuch: was tatsächlich gespielt wurde.
@@ -1077,6 +1123,7 @@
     events: ["live-list"],
     alerts: ["alerts-body", "alerts-cards", "moves-list", "books-list"],
     scorecard: ["scorecard-list"],
+    arbitrage: ["arb-list"],
     ledger: ["bets-list"],
     bets: ["bets-list"],
     recommendations: ["picks-list"],
@@ -1116,6 +1163,7 @@
       alerts: "/alerts?limit=80",
       scorecard: "/alerts/scorecard",
       recommendations: "/alerts/recommendations?window_minutes=30",
+      arbitrage: "/arbitrage",
       ledger: "/bets/ledger",
       bets: "/bets?limit=12",
     };
@@ -1144,8 +1192,18 @@
     // "Lade…" - und das sieht aus wie ein Fehler im Dashboard.
     reportApiDown(Object.keys(data).length === 0);
 
-    const { health, stats, providers, events, alerts, scorecard, recommendations, ledger, bets } =
-      data;
+    const {
+      health,
+      stats,
+      providers,
+      events,
+      alerts,
+      scorecard,
+      recommendations,
+      ledger,
+      bets,
+      arbitrage,
+    } = data;
 
     if (stats) {
       $("kpi-live").textContent = stats.live_events_redis ?? stats.events_live ?? 0;
@@ -1164,6 +1222,7 @@
 
     if (recommendations) renderRecommendations(recommendations);
     if (ledger) renderLedger(ledger, bets || []);
+    renderArbitrage(arbitrage);
 
     if (events) {
       state.events = new Map(events.map((e) => [e.event_id, e]));

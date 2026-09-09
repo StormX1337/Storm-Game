@@ -215,6 +215,25 @@ class Settings(BaseSettings):
     #: Wie viele Empfehlungen die Bestenliste höchstens enthält.
     recommend_limit: int = 10
 
+    # --------------------------------------------------------- Sichere Wetten
+    #: Widersprechen sich die Buchmacher untereinander, ist der Gewinn
+    #: Arithmetik statt Schätzung. Kostet keinen zusätzlichen Abruf - es wird
+    #: nur zusätzlich angesehen, was ohnehin schon einläuft.
+    arbitrage_enabled: bool = True
+    #: Darunter lohnt der Aufwand nicht, und Rundung erzeugt Scheinfunde.
+    arbitrage_min_profit_percent: float = 0.5
+    #: Darüber ist es praktisch immer ein Datenfehler. Solche Funde werden
+    #: als Verdacht ausgewiesen, nicht als Empfehlung.
+    arbitrage_max_profit_percent: float = 12.0
+    #: Beide Seiten müssen frisch sein - eine alte Quote ist keine Wette.
+    arbitrage_max_age: float = 15.0
+    #: Wie lange ein Fund im Dashboard stehen bleibt.
+    arbitrage_ttl_seconds: int = 120
+    #: Abstand zwischen zwei Meldungen zum selben Markt.
+    arbitrage_cooldown_seconds: int = 300
+    #: Funde auch nach Telegram schicken.
+    arbitrage_telegram: bool = True
+
     # -------------------------------------------------------- Wett-Tagebuch
     #: Festhalten, was tatsächlich gespielt wurde - und was dabei herauskam.
     #: Der Bot setzt weiterhin nichts; er führt Buch.
@@ -250,6 +269,7 @@ class Settings(BaseSettings):
     channel_alerts: str = "storm:alerts"
     channel_odds: str = "storm:odds"
     channel_events: str = "storm:events"
+    channel_arbitrage: str = "storm:arbitrage"
 
     @field_validator("log_level")
     @classmethod

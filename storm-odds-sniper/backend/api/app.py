@@ -24,7 +24,7 @@ from backend.api.middleware import (
     RequestContextMiddleware,
     SecurityHeadersMiddleware,
 )
-from backend.api.routes import alerts, bets, events, health, odds, stats
+from backend.api.routes import alerts, arbitrage, bets, events, health, odds, stats
 from backend.api.ws import WebSocketHub
 from backend.core.config import Settings, get_settings
 from backend.core.logging import configure_logging, get_logger
@@ -140,6 +140,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(odds.router)
     app.include_router(alerts.router)
     app.include_router(bets.router)
+    app.include_router(arbitrage.router)
     app.include_router(stats.router)
 
     @app.get("/", include_in_schema=False)

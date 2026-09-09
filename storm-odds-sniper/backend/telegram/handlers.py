@@ -419,6 +419,43 @@ async def _settle_bet(update, context, action: str, bet_id: int) -> None:
         await query.edit_message_text(fmt.format_bet_line(bet), parse_mode=ParseMode.HTML)
 
 
+async def cmd_arbitrage(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Aktuelle Widersprüche zwischen Büchern."""
+    state = _state(context)
+    settings = context.application.bot_data.get("settings") or get_settings()
+    if state is None:
+        await _reply(update, "⚠️ Redis nicht verfügbar.")
+        return
+    if not settings.arbitrage_enabled:
+        await _reply(update, "🔒 Sichere Wetten sind abgeschaltet (ARBITRAGE_ENABLED).")
+        return
+    try:
+        funde = await state.get_arbitrages()
+    except Exception as exc:  # noqa: BLE001 - eine Abfrage stoppt den Bot nicht
+        log.warning("arbitrage nicht lesbar", error=str(exc))
+        await _reply(update, "⚠️ Gerade nicht abrufbar.")
+        return
+
+    echte = [f for f in funde if not f.get("suspicious")]
+    if not echte:
+        verdaechtig = len(funde) - len(echte)
+        text = (
+            "🔒 <b>Sichere Wetten</b>\n\nGerade keine. Das ist der Normalfall - "
+            "Buchmacher widersprechen sich selten und nur für Sekunden."
+        )
+        if verdaechtig:
+            text += (
+                f"\n\n⚠️ {verdaechtig} Fund(e) waren zu gut, um wahr zu sein, "
+                "und damit fast sicher ein Datenfehler. Die stehen hier nicht."
+            )
+        await _reply(update, text, back_to_menu())
+        return
+
+    await _reply(update, f"🔒 <b>Sichere Wetten</b> — {len(echte)} gefunden")
+    for item in echte[:5]:
+        await _reply_new(update, fmt.format_arbitrage(item, bankroll=settings.bankroll))
+
+
 async def cmd_pause(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     repo = _repo(context)
     user = update.effective_user
@@ -467,6 +504,7 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             "sports": cmd_sports,
             "scorecard": cmd_scorecard,
             "ledger": cmd_ledger,
+            "arbitrage": cmd_arbitrage,
         }
         if target == "prematch":
             await _prematch_view(update, context)
@@ -601,6 +639,8 @@ def register(application: Application) -> None:
     application.add_handler(CommandHandler("wetten", cmd_bets))
     application.add_handler(CommandHandler("bets", cmd_bets))
     application.add_handler(CommandHandler("kasse", cmd_ledger))
+    application.add_handler(CommandHandler("arb", cmd_arbitrage))
+    application.add_handler(CommandHandler("sicher", cmd_arbitrage))
     application.add_handler(CommandHandler("bilanz", cmd_scorecard))
     application.add_handler(CommandHandler("scorecard", cmd_scorecard))
     application.add_handler(CommandHandler("pause", cmd_pause))

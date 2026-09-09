@@ -451,6 +451,65 @@ def format_ledger(ledger, *, bankroll: float = 0.0) -> str:
     return "\n".join(lines)
 
 
+def format_arbitrage(item: dict, *, bankroll: float = 0.0) -> str:
+    """Ein Widerspruch zwischen Büchern, mit Einsatzverteilung.
+
+    Anders als beim Rest steht hier kein "vermutlich": die Rechnung geht auf,
+    egal wie das Spiel ausgeht. Was nicht aufgeht, ist die Annahme, dass
+    beide Preise stehen bleiben, bis beide Wetten platziert sind - und genau
+    das steht deshalb darunter.
+    """
+    icon = "⚠️" if item.get("suspicious") else "🔒"
+    lines = [
+        f"{icon} <b>SICHERE WETTE</b> · <b>{item.get('profit_percent', 0):+.2f} %</b>",
+        "",
+        f"🏟 <b>{esc(item.get('event_title') or item.get('event_id'))}</b>",
+        f"📋 {esc(item.get('market_label') or item.get('market'))}",
+        "",
+    ]
+    einsatz_basis = bankroll if bankroll > 0 else 100.0
+    einheit = "" if bankroll > 0 else " %"
+    for leg in item.get("legs", []):
+        anteil = float(leg.get("stake_percent", 0.0))
+        betrag = einsatz_basis * anteil / 100.0
+        lines.append(
+            f"• <b>{esc(leg.get('selection_label') or leg.get('selection'))}</b> "
+            f"bei {esc(leg.get('bookmaker'))} zu <code>{float(leg.get('odds', 0)):.2f}</code>"
+        )
+        lines.append(f"    Einsatz {betrag:.2f}{einheit} ({anteil:.1f} % des Gesamteinsatzes)")
+    if item.get("legs"):
+        erster = item["legs"][0]
+        rueck = (
+            einsatz_basis
+            * float(erster.get("stake_percent", 0))
+            / 100.0
+            * float(erster.get("odds", 0))
+        )
+        lines += [
+            "",
+            f"💰 <b>Zurück</b>: {rueck:.2f}{einheit} — bei jedem Ausgang gleich",
+        ]
+    if bankroll <= 0:
+        lines.append("<i>Beträge je 100 Einsatz; mit BANKROLL werden es echte Beträge.</i>")
+
+    if item.get("suspicious"):
+        lines += [
+            "",
+            "⚠️ <b>Zu gut, um wahr zu sein.</b> Reale Widersprüche liegen bei",
+            "0,5-3 %. So ein Fund ist fast immer eine falsche Linie oder ein",
+            "veralteter Preis - erst prüfen, dann gar nichts.",
+        ]
+    lines += [
+        "",
+        f"⏳ Älteste Quote: {float(item.get('max_age', 0)):.0f}s",
+        "",
+        "<i>Arithmetik, kein Selbstläufer: beide Preise müssen stehen, bis",
+        "beide Wetten platziert sind. Bekommst du nur eine Seite, hast du",
+        "eine ungewollte Einzelwette. Es wird nichts automatisch gesetzt.</i>",
+    ]
+    return "\n".join(lines)
+
+
 def format_event_line(event: EventSnapshot) -> str:
     """Eine Zeile je Event für /live."""
     icon = SPORT_ICON.get(event.sport, "🏟")
@@ -608,6 +667,7 @@ Ich überwache Fußball- und Tennisquoten mehrerer Anbieter und melde:
 /tipps — was man jetzt spielen würde, mit Einsatz
 /wetten — gespielte Wetten, abrechnen per Knopf
 /kasse — was dabei herausgekommen ist
+/arb — sichere Wetten (Widersprüche zwischen Büchern)
 /bilanz — Trefferbilanz: was aus den Alarmen wurde
 /pause — Benachrichtigungen pausieren
 /resume — Benachrichtigungen fortsetzen

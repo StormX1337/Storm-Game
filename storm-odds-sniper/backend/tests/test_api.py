@@ -620,3 +620,97 @@ class TestWettTagebuch:
     async def test_kennzahlen_verraten_ob_der_knopf_sinn_hat(self, client, schreib_client):
         assert (await client.get("/stats")).json()["betlog_writes"] is False
         assert (await schreib_client.get("/stats")).json()["betlog_writes"] is True
+
+
+class TestSichereWetten:
+    """Die Karte bleibt still, solange es nichts gibt - und Funde, die zu
+    gut sind, um wahr zu sein, kommen nicht ungefragt heraus."""
+
+    @staticmethod
+    async def _lege_fund(redis_state, *, profit=6.24, suspicious=False, key="e1|m"):
+        await redis_state.set_arbitrage(
+            key,
+            {
+                "event_id": "e1",
+                "event_title": "Ajax vs Feyenoord",
+                "sport": "football",
+                "market": "over_under|2.5|full_time",
+                "market_label": "Over/Under 2.5",
+                "legs": [
+                    {
+                        "selection": "over",
+                        "selection_label": "Über 2.5",
+                        "bookmaker": "a",
+                        "odds": 2.10,
+                        "stake_share": 0.5059,
+                        "stake_percent": 50.59,
+                        "age": 0.0,
+                    },
+                    {
+                        "selection": "under",
+                        "selection_label": "Unter 2.5",
+                        "bookmaker": "b",
+                        "odds": 2.15,
+                        "stake_share": 0.4941,
+                        "stake_percent": 49.41,
+                        "age": 0.0,
+                    },
+                ],
+                "total_probability": 0.94131,
+                "profit_percent": profit,
+                "bookmakers": ["a", "b"],
+                "max_age": 0.0,
+                "suspicious": suspicious,
+                "detected_at": now_ts(),
+            },
+            ttl=120,
+        )
+
+    async def test_ohne_funde_leere_liste(self, client):
+        body = (await client.get("/arbitrage")).json()
+        assert body["enabled"] is True
+        assert body["found"] == 0
+        assert body["items"] == []
+
+    async def test_fund_wird_ausgeliefert(self, client, redis_state):
+        await self._lege_fund(redis_state)
+        body = (await client.get("/arbitrage")).json()
+        assert body["found"] == 1
+        item = body["items"][0]
+        assert item["event_title"] == "Ajax vs Feyenoord"
+        assert [leg["bookmaker"] for leg in item["legs"]] == ["a", "b"]
+        assert sum(leg["stake_percent"] for leg in item["legs"]) == pytest.approx(100.0, abs=0.05)
+
+    async def test_verdaechtige_funde_bleiben_draussen(self, client, redis_state):
+        """40 % sind kein Geschenk, sondern ein Datenfehler."""
+        await self._lege_fund(redis_state, profit=42.0, suspicious=True)
+        body = (await client.get("/arbitrage")).json()
+        assert body["found"] == 0
+        assert body["suspicious_hidden"] == 1
+
+        auf_wunsch = (await client.get("/arbitrage?include_suspicious=true")).json()
+        assert auf_wunsch["found"] == 1
+        assert auf_wunsch["items"][0]["suspicious"] is True
+
+    async def test_beste_zuerst(self, client, redis_state):
+        await self._lege_fund(redis_state, profit=1.0, key="a|m")
+        await self._lege_fund(redis_state, profit=5.0, key="b|m")
+        items = (await client.get("/arbitrage")).json()["items"]
+        assert [item["profit_percent"] for item in items] == [5.0, 1.0]
+
+    async def test_hinweis_steht_dabei(self, client):
+        body = (await client.get("/arbitrage")).json()
+        assert "kein Selbstläufer" in body["disclaimer"]
+        assert "nichts automatisch gesetzt" in body["disclaimer"]
+
+    async def test_abgelaufene_eintraege_verschwinden(self, redis_state):
+        """Die Menge lebt länger als ihre Einträge - ohne Aufräumen wüchse
+        sie mit jedem Fund weiter."""
+        await self._lege_fund(redis_state, key="weg|m")
+        await redis_state.client.delete("arb:weg|m")
+        assert await redis_state.get_arbitrages() == []
+        assert await redis_state.client.smembers("arb:all") == set()
+
+    async def test_abkuehlzeit_meldet_nur_einmal(self, redis_state):
+        assert await redis_state.claim_arbitrage("e1|m", cooldown=60) is True
+        assert await redis_state.claim_arbitrage("e1|m", cooldown=60) is False

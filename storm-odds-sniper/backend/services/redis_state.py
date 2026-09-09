@@ -445,6 +445,46 @@ class RedisState:
                 continue
         return out
 
+    # -------------------------------------------------------- Sichere Wetten
+    async def set_arbitrage(self, key: str, payload: dict, *, ttl: int) -> None:
+        """Einen Fund hinterlegen. Kurze TTL: er ist Sekunden alt gültig.
+
+        Ohne Ablauf stünden längst geschlossene Widersprüche weiter im
+        Dashboard - und nichts ist wertloser als eine sichere Wette, die es
+        seit zehn Minuten nicht mehr gibt.
+        """
+        pipe = self.client.pipeline(transaction=False)
+        pipe.set(f"arb:{key}", _dumps(payload), ex=ttl)
+        pipe.sadd("arb:all", key)
+        pipe.expire("arb:all", ttl * 10)
+        await pipe.execute()
+
+    async def get_arbitrages(self) -> list[dict]:
+        """Alle noch gültigen Funde, beste zuerst."""
+        raw = await self.client.smembers("arb:all")
+        keys = [k.decode() if isinstance(k, bytes) else k for k in (raw or [])]
+        if not keys:
+            return []
+        values = await self.client.mget([f"arb:{key}" for key in keys])
+        out: list[dict] = []
+        abgelaufen: list[str] = []
+        for key, payload in zip(keys, values, strict=True):
+            data = _loads(payload)
+            if data:
+                out.append(data)
+            else:
+                abgelaufen.append(key)
+        if abgelaufen:
+            # Die Menge selbst läuft später ab als ihre Einträge - ohne das
+            # wüchse sie mit jedem Fund weiter.
+            await self.client.srem("arb:all", *abgelaufen)
+        out.sort(key=lambda item: item.get("profit_percent", 0.0), reverse=True)
+        return out
+
+    async def claim_arbitrage(self, key: str, *, cooldown: int) -> bool:
+        """Darf dieser Fund gemeldet werden, oder kam er gerade schon?"""
+        return bool(await self.client.set(f"arbcd:{key}", b"1", nx=True, ex=cooldown))
+
     # ------------------------------------------------------------ Statistik
     async def counters(self, *, max_age: float | None = None) -> dict[str, int]:
         """Zählerstände. Mit ``max_age`` werden nur Events mit frischen Daten

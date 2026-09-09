@@ -159,12 +159,40 @@ class AlertDispatcher:
                 await asyncio.sleep(1.0 + attempt)
         return False
 
+    async def dispatch_arbitrage(self, item: dict) -> int:
+        """Einen Widerspruch zwischen Büchern verteilen.
+
+        Ohne die üblichen Filter: Value-Schwelle und Confidence sagen hier
+        nichts, weil nichts geschätzt wird. Nur "pausiert" gilt weiterhin -
+        wer Ruhe will, will Ruhe.
+        """
+        if not self.settings.arbitrage_telegram:
+            return 0
+        text = fmt.format_arbitrage(item, bankroll=self.settings.bankroll)
+        sent = 0
+        for chat_id, user_settings in await self.recipients():
+            if user_settings is not None and user_settings.paused:
+                continue
+            if await self._send(chat_id, text):
+                sent += 1
+        self.sent += sent
+        return sent
+
     async def run(self) -> None:
-        """Dauerhaft auf dem Alarm-Kanal lauschen."""
+        """Dauerhaft auf Alarm- und Arbitrage-Kanal lauschen."""
+        kanaele = [self.settings.channel_alerts]
+        if self.settings.arbitrage_enabled and self.settings.arbitrage_telegram:
+            kanaele.append(self.settings.channel_arbitrage)
         while True:
             try:
-                async for _channel, payload in self.state.subscribe(self.settings.channel_alerts):
+                async for channel, payload in self.state.subscribe(*kanaele):
                     if not payload:
+                        continue
+                    if channel == self.settings.channel_arbitrage:
+                        try:
+                            await self.dispatch_arbitrage(payload)
+                        except Exception as exc:  # noqa: BLE001 - eine Meldung stoppt nichts
+                            log.warning("arbitrage-versand fehlgeschlagen", error=str(exc))
                         continue
                     try:
                         alert = Alert.from_json(payload)
