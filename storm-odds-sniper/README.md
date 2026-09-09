@@ -64,6 +64,7 @@ deutlich abweicht — inklusive Bewertung, wie belastbar das Signal ist.
 | 🔴 **Live** | Fußball mit Minute, Spielstand, Halbzeit und roten Karten; Tennis mit Satz, Games, Punkten und Aufschlag |
 | 🤖 **Telegram** | Alarme in Echtzeit, persönliche Filter je Nutzer, Inline-Menü |
 | 📊 **Dashboard** | Dark-Mode-Oberfläche mit Live-WebSocket |
+| 🎯 **Empfehlung** | Aus jedem Alarm wird eine Handlungsempfehlung: spielen, kleiner Einsatz, beobachten oder sein lassen — mit Einsatzgröße nach fraktionalem Kelly |
 | 📒 **Trefferbilanz** | Jeder Alarm wird nachkontrolliert: hat der Buchmacher korrigiert, oder ist nur der Markt nachgezogen? Ohne zusätzlichen API-Aufruf |
 | 🔌 **Austauschbare Quellen** | Drei Adapter hinter einer gemeinsamen Schnittstelle: SportsGameOdds (Live-Filter), The Odds API, Betfair Exchange |
 
@@ -486,8 +487,12 @@ docker compose exec api python /app/scripts/smoke_test.py http://127.0.0.1:8000
 
 Das Dashboard zeigt:
 
+- **Empfehlungen — was jetzt spielen?** ganz oben: Wette, Buchmacher, Quote
+  und ein Einsatzvorschlag in Prozent der Bankroll. Bleibt die Liste leer,
+  steht dort **warum** (siehe [Abschnitt 15, Schritt 10](#15-wie-die-erkennung-funktioniert)).
 - **Alarme** mit Zeit, Sport, Event, Markt, Buchmacher, Quote, fairer Quote,
-  Value, Confidence, Status und **Urteil** — filterbar nach Art und Sportart.
+  Value, Confidence, **Tipp**, Status und **Urteil** — filterbar nach Art und
+  Sportart.
   Ein Klick auf die Zeile klappt die Herleitung auf: verglichene Preise, die
   drei Modelle, die Signale des Error-Scores und, sobald vorhanden, die
   Nachkontrolle mit den Preisen davor und danach.
@@ -549,6 +554,7 @@ Dem Bot `/start` schreiben.
 | `/live` | laufende Events |
 | `/value` | beste aktuelle Value-Alarme |
 | `/alerts` | letzte Alarme |
+| `/tipps` | Was man jetzt spielen würde — mit Einsatzvorschlag |
 | `/bilanz` | Trefferbilanz: was aus den Alarmen wurde |
 | `/pause` | Benachrichtigungen pausieren |
 | `/resume` | Benachrichtigungen fortsetzen |
@@ -836,6 +842,100 @@ FOLLOWUP_MOVE_PERCENT=2.0      # ab wann ein Preis als bewegt gilt
 und jedes Urteil lautet „offen". Der Scanner warnt beim Start, wenn das
 passiert.
 
+### Schritt 10 — was soll man davon spielen?
+
+Ein Alarm ist eine Beobachtung, keine Anweisung. Die Frage danach lautet:
+**spielen oder nicht — und mit wie viel?** Diese Rechnung macht
+`backend/core/recommendation.py`, und zwar bewusst nicht so, wie es
+naheliegt.
+
+Naheliegend wäre: nach Value absteigend sortieren, oben steht die beste
+Wette. Genau das ist der teuerste Fehler, den dieses Modul machen könnte.
+Eine Quote, die **250 % über dem Markt** liegt, ist so gut wie nie ein
+Vorteil, sondern ein Datenfehler: eine andere Linie, ein stehengebliebener
+Preis, ein Markt, der nur so heißt wie unserer. Wer nach Value sortiert,
+sortiert die Datenfehler nach oben.
+
+Deshalb gilt hier: **je größer die gemeldete Abweichung, desto stärker der
+Verdacht auf einen Fehler statt auf einen Vorteil.** Der *glaubwürdige*
+Vorteil steigt zuerst mit der Abweichung, hat ein Maximum und fällt danach
+wieder gegen null:
+
+| gemeldeter Value | Plausibilität | glaubwürdiger Vorteil | Empfehlung |
+|---:|---:|---:|---|
+| +5 % | 0,82 | +3,2 % | spielen |
+| +10 % | 0,46 | +3,6 % | spielen |
+| +15 % | 0,17 | +2,0 % | kleiner Einsatz |
+| +20 % | 0,04 | +0,7 % | nur beobachten |
+| +30 % | 0,00 | +0,0 % | nicht spielen |
+| +250 % | — | — | abgelehnt: Datenfehler |
+
+<sub>Werte für 20 Vergleichsquoten, Confidence 80 und eine frische Quote. Weniger Bücher, geringere Confidence oder ein älterer Preis drücken jede Zeile weiter nach unten.</sub>
+
+Das ist keine Willkür, sondern das übliche Verhalten robuster Schätzer bei
+schwerschwänzigen Fehlern (redeszendierende Einflussfunktion): ab einem
+gewissen Abstand ist ein weiterer Schritt weg vom Markt kein Argument
+mehr *für* die Wette, sondern eines *dagegen*. Bei einem belegten Fehlpreis
+(hoher Error-Score) darf der Abstand größer sein — dort ist die Behauptung ja
+gerade, dass dieses eine Buch danebenliegt.
+
+Der Rechenweg je Alarm:
+
+1. **Rohvorteil** — `value_percent`, was das Modell behauptet.
+2. **Verlässlichkeit** — Buchmacheranzahl, Confidence und Quotenalter,
+   jeweils gedeckelt. Wer die harten Mindestwerte reißt, fliegt vorher raus.
+3. **Plausibilität** — die Kurve oben.
+4. **Glaubwürdiger Vorteil** = 1 × 2 × 3. **Danach** wird sortiert.
+5. **Einsatz** — fraktionaler Kelly auf genau diesen Vorteil, nie auf den
+   Rohwert: `Einsatz = KELLY_FRACTION × Vorteil / (Quote − 1)`, gedeckelt
+   durch `MAX_STAKE_PERCENT`.
+
+Die Liste selbst ist zusätzlich entdoppelt, weil Alarme **nicht unabhängig**
+sind:
+
+* **Gleiche Wette nur einmal**, zum höchsten Preis. Für dieselbe Selektion
+  ist das keine Schätzung, sondern Arithmetik: 2.20 schlägt 2.10.
+* **Höchstens eine Wette je Event** (`RECOMMEND_MAX_PICKS_PER_EVENT`). Zwei
+  Selektionen desselben Spiels hängen zusammen; ohne diese Regel könnte die
+  Liste Über *und* Unter empfehlen.
+* **Gesamtbudget** (`MAX_TOTAL_STAKE_PERCENT`). Zehn gute Wetten sind nicht
+  zehnmal so sicher wie eine — sie sind zehnmal so viel Einsatz.
+
+**Bleibt nichts übrig, steht dort warum.** Eine leere Liste ohne Begründung
+ist der Zustand, in dem man an der Anlage zweifelt statt am Markt — deshalb
+zählt `dropped` jeden Ablehnungsgrund mit, im Dashboard, in `/tipps` und in
+`GET /alerts/recommendations`.
+
+Zu sehen ist das an vier Stellen:
+
+* **Dashboard** — Karte „Empfehlungen — was jetzt spielen?" und die Spalte
+  *Tipp* in der Alarmtabelle
+* **Telegram** — `/tipps`, dazu ein Empfehlungsblock in jeder Alarmnachricht
+* **API** — `GET /alerts/recommendations`, `GET /alerts?grade=strong`, sowie
+  `recommendation` an jedem Alarm
+* **Datenbank** — `alerts.recommendation_grade`, `alerts.stake_percent`,
+  `alerts.credible_edge_percent`
+
+> **Wichtig, und bitte nicht überlesen:** das ist eine Schätzung aus
+> öffentlich abrufbaren Quoten — **keine Wettberatung und keine
+> Gewinngarantie**. Der Einsatzvorschlag ist eine Kelly-Rechnung auf eine
+> *geschätzte* Wahrscheinlichkeit, kein Versprechen. Das System setzt nichts
+> und verändert nichts bei Buchmachern; ob und was gespielt wird, entscheidet
+> der Mensch. Preise vor dem Setzen selbst prüfen — die Quote kann längst weg
+> sein.
+
+Stellschrauben in der `.env`:
+
+```env
+RECOMMEND_ENABLED=true         # ganz abschaltbar
+BANKROLL=0                     # 0 = nur Prozentwerte, kein erfundener Betrag
+KELLY_FRACTION=0.25            # Viertel-Kelly
+MAX_STAKE_PERCENT=2.0          # Deckel je Wette
+MAX_TOTAL_STAKE_PERCENT=6.0    # Deckel über die ganze Liste
+PLAUSIBLE_EDGE_PERCENT=8.0     # größer = mehr Datenfehler in der Liste
+ABSURD_EDGE_PERCENT=60.0       # darüber ohne Rechnung abgelehnt
+```
+
 ---
 
 ## 16. API
@@ -857,8 +957,9 @@ Swagger UI: <http://localhost:8080/docs> · OpenAPI: `/openapi.json`
 | `GET /events/live` | nur laufende Events |
 | `GET /events/{id}` | einzelnes Event |
 | `GET /odds?event_id=` | aktuelle Quoten aus Redis |
-| `GET /alerts` | Alarm-Historie (`?kind=`, `?sport=`, `?min_value=`, `?since_minutes=`), je Alarm mit `verdict` und `clv_percent` |
+| `GET /alerts` | Alarm-Historie (`?kind=`, `?sport=`, `?min_value=`, `?since_minutes=`, `?grade=`), je Alarm mit `recommendation`, `verdict` und `clv_percent` |
 | `GET /alerts/scorecard` | Trefferbilanz: was aus den Alarmen wurde (`?window_hours=`) |
+| `GET /alerts/recommendations` | Was man jetzt spielen würde (`?window_minutes=`, `?limit=`, `?sport=`) — entdoppelt, mit Einsatz und Gesamtbudget |
 | `GET /stats` | Kennzahlen |
 | `GET /metrics` | Prometheus |
 | `WS /ws` | Live-Stream (Alarme, Events, Bewegungen) |
@@ -868,6 +969,7 @@ Beispiel:
 ```bash
 curl -s http://localhost:8080/api/alerts?limit=5 | jq
 curl -s http://localhost:8080/api/events/live | jq '.[].home'
+curl -s 'http://localhost:8080/api/alerts/recommendations' | jq '.picks[].recommendation.play'
 ```
 
 ---
@@ -908,6 +1010,7 @@ Abgedeckt sind unter anderem:
 | Telegram-Formatierung und Empfängerfilter | `test_telegram.py` |
 | Urteil und Closing Line Value | `test_verdict.py` |
 | Nachkontrolle vom Alarm bis zur Bilanz | `test_followup.py` |
+| Empfehlung: Grad, Kelly-Einsatz, Entdopplung | `test_recommendation.py` |
 | Secret-Redaction im Logging | `test_logging.py` |
 
 Linting:
@@ -1321,6 +1424,7 @@ storm-odds-sniper/
 │   │   ├── outlier.py        Fixed-Odds-Error-Detector
 │   │   ├── filters.py        False-Positive-Schutz
 │   │   ├── verdict.py        Nachkontrolle: Urteil und Closing Line Value
+│   │   ├── recommendation.py Empfehlung: Grad, Kelly-Einsatz, Bestenliste
 │   │   ├── backoff.py        exponentielles Backoff
 │   │   └── metrics.py        Prometheus
 │   ├── models/

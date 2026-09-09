@@ -197,6 +197,93 @@ class TestAlerts:
         assert row["resolved_at"] is not None
 
 
+class TestEmpfehlungen:
+    """Die Bestenliste: was man jetzt spielen würde."""
+
+    @staticmethod
+    def _mit_empfehlung(**overrides):
+        from backend.core.recommendation import evaluate
+        from backend.tests.test_database import make_alert
+
+        alert = make_alert(**overrides)
+        alert.recommendation = evaluate(alert).to_json()
+        return alert
+
+    async def test_alarm_traegt_seine_empfehlung(self, client, repository):
+        alert = self._mit_empfehlung(value_percent=11.0, odds=2.10)
+        await repository.write_batch(alerts=[alert])
+        row = (await client.get("/alerts")).json()[0]
+        assert row["recommendation"]["grade"] in {"strong", "moderate", "weak", "skip"}
+        assert row["recommendation"]["play"]
+
+    async def test_alter_alarm_ohne_empfehlung_bleibt_null(self, client, repository):
+        from backend.tests.test_database import make_alert
+
+        await repository.write_batch(alerts=[make_alert()])
+        assert (await client.get("/alerts")).json()[0]["recommendation"] is None
+
+    async def test_filter_nach_grad(self, client, repository):
+        spielbar = self._mit_empfehlung(value_percent=11.0, odds=2.10)
+        absurd = self._mit_empfehlung(value_percent=250.0, odds=9.0, bookmaker="anderer")
+        await repository.write_batch(alerts=[spielbar, absurd])
+        skip = (await client.get("/alerts?grade=skip")).json()
+        assert [row["bookmaker"] for row in skip] == ["anderer"]
+        assert (await client.get("/alerts?grade=nonsense")).status_code == 422
+
+    async def test_bestenliste_nennt_wette_und_einsatz(self, client, repository):
+        alert = self._mit_empfehlung(value_percent=11.0, odds=2.10)
+        await repository.write_batch(alerts=[alert])
+        body = (await client.get("/alerts/recommendations")).json()
+        assert body["considered"] == 1
+        assert len(body["picks"]) == 1
+        pick = body["picks"][0]
+        assert pick["alert"]["bookmaker"] == "examplebookie"
+        assert pick["recommendation"]["stake_percent"] > 0
+        assert "Einsatz" in pick["recommendation"]["play"]
+        assert body["total_stake_percent"] == pytest.approx(pick["recommendation"]["stake_percent"])
+
+    async def test_leere_bestenliste_nennt_den_grund(self, client, repository):
+        """Der Fehler, den dieses Projekt nicht mehr machen darf: nichts
+        anzeigen und nicht sagen, warum."""
+        await repository.write_batch(alerts=[self._mit_empfehlung(value_percent=250.0)])
+        body = (await client.get("/alerts/recommendations")).json()
+        assert body["picks"] == []
+        assert body["dropped"]
+        assert body["dropped"][0]["code"] == "unplausibel"
+        assert body["dropped"][0]["label"]
+
+    async def test_absurder_value_steht_nicht_oben(self, client, repository):
+        massvoll = self._mit_empfehlung(
+            value_percent=11.0, odds=2.10, event=make_event(event_id="m1")
+        )
+        absurd = self._mit_empfehlung(
+            value_percent=180.0, odds=8.0, event=make_event(event_id="a1")
+        )
+        await repository.write_batch(alerts=[massvoll, absurd])
+        picks = (await client.get("/alerts/recommendations")).json()["picks"]
+        assert [pick["alert"]["event_id"] for pick in picks] == [massvoll.event.event_id]
+
+    async def test_altes_fenster_liefert_nichts(self, client, repository):
+        alert = self._mit_empfehlung(value_percent=11.0, odds=2.10)
+        alert.detected_at = now_ts() - 7200
+        await repository.write_batch(alerts=[alert])
+        body = (await client.get("/alerts/recommendations?window_minutes=15")).json()
+        assert body["considered"] == 0
+        assert body["picks"] == []
+
+    async def test_hinweis_steht_in_jeder_antwort(self, client):
+        body = (await client.get("/alerts/recommendations")).json()
+        assert "Keine Wettberatung" in body["disclaimer"]
+        assert "nichts automatisch gesetzt" in body["disclaimer"]
+
+    async def test_kennzahlen_zaehlen_die_grade(self, client, redis_state):
+        await redis_state.add_grades({"strong": 2, "skip": 7})
+        body = (await client.get("/stats")).json()
+        codes = {entry["code"]: entry["count"] for entry in body["grades"]}
+        assert codes == {"strong": 2, "skip": 7}
+        assert body["playable_alerts"] == 2
+
+
 class TestScorecard:
     async def test_empty_scorecard_is_not_an_error(self, client):
         body = (await client.get("/alerts/scorecard")).json()

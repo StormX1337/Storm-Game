@@ -13,7 +13,10 @@ from telegram.ext import (
     ContextTypes,
 )
 
+from backend.core.config import get_settings
 from backend.core.logging import get_logger
+from backend.core.recommendation import Recommendation, build_slip, config_from_settings
+from backend.core.recommendation import evaluate as recommend
 from backend.database.repository import Repository
 from backend.models.domain import Alert
 from backend.services.redis_state import RedisState
@@ -29,6 +32,10 @@ from backend.telegram.keyboards import (
 log = get_logger("telegram")
 
 ALL_SPORTS = ["football", "tennis"]
+
+#: Zeitfenster von /tipps. Kurz gehalten: ein alter Preis ist keine
+#: Empfehlung mehr, sondern eine Erinnerung.
+TIPS_WINDOW_MINUTES = 20
 
 #: Grenzen, damit Nutzer sich nicht selbst aussperren oder fluten.
 BOUNDS = {
@@ -196,6 +203,46 @@ async def cmd_value(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def cmd_alerts(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await _send_alert_list(update, context, kind=None, title="🚨 <b>Letzte Alarme</b>")
+
+
+async def cmd_tips(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Was man jetzt spielen würde - mit Einsatzvorschlag.
+
+    Das Fenster ist bewusst kurz. Ein Alarm von vor zwei Stunden ist keine
+    Empfehlung mehr, sondern ein Stück Geschichte.
+    """
+    repo = _repo(context)
+    if repo is None:
+        await _reply(update, "⚠️ Datenbank nicht verfügbar - keine Empfehlung möglich.")
+        return
+    settings = context.application.bot_data.get("settings") or get_settings()
+    config = config_from_settings(settings)
+    window = TIPS_WINDOW_MINUTES
+    since = datetime.now(UTC) - timedelta(minutes=window)
+    try:
+        rows = await repo.list_alerts(limit=300, since=since)
+    except Exception as exc:  # noqa: BLE001 - eine Abfrage darf den Bot nie stoppen
+        log.warning("empfehlungen nicht lesbar", error=str(exc))
+        await _reply(update, "⚠️ Empfehlungen gerade nicht abrufbar.")
+        return
+
+    pairs = []
+    for row in rows:
+        try:
+            alert = Alert.from_json(row.payload or {})
+        except Exception as exc:  # noqa: BLE001 - defensiv gegen alte Payload-Formate
+            log.debug("alarm nicht lesbar - übersprungen", error=str(exc))
+            continue
+        stored = alert.recommendation
+        pairs.append(
+            (alert, Recommendation.from_json(stored) if stored else recommend(alert, config))
+        )
+    slip = build_slip(pairs, config=config, limit=settings.recommend_limit)
+    await _reply(
+        update,
+        fmt.format_slip(slip, window_minutes=window, bankroll=settings.bankroll),
+        back_to_menu(),
+    )
 
 
 async def cmd_scorecard(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -382,6 +429,8 @@ def register(application: Application) -> None:
     application.add_handler(CommandHandler("live", cmd_live))
     application.add_handler(CommandHandler("value", cmd_value))
     application.add_handler(CommandHandler("alerts", cmd_alerts))
+    application.add_handler(CommandHandler("tipps", cmd_tips))
+    application.add_handler(CommandHandler("tips", cmd_tips))
     application.add_handler(CommandHandler("bilanz", cmd_scorecard))
     application.add_handler(CommandHandler("scorecard", cmd_scorecard))
     application.add_handler(CommandHandler("pause", cmd_pause))

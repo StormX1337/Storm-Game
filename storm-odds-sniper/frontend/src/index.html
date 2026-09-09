@@ -54,9 +54,29 @@
     <article class="kpi"><span class="kpi__label">Buchmacher</span><strong id="kpi-books">–</strong></article>
     <article class="kpi"><span class="kpi__label">Provider aktiv</span><strong id="kpi-providers">–</strong></article>
     <article class="kpi" title="Abstand der gemeldeten Preise zum später beobachteten Marktkonsens. Kein Gewinn."><span class="kpi__label">Ø vs. Markt</span><strong id="kpi-clv">–</strong></article>
+    <article class="kpi" title="Alarme, aus denen eine spielbare Empfehlung wurde. Der Rest ist geprüft und verworfen."><span class="kpi__label">Spielbar</span><strong id="kpi-playable">–</strong></article>
   </section>
 
   <main class="grid">
+    <section class="card card--wide">
+      <header class="card__head">
+        <h2>Empfehlungen — was jetzt spielen?</h2>
+        <span class="badge" id="picks-stake" title="Summe der vorgeschlagenen Einsätze">0 %</span>
+      </header>
+      <p class="tagline" style="padding: 0 14px 6px;">
+        Sortiert nach dem <b>realistischen</b> Vorteil, nicht nach der gemeldeten Value-Zahl.
+        Eine Quote weit jenseits des Marktes ist fast immer ein Datenfehler — solche Alarme
+        werden abgewertet statt nach oben sortiert.
+      </p>
+      <ul class="list" id="picks-list">
+        <li class="empty">Lade…</li>
+      </ul>
+      <p class="tagline" style="padding: 6px 14px 12px;">
+        Schätzung aus öffentlich abrufbaren Quoten. Keine Wettberatung, keine Gewinngarantie.
+        Preise vor dem Setzen selbst prüfen — es wird nichts automatisch gesetzt.
+      </p>
+    </section>
+
     <section class="card card--wide">
       <header class="card__head">
         <h2>Alarme</h2>
@@ -75,11 +95,11 @@
             <tr>
               <th>Zeit</th><th>Sport</th><th>Event</th><th>Markt</th><th>Buchmacher</th>
               <th class="num">Quote</th><th class="num">Fair</th><th class="num">Value</th>
-              <th class="num">Conf.</th><th>Status</th><th>Urteil</th>
+              <th class="num">Conf.</th><th>Tipp</th><th>Status</th><th>Urteil</th>
             </tr>
           </thead>
           <tbody id="alerts-body">
-            <tr class="empty"><td colspan="11">Warte auf Alarme…</td></tr>
+            <tr class="empty"><td colspan="12">Warte auf Alarme…</td></tr>
           </tbody>
         </table>
       </div>

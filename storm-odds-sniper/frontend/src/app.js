@@ -66,6 +66,15 @@
       text: "Die Nachkontrolle steht noch aus." },
   };
 
+  /* Empfehlungsgrade. Bewusst dieselben Symbole wie in Telegram - wer beides
+     nutzt, soll nicht zweimal etwas lernen müssen. */
+  const GRADE = {
+    strong: { icon: "🟢", short: "spielen", tag: "good" },
+    moderate: { icon: "🟡", short: "klein", tag: "warn" },
+    weak: { icon: "⚪", short: "beobachten", tag: "fin" },
+    skip: { icon: "⛔", short: "nein", tag: "fin" },
+  };
+
   /* ------------------------------------------------------------ Rendering */
 
   function alertPasses(alert) {
@@ -79,7 +88,7 @@
     const body = $("alerts-body");
     const rows = state.alerts.filter(alertPasses).slice(0, MAX_ALERTS);
     if (!rows.length) {
-      body.innerHTML = '<tr class="empty"><td colspan="11">Keine Alarme für diesen Filter.</td></tr>';
+      body.innerHTML = '<tr class="empty"><td colspan="12">Keine Alarme für diesen Filter.</td></tr>';
       return;
     }
     body.innerHTML = rows
@@ -107,6 +116,7 @@
               a.confidence >= 80 ? "good" : a.confidence >= 60 ? "" : "warn"
             }" data-width="${Math.max(0, Math.min(100, a.confidence || 0))}"></i></div>
           </td>
+          <td>${gradeCell(a)}</td>
           <td><span class="tag tag--${tag}">${esc(a.status || "?")}</span></td>
           <td>${verdictCell(a)}</td>
         </tr>`;
@@ -117,6 +127,27 @@
     body.querySelectorAll("tr[data-index]").forEach((tr) => {
       tr.addEventListener("click", () => toggleDetail(tr, rows[Number(tr.dataset.index)]));
     });
+  }
+
+  /* Was aus dem Alarm folgt. Ein Alarm ohne Empfehlung ist ein alter Alarm -
+     das ist etwas anderes als "nicht spielen" und wird auch so gezeigt. */
+  function gradeCell(a) {
+    const r = a.recommendation;
+    if (!r) return '<span class="dim" title="Vor Einführung der Empfehlung entstanden">–</span>';
+    // Ein Bewegungsalarm hat keine faire Quote. "Nicht spielen" würde ein
+    // Urteil behaupten, das nie gefällt wurde - das ist etwas anderes als
+    // "geprüft und verworfen".
+    if (r.reason_code === "keine_referenz") {
+      return `<span class="dim" title="${esc(r.reason_label || "")}">–</span>`;
+    }
+    const g = GRADE[r.grade] || { icon: "•", short: r.grade, tag: "fin" };
+    const title = r.grade === "skip" || !r.stake_percent ? r.reason_label || "" :
+      `Realistischer Vorteil ${fmtPct(r.credible_edge_percent)} (gemeldet ${fmtPct(r.raw_edge_percent)})`;
+    const stake = r.stake_percent > 0
+      ? `<div class="event-sub mono">${r.stake_percent.toFixed(1)} %</div>` : "";
+    return `<span class="tag tag--${g.tag}" title="${esc(title)}">${g.icon} ${esc(
+      g.short
+    )}</span>${stake}`;
   }
 
   /* Ein Alarm ohne Urteil ist nicht "gescheitert", sondern noch nicht
@@ -432,6 +463,56 @@
     applyMeterWidths(list);
   }
 
+  /* Die Bestenliste. Wenn nichts übrig bleibt, steht hier *warum* - eine
+     leere Kachel ohne Begründung lässt Nutzer an der Anlage zweifeln statt
+     am Markt. */
+  function renderRecommendations(data) {
+    const list = $("picks-list");
+    const badge = $("picks-stake");
+    const picks = data.picks || [];
+    badge.textContent = `${(data.total_stake_percent || 0).toFixed(1)} %`;
+
+    if (!picks.length) {
+      const reasons = (data.dropped || [])
+        .slice(0, 5)
+        .map((r) => `<li><span class="dim">${esc(r.label)}</span> <b>${r.count}</b></li>`)
+        .join("");
+      list.innerHTML =
+        `<li class="empty">Nichts Spielbares unter ${data.considered || 0} geprüften Alarmen.</li>` +
+        (reasons ? `<li class="dim" style="padding-bottom:2px">Warum:</li>${reasons}` : "");
+      return;
+    }
+
+    list.innerHTML = picks
+      .map((pick, index) => {
+        const a = pick.alert;
+        const r = pick.recommendation;
+        const g = GRADE[r.grade] || { icon: "•", short: r.grade, tag: "fin" };
+        const amount = r.stake_amount ? ` (≈ ${r.stake_amount.toFixed(2)})` : "";
+        const warnings = (r.warnings || [])
+          .slice(0, 2)
+          .map((w) => `<div class="event-sub">⚠️ ${esc(w)}</div>`)
+          .join("");
+        return `<li>
+          <div class="event-main">
+            <span class="tag tag--${g.tag}">${g.icon} ${esc(g.short)}</span>
+            <b>${index + 1}. ${esc(a.event_title)}</b>
+          </div>
+          <div class="event-sub">${esc(a.market_label)} · <b>${esc(
+          a.selection_label
+        )}</b> · ${esc(a.bookmaker)} · <span class="mono">${fmtOdds(a.odds)}</span></div>
+          <div class="event-sub">
+            💵 <b>${r.stake_percent.toFixed(1)} %</b> der Bankroll${amount} ·
+            Vorteil <b class="${r.credible_edge_percent >= 0 ? "pos" : "neg"}">${fmtPct(
+          r.credible_edge_percent
+        )}</b> <span class="dim">(gemeldet ${fmtPct(r.raw_edge_percent)})</span>
+          </div>
+          ${warnings}
+        </li>`;
+      })
+      .join("");
+  }
+
   function renderSystem(health, stats) {
     const list = $("system-list");
     const items = (health.components || []).map(
@@ -513,6 +594,11 @@
         clv_percent: raw.clv_percent,
         closing_odds: raw.closing_odds,
         closing_fair_odds: raw.closing_fair_odds,
+        // Leeres Objekt heißt "nicht bewertet" - genauso wie ein fehlendes
+        // Feld aus der REST-Antwort. Beides wird zu null, damit die Tabelle
+        // "kein Urteil" nicht mit "nicht spielen" verwechselt.
+        recommendation:
+          raw.recommendation && raw.recommendation.grade ? raw.recommendation : null,
       };
     }
     return { ...raw, detected_at: raw.detected_at };
@@ -609,6 +695,7 @@
       events: "/events?limit=120",
       alerts: "/alerts?limit=80",
       scorecard: "/alerts/scorecard",
+      recommendations: "/alerts/recommendations?window_minutes=30",
     };
     const names = Object.keys(requests);
     const settled = await Promise.allSettled(names.map((name) => fetchJson(requests[name])));
@@ -631,7 +718,7 @@
     // "Lade…" - und das sieht aus wie ein Fehler im Dashboard.
     reportApiDown(Object.keys(data).length === 0);
 
-    const { health, stats, providers, events, alerts, scorecard } = data;
+    const { health, stats, providers, events, alerts, scorecard, recommendations } = data;
 
     if (stats) {
       $("kpi-live").textContent = stats.live_events_redis ?? stats.events_live ?? 0;
@@ -640,11 +727,14 @@
       $("kpi-value").textContent =
         stats.avg_value_percent != null ? fmtPct(stats.avg_value_percent) : "–";
       $("kpi-books").textContent = stats.bookmakers ?? 0;
+      $("kpi-playable").textContent = stats.playable_alerts ?? "–";
       $("kpi-providers").textContent = `${stats.providers_connected ?? 0}/${
         stats.providers_total ?? 0
       }`;
       renderSuppressed(stats);
     }
+
+    if (recommendations) renderRecommendations(recommendations);
 
     if (events) {
       state.events = new Map(events.map((e) => [e.event_id, e]));

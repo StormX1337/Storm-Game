@@ -102,6 +102,35 @@ class OddsResponse(BaseModel):
     is_exchange: bool = False
 
 
+class RecommendationModel(BaseModel):
+    """Die Handlungsempfehlung zu einem Alarm.
+
+    ``credible_edge_percent`` ist die Zahl, auf die es ankommt - der Vorteil,
+    der nach Abzug von Unsicherheit und Unplausibilität übrig bleibt. Sie ist
+    absichtlich kleiner als ``value_percent`` und wächst nicht mit ihm: eine
+    extrem hohe gemeldete Abweichung ist ein Hinweis auf einen Datenfehler,
+    kein Grund für einen höheren Einsatz.
+    """
+
+    grade: str
+    label: str
+    reason_code: str = "ok"
+    reason_label: str = ""
+    credible_edge_percent: float = 0.0
+    raw_edge_percent: float = 0.0
+    #: Vorschlag in Prozent der Bankroll (fraktionaler Kelly, gedeckelt).
+    stake_percent: float = 0.0
+    #: Betrag - nur wenn eine Bankroll hinterlegt ist, sonst ``null``.
+    stake_amount: float | None = None
+    reliability: float = 0.0
+    plausibility: float = 0.0
+    rank_score: float = 0.0
+    reasons: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    checklist: list[str] = Field(default_factory=list)
+    play: str = ""
+
+
 class AlertResponse(BaseModel):
     id: int | None = None
     kind: str
@@ -139,6 +168,9 @@ class AlertResponse(BaseModel):
     closing_odds: float | None = None
     closing_fair_odds: float | None = None
     resolved_at: datetime | None = None
+    # -------------------------------------------------- Empfehlung
+    #: ``None`` = vor Einführung der Empfehlung entstanden.
+    recommendation: RecommendationModel | None = None
 
 
 class VerdictCount(BaseModel):
@@ -182,6 +214,35 @@ class SuppressionReason(BaseModel):
     count: int
 
 
+class RecommendationPick(BaseModel):
+    """Ein Vorschlag der Bestenliste: der Alarm und was daraus folgt."""
+
+    alert: AlertResponse
+    recommendation: RecommendationModel
+
+
+class RecommendationsResponse(BaseModel):
+    """Die Bestenliste: was man jetzt spielen würde.
+
+    ``dropped`` ist genauso wichtig wie ``picks``. Eine leere Liste ohne
+    Begründung lässt den Nutzer ratlos zurück - hier steht deshalb immer,
+    warum nichts übrig blieb.
+    """
+
+    window_minutes: int
+    considered: int
+    picks: list[RecommendationPick] = Field(default_factory=list)
+    total_stake_percent: float = 0.0
+    #: Hinterlegte Bankroll; ``null`` = keine, dann nur Prozentwerte.
+    bankroll: float | None = None
+    dropped: list[SuppressionReason] = Field(default_factory=list)
+    #: Steht bewusst in jeder Antwort - siehe README.
+    disclaimer: str = (
+        "Schätzung aus öffentlich abrufbaren Quoten. Keine Wettberatung, "
+        "keine Gewinngarantie. Es wird nichts automatisch gesetzt."
+    )
+
+
 class StatsResponse(BaseModel):
     events_total: int
     events_live: int
@@ -203,6 +264,9 @@ class StatsResponse(BaseModel):
     verdicts: list[VerdictCount] = Field(default_factory=list)
     followups_pending: int = 0
     avg_clv_percent: float | None = None
+    #: Wie die Alarme empfohlen wurden - je Grad.
+    grades: list[SuppressionReason] = Field(default_factory=list)
+    playable_alerts: int = 0
 
 
 class WsMessage(BaseModel):

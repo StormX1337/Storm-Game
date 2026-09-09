@@ -209,9 +209,20 @@ class AlertRow(Base):
         DateTime(timezone=True), nullable=True, index=True
     )
 
+    # ------------------------------------------------- Empfehlung
+    #: Grad der Handlungsempfehlung (siehe ``backend/core/recommendation.py``).
+    #: ``NULL`` = vor Einführung der Empfehlung entstanden.
+    recommendation_grade: Mapped[str | None] = mapped_column(String(16), nullable=True, index=True)
+    #: Vorgeschlagener Einsatz in Prozent der Bankroll (0 = nicht spielen).
+    stake_percent: Mapped[float | None] = mapped_column(Float, nullable=True)
+    #: Der Vorteil, der nach Abzug von Unsicherheit und Unplausibilität
+    #: übrig bleibt. Nicht identisch mit ``value_percent`` - das ist Absicht.
+    credible_edge_percent: Mapped[float | None] = mapped_column(Float, nullable=True)
+
     __table_args__ = (
         Index("ix_alerts_detected_kind", "detected_at", "kind"),
         Index("ix_alerts_verdict_kind", "verdict", "kind"),
+        Index("ix_alerts_grade_detected", "recommendation_grade", "detected_at"),
     )
 
 

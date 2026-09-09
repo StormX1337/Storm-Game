@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from html import escape
 
+from backend.core.recommendation import GRADE_LABELS
+from backend.core.recommendation import REASON_LABELS as RECOMMENDATION_REASONS
 from backend.core.verdict import VERDICT_LABELS
 from backend.models.domain import Alert, EventSnapshot, now_ts
 from backend.models.enums import AlertKind, EventStatus, Sport
@@ -39,6 +41,14 @@ VERDICT_TEXT: dict[str, str] = {
 #: Unter so vielen ausgewerteten Alarmen wird kein Durchschnitt gezeigt.
 #: Muss zu MIN_SCORED im Dashboard passen.
 MIN_SCORED = 10
+
+#: Symbole je Empfehlungsgrad - dieselben wie im Dashboard.
+GRADE_ICONS: dict[str, str] = {
+    "strong": "🟢",
+    "moderate": "🟡",
+    "weak": "⚪",
+    "skip": "⛔",
+}
 
 #: Symbole je Urteil der Nachkontrolle - dieselbe Reihenfolge wie im Dashboard.
 VERDICT_ICONS: dict[str, str] = {
@@ -174,6 +184,8 @@ def format_alert(alert: Alert, *, compact: bool = False) -> str:
     if not compact and alert.kind is not AlertKind.ODDS_MOVE:
         lines.extend(explain_alert(alert))
 
+    lines.extend(recommendation_block(alert, compact=compact))
+
     if not compact:
         lines.append(f"⏳ Quotenalter: {alert.odds_age:.1f}s")
         for note in alert.notes[:3]:
@@ -181,6 +193,50 @@ def format_alert(alert: Alert, *, compact: bool = False) -> str:
         lines.append("")
         lines.append("<i>Nur Analyse - keine automatische Wettabgabe.</i>")
     return "\n".join(line for line in lines if line is not None)
+
+
+def recommendation_block(alert: Alert, *, compact: bool = False) -> list[str]:
+    """Der Teil, auf den es ankommt: spielen oder nicht - und mit wie viel.
+
+    Bewusst *nach* den Rohzahlen: der Value steht oben, die Einordnung
+    darunter. Eine gemeldete Abweichung von 200 % ist kein Grund für einen
+    großen Einsatz, sondern der Verdacht auf einen Datenfehler - und genau
+    das sagt dieser Block dann auch.
+    """
+    data = alert.recommendation
+    if not data:
+        return []
+    # Ein Bewegungsalarm hat keine faire Quote. Ein "nicht spielen" wäre hier
+    # kein Urteil, sondern nur dessen Abwesenheit - also gar nichts schreiben.
+    if data.get("reason_code") == "keine_referenz":
+        return []
+    grade = str(data.get("grade", ""))
+    icon = GRADE_ICONS.get(grade, "•")
+    label = data.get("label") or GRADE_LABELS.get(grade, grade)
+    lines = ["", f"{icon} <b>Empfehlung</b>: {esc(label)}"]
+
+    stake = float(data.get("stake_percent") or 0.0)
+    if stake > 0:
+        amount = data.get("stake_amount")
+        betrag = f" (≈ {float(amount):.2f})" if amount else ""
+        lines.append(f"💵 <b>Einsatz</b>: {stake:.1f} % der Bankroll{betrag}")
+        edge = float(data.get("credible_edge_percent") or 0.0)
+        raw = float(data.get("raw_edge_percent") or 0.0)
+        lines.append(f"📐 <b>Realistischer Vorteil</b>: {edge:+.1f} % (gemeldet {raw:+.1f} %)")
+    else:
+        reason = data.get("reason_label") or data.get("reason_code") or ""
+        if reason:
+            lines.append(f"↳ {esc(reason)}")
+
+    if compact:
+        return lines
+
+    for warning in list(data.get("warnings") or [])[:2]:
+        lines.append(f"⚠️ {esc(warning)}")
+    if stake > 0:
+        for item in list(data.get("checklist") or [])[:2]:
+            lines.append(f"☑️ {esc(item)}")
+    return lines
 
 
 def explain_alert(alert: Alert) -> list[str]:
@@ -238,6 +294,55 @@ def format_alert_short(alert: Alert) -> str:
         f"    <code>{alert.odds:.2f}</code> (fair <code>{alert.fair_odds:.2f}</code>) · "
         f"<b>{alert.value_percent:+.1f}%</b> · C{alert.confidence}"
     )
+
+
+def format_slip(slip, *, window_minutes: int, bankroll: float = 0.0) -> str:
+    """Die Bestenliste für Telegram.
+
+    Wenn nichts übrig bleibt, steht hier *warum*. Eine leere Liste ohne
+    Begründung ist der Zustand, in dem man an der Anlage zweifelt statt am
+    Markt.
+    """
+    lines = [
+        "🎯 <b>Was jetzt spielen?</b>",
+        f"<i>Aus den Alarmen der letzten {window_minutes} Minuten.</i>",
+        "",
+    ]
+    if not slip.picks:
+        lines.append(f"Nichts Spielbares unter {slip.considered} geprüften Alarmen.")
+        if slip.dropped:
+            lines.append("")
+            lines.append("<b>Warum</b>:")
+            for code, count in slip.dropped.most_common(5):
+                lines.append(f"• {esc(RECOMMENDATION_REASONS.get(code, code))}: {count}")
+        lines.append("")
+        lines.append("<i>Kein Vorschlag ist auch ein Ergebnis - erzwungene Wetten kosten Geld.</i>")
+        return "\n".join(lines)
+
+    for index, pick in enumerate(slip.picks, start=1):
+        alert, rec = pick.alert, pick.recommendation
+        icon = GRADE_ICONS.get(rec.grade.value, "•")
+        betrag = f" (≈ {rec.stake_amount:.2f})" if rec.stake_amount else ""
+        lines += [
+            f"{index}. {icon} <b>{esc(alert.event.home)}</b> vs <b>{esc(alert.event.away)}</b>",
+            f"    {esc(alert.market.label)} · <b>{esc(alert.selection.display)}</b>",
+            f"    🏦 {esc(alert.bookmaker)} · <code>{alert.odds:.2f}</code>",
+            f"    💵 <b>{rec.stake_percent:.1f} %</b> der Bankroll{betrag} · "
+            f"Vorteil {rec.credible_edge_percent:+.1f} % "
+            f"(gemeldet {rec.raw_edge_percent:+.1f} %)",
+            "",
+        ]
+
+    lines.append(f"<b>Gesamteinsatz</b>: {slip.total_stake_percent:.1f} % der Bankroll")
+    if not bankroll:
+        lines.append("<i>Keine Bankroll hinterlegt - Beträge werden nicht geraten (BANKROLL).</i>")
+    lines += [
+        "",
+        "<i>Preise vor dem Setzen selbst prüfen. Schätzung aus öffentlichen",
+        "Quoten - keine Wettberatung, keine Gewinngarantie. Es wird nichts",
+        "automatisch gesetzt.</i>",
+    ]
+    return "\n".join(lines)
 
 
 def format_event_line(event: EventSnapshot) -> str:
@@ -394,6 +499,7 @@ Ich überwache Fußball- und Tennisquoten mehrerer Anbieter und melde:
 /live — laufende Events
 /value — beste aktuelle Value-Alarme
 /alerts — letzte Alarme
+/tipps — was man jetzt spielen würde, mit Einsatz
 /bilanz — Trefferbilanz: was aus den Alarmen wurde
 /pause — Benachrichtigungen pausieren
 /resume — Benachrichtigungen fortsetzen

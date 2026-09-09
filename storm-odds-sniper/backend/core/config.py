@@ -182,6 +182,33 @@ class Settings(BaseSettings):
     #: Ab dieser Änderung gilt ein Preis als bewegt (Prozentpunkte).
     followup_move_percent: float = 2.0
 
+    # ------------------------------------------------------------ Empfehlung
+    #: Aus einem Alarm wird eine Handlungsempfehlung abgeleitet: spielen,
+    #: kleiner Einsatz, beobachten oder sein lassen - mit Einsatzgröße.
+    #: Es wird nichts gesetzt; die Empfehlung ist eine Rechnung, keine Wette.
+    recommend_enabled: bool = True
+    #: Bankroll in Kontowährung. 0 = nicht hinterlegt; dann nennt die
+    #: Empfehlung nur Prozentwerte und erfindet keinen Betrag.
+    bankroll: float = 0.0
+    #: Anteil des vollen Kelly-Einsatzes. Voller Kelly unterstellt, die
+    #: geschätzte Wahrscheinlichkeit sei exakt - sie ist es nie.
+    kelly_fraction: float = 0.25
+    max_stake_percent: float = 2.0
+    max_total_stake_percent: float = 6.0
+    #: Größenordnung eines Vorteils, den es real geben kann (in Prozent).
+    #: Alles weit darüber gilt als Datenfehler und wird abgewertet, nicht
+    #: hochsortiert - siehe backend/core/recommendation.py.
+    plausible_edge_percent: float = 8.0
+    max_plausible_edge_percent: float = 18.0
+    absurd_edge_percent: float = 60.0
+    recommend_min_confidence: int = 65
+    recommend_min_bookmakers: int = 4
+    recommend_max_odds_age: float = 15.0
+    #: Wetten je Event. Zwei Selektionen desselben Spiels hängen zusammen.
+    recommend_max_picks_per_event: int = 1
+    #: Wie viele Empfehlungen die Bestenliste höchstens enthält.
+    recommend_limit: int = 10
+
     # -------------------------------------------------------------- scanner
     scanner_queue_size: int = 20000
     scanner_workers: int = 4

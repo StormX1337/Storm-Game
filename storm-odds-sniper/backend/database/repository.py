@@ -291,6 +291,9 @@ class Repository:
                 fingerprint=alert.fingerprint,
                 detected_at=_dt(alert.detected_at),
                 payload=alert.to_json(),
+                recommendation_grade=alert.recommendation.get("grade"),
+                stake_percent=alert.recommendation.get("stake_percent"),
+                credible_edge_percent=alert.recommendation.get("credible_edge_percent"),
             )
             .on_conflict_do_nothing(index_elements=[AlertRow.fingerprint])
         )
@@ -499,6 +502,7 @@ class Repository:
         kind: str | None = None,
         min_value: float | None = None,
         since: datetime | None = None,
+        grade: str | None = None,
     ) -> list[AlertRow]:
         stmt: Select = (
             select(AlertRow).order_by(AlertRow.detected_at.desc()).limit(limit).offset(offset)
@@ -511,6 +515,8 @@ class Repository:
             stmt = stmt.where(AlertRow.value_percent >= min_value)
         if since is not None:
             stmt = stmt.where(AlertRow.detected_at >= since)
+        if grade:
+            stmt = stmt.where(AlertRow.recommendation_grade == grade)
         async with self.session_factory() as session:
             return list((await session.execute(stmt)).scalars().all())
 

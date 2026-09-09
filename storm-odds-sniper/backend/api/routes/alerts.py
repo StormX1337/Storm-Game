@@ -7,8 +7,25 @@ from datetime import UTC, datetime, timedelta
 from fastapi import APIRouter, Query, Request
 
 from backend.api.deps import get_optional_repository
+from backend.core.config import get_settings
+from backend.core.recommendation import (
+    REASON_LABELS,
+    Recommendation,
+    build_slip,
+    config_from_settings,
+)
+from backend.core.recommendation import evaluate as recommend
 from backend.core.verdict import VERDICT_LABELS
-from backend.models.schemas import AlertResponse, BookmakerScore, ScorecardResponse, VerdictCount
+from backend.models.domain import Alert, to_utc
+from backend.models.schemas import (
+    AlertResponse,
+    BookmakerScore,
+    RecommendationPick,
+    RecommendationsResponse,
+    ScorecardResponse,
+    SuppressionReason,
+    VerdictCount,
+)
 
 router = APIRouter(prefix="/alerts", tags=["alerts"])
 
@@ -58,6 +75,45 @@ def _row_to_response(row) -> AlertResponse:
         closing_odds=row.closing_odds,
         closing_fair_odds=row.closing_fair_odds,
         resolved_at=row.resolved_at,
+        recommendation=payload.get("recommendation") or None,
+    )
+
+
+def _alert_to_response(alert: Alert) -> AlertResponse:
+    """Ein Alarm aus dem Speicher als API-Antwort.
+
+    Getrennt von ``_row_to_response``: dort kommen Urteil und CLV aus
+    eigenen Spalten, hier gibt es nur den Alarm selbst.
+    """
+    score = alert.event.score
+    return AlertResponse(
+        kind=alert.kind.value,
+        sport=alert.event.sport.value,
+        event_id=alert.event.event_id,
+        event_title=alert.event.title,
+        league=alert.event.league,
+        status=alert.event.status.value,
+        score=score.as_text() if score else None,
+        market=alert.market.key,
+        market_label=alert.market.label,
+        selection=alert.selection.key,
+        selection_label=alert.selection.display,
+        bookmaker=alert.bookmaker,
+        odds=alert.odds,
+        fair_odds=alert.fair_odds,
+        value_percent=alert.value_percent,
+        deviation_percent=alert.deviation_percent,
+        confidence=alert.confidence,
+        error_score=alert.error_score,
+        bookmaker_count=alert.bookmaker_count,
+        detected_at=to_utc(alert.detected_at),
+        provider=alert.provider,
+        previous_odds=alert.previous_odds,
+        notes=list(alert.notes),
+        fair_models=dict(alert.fair_models),
+        score_components=dict(alert.score_components),
+        references=dict(alert.references),
+        recommendation=alert.recommendation or None,
     )
 
 
@@ -70,13 +126,24 @@ async def list_alerts(
     kind: str | None = Query(default=None, pattern="^(value|fixed_error|odds_move)$"),
     min_value: float | None = Query(default=None, ge=-100, le=1000),
     since_minutes: int | None = Query(default=None, ge=1, le=10080),
+    grade: str | None = Query(
+        default=None,
+        pattern="^(strong|moderate|weak|skip)$",
+        description="Nur Alarme mit diesem Empfehlungsgrad.",
+    ),
 ) -> list[AlertResponse]:
     repo = get_optional_repository(request)
     if repo is None:
         return []
     since = datetime.now(UTC) - timedelta(minutes=since_minutes) if since_minutes else None
     rows = await repo.list_alerts(
-        limit=limit, offset=offset, sport=sport, kind=kind, min_value=min_value, since=since
+        limit=limit,
+        offset=offset,
+        sport=sport,
+        kind=kind,
+        min_value=min_value,
+        since=since,
+        grade=grade,
     )
     return [_row_to_response(row) for row in rows]
 
@@ -114,3 +181,77 @@ async def scorecard(
         by_kind=data["by_kind"],
         by_bookmaker=[BookmakerScore(**entry) for entry in data["by_bookmaker"]],
     )
+
+
+@router.get(
+    "/recommendations",
+    response_model=RecommendationsResponse,
+    summary="Was soll man jetzt spielen?",
+    description=(
+        "Die Bestenliste aus den letzten Alarmen: Wette, Buchmacher, Quote "
+        "und ein Einsatzvorschlag in Prozent der Bankroll.\n\n"
+        "Sortiert wird **nicht** nach der gemeldeten Value-Zahl. Eine Quote "
+        "weit jenseits des Marktes ist fast immer ein Datenfehler und kein "
+        "Vorteil; solche Alarme werden abgewertet statt nach oben sortiert. "
+        "Maßgeblich ist `credible_edge_percent`.\n\n"
+        "Das Fenster ist bewusst kurz: ein Preis von vor zwei Stunden ist "
+        "keine Empfehlung mehr, sondern Geschichte."
+    ),
+)
+async def recommendations(
+    request: Request,
+    window_minutes: int = Query(default=15, ge=1, le=1440),
+    limit: int | None = Query(default=None, ge=1, le=50),
+    sport: str | None = Query(default=None, pattern="^(football|tennis)$"),
+    scan_limit: int = Query(
+        default=300, ge=1, le=500, description="Wie viele Alarme höchstens geprüft werden."
+    ),
+) -> RecommendationsResponse:
+    settings = get_settings()
+    config = config_from_settings(settings)
+    response = RecommendationsResponse(
+        window_minutes=window_minutes,
+        considered=0,
+        bankroll=settings.bankroll or None,
+    )
+    repo = get_optional_repository(request)
+    if repo is None:
+        return response
+
+    since = datetime.now(UTC) - timedelta(minutes=window_minutes)
+    rows = await repo.list_alerts(limit=scan_limit, sport=sport, since=since)
+
+    pairs: list[tuple[Alert, Recommendation]] = []
+    unreadable = 0
+    for row in rows:
+        try:
+            alert = Alert.from_json(row.payload or {})
+        except Exception:  # noqa: BLE001 - eine kaputte Zeile kippt nicht die Liste
+            unreadable += 1
+            continue
+        stored = alert.recommendation
+        # Gespeichert wird bevorzugt: dieselbe Zahl, die im Dashboard und in
+        # Telegram steht. Ältere Alarme haben noch keine - die werden hier
+        # nachgerechnet, statt sie stillschweigend wegzulassen.
+        suggestion = Recommendation.from_json(stored) if stored else recommend(alert, config)
+        pairs.append((alert, suggestion))
+
+    slip = build_slip(pairs, config=config, limit=limit or settings.recommend_limit)
+    if unreadable:
+        slip.dropped["alarm_unlesbar"] += unreadable
+        slip.considered += unreadable
+
+    response.considered = slip.considered
+    response.total_stake_percent = slip.total_stake_percent
+    response.picks = [
+        RecommendationPick(
+            alert=_alert_to_response(pick.alert),
+            recommendation=pick.recommendation.to_json(),
+        )
+        for pick in slip.picks
+    ]
+    response.dropped = [
+        SuppressionReason(code=code, label=REASON_LABELS.get(code, code), count=count)
+        for code, count in slip.dropped.most_common()
+    ]
+    return response

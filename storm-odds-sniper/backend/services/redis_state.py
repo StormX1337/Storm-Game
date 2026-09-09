@@ -390,6 +390,27 @@ class RedisState:
                 continue
         return out
 
+    async def add_grades(self, counts: dict[str, int]) -> None:
+        """Empfehlungsgrade gebündelt zählen - wie die Urteile."""
+        if not counts:
+            return
+        pipe = self.client.pipeline(transaction=False)
+        for grade, amount in counts.items():
+            pipe.hincrby("stat:grades", grade, amount)
+        pipe.expire("stat:grades", 86400 * 7)
+        await pipe.execute()
+
+    async def get_grades(self) -> dict[str, int]:
+        raw = await self.client.hgetall("stat:grades")
+        out: dict[str, int] = {}
+        for key, value in (raw or {}).items():
+            code = key.decode() if isinstance(key, bytes) else key
+            try:
+                out[code] = int(value)
+            except (TypeError, ValueError):
+                continue
+        return out
+
     # ------------------------------------------------------------ Statistik
     async def counters(self) -> dict[str, int]:
         live = await self.client.scard("ev:live")

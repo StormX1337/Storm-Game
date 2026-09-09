@@ -300,6 +300,147 @@ def dispatcher(redis_state):
     return AlertDispatcher(bot=None, state=redis_state, settings=settings, repository=None)
 
 
+class TestEmpfehlungInDerNachricht:
+    """Die Empfehlung steht in der Nachricht - und ordnet die Rohzahl ein."""
+
+    @staticmethod
+    def _alert(**overrides):
+        from backend.core.recommendation import evaluate
+
+        alert = football_alert(**overrides)
+        alert.recommendation = evaluate(alert).to_json()
+        return alert
+
+    def test_spielbarer_alarm_nennt_einsatz(self):
+        text = fmt.format_alert(
+            self._alert(kind=AlertKind.VALUE, odds=2.10, value_percent=11.0, error_score=0)
+        )
+        assert "Empfehlung" in text
+        assert "Einsatz" in text
+        assert "% der Bankroll" in text
+        assert "Realistischer Vorteil" in text
+
+    def test_absurder_alarm_wird_als_nicht_spielbar_ausgewiesen(self):
+        """56.7 % Value sind kein Grund zu spielen, sondern ein Verdacht."""
+        text = fmt.format_alert(self._alert(odds=4.20, value_percent=250.0))
+        assert "Nicht spielen" in text
+        assert "Datenfehler" in text
+        assert "Einsatz" not in text
+
+    def test_alarm_ohne_empfehlung_bleibt_unveraendert(self):
+        text = fmt.format_alert(football_alert())
+        assert "Empfehlung" not in text
+
+    def test_jeder_grad_hat_ein_symbol(self):
+        from backend.core.recommendation import Grade
+
+        for grade in Grade:
+            assert fmt.GRADE_ICONS[grade.value]
+
+    def test_hilfe_nennt_den_tipps_befehl(self):
+        assert "/tipps" in fmt.HELP_TEXT
+
+
+class TestBestenliste:
+    @staticmethod
+    def _slip(*alerts, **kwargs):
+        from backend.core.recommendation import recommend_all
+
+        return recommend_all(alerts, **kwargs)
+
+    def test_liste_nennt_wette_buchmacher_quote_und_einsatz(self):
+        alert = football_alert(kind=AlertKind.VALUE, odds=2.10, value_percent=11.0)
+        text = fmt.format_slip(self._slip(alert), window_minutes=20)
+        assert "Was jetzt spielen" in text
+        assert "ExampleBookie" in text
+        assert "2.10" in text
+        assert "% der Bankroll" in text
+        assert "Gesamteinsatz" in text
+
+    def test_leere_liste_nennt_den_grund(self):
+        alert = football_alert(value_percent=250.0)
+        text = fmt.format_slip(self._slip(alert), window_minutes=20)
+        assert "Nichts Spielbares" in text
+        assert "Warum" in text
+        assert "Datenfehler" in text
+
+    def test_ohne_bankroll_werden_keine_betraege_erfunden(self):
+        alert = football_alert(kind=AlertKind.VALUE, odds=2.10, value_percent=11.0)
+        text = fmt.format_slip(self._slip(alert), window_minutes=20, bankroll=0.0)
+        assert "Keine Bankroll hinterlegt" in text
+        assert "≈" not in text
+
+    def test_mit_bankroll_steht_der_betrag_dabei(self):
+        from backend.core.recommendation import RecommendationConfig
+
+        alert = football_alert(kind=AlertKind.VALUE, odds=2.10, value_percent=11.0)
+        slip = self._slip(alert, config=RecommendationConfig(bankroll=2000.0))
+        text = fmt.format_slip(slip, window_minutes=20, bankroll=2000.0)
+        assert "≈" in text
+        assert "Keine Bankroll hinterlegt" not in text
+
+    def test_hinweis_auf_keine_wettberatung(self):
+        alert = football_alert(kind=AlertKind.VALUE, odds=2.10, value_percent=11.0)
+        text = fmt.format_slip(self._slip(alert), window_minutes=20)
+        assert "keine Wettberatung" in text
+        assert "automatisch gesetzt" in text
+
+
+class TestTippsBefehl:
+    """/tipps gegen eine echte Datenbank - der Befehl darf nie leer laufen."""
+
+    @staticmethod
+    def _update():
+        gesendet: list[str] = []
+
+        async def reply_text(text, **kwargs):
+            gesendet.append(text)
+
+        update = SimpleNamespace(
+            callback_query=None,
+            effective_message=SimpleNamespace(reply_text=reply_text),
+            effective_user=SimpleNamespace(id=1, username="u", first_name="U"),
+        )
+        return update, gesendet
+
+    @staticmethod
+    def _context(repository, settings):
+        return SimpleNamespace(
+            application=SimpleNamespace(
+                bot_data={"repository": repository, "settings": settings, "admin_ids": set()}
+            )
+        )
+
+    async def test_gespeicherte_alarme_werden_zur_liste(self, repository):
+        from backend.core.recommendation import evaluate
+        from backend.telegram.handlers import cmd_tips
+
+        alert = football_alert(kind=AlertKind.VALUE, odds=2.10, value_percent=11.0)
+        alert.fingerprint = "tipps-1"
+        alert.recommendation = evaluate(alert).to_json()
+        await repository.write_batch(alerts=[alert])
+
+        update, gesendet = self._update()
+        await cmd_tips(update, self._context(repository, Settings(_env_file=None)))
+        assert len(gesendet) == 1
+        assert "ExampleBookie" in gesendet[0]
+        assert "% der Bankroll" in gesendet[0]
+
+    async def test_ohne_datenbank_sagt_der_befehl_warum(self, repository):
+        from backend.telegram.handlers import cmd_tips
+
+        update, gesendet = self._update()
+        await cmd_tips(update, self._context(None, Settings(_env_file=None)))
+        assert "Datenbank nicht verfügbar" in gesendet[0]
+
+    async def test_ohne_alarme_bleibt_die_antwort_verstaendlich(self, repository):
+        from backend.telegram.handlers import cmd_tips
+
+        update, gesendet = self._update()
+        await cmd_tips(update, self._context(repository, Settings(_env_file=None)))
+        assert "Nichts Spielbares" in gesendet[0]
+
+
 class TestDispatcherFilters:
     def test_matching_alert_passes(self, dispatcher):
         assert dispatcher.matches(football_alert(), user_settings())
@@ -398,3 +539,19 @@ class TestBefehlsregistrierung:
 
         documented = set(re.findall(r"^/(\w+)", fmt.HELP_TEXT, flags=re.MULTILINE))
         assert documented <= self._registered_commands()
+
+
+class TestBewegungsalarmOhneUrteil:
+    """Ein Bewegungsalarm hat keine faire Quote - dann gibt es auch kein
+    "nicht spielen". Fehlendes Urteil und negatives Urteil sind zweierlei."""
+
+    def test_bewegungsalarm_bekommt_keinen_empfehlungsblock(self):
+        from backend.core.recommendation import evaluate
+
+        alert = football_alert(
+            kind=AlertKind.ODDS_MOVE, odds=2.10, previous_odds=1.80, value_percent=0.0
+        )
+        alert.recommendation = evaluate(alert).to_json()
+        text = fmt.format_alert(alert)
+        assert "Empfehlung" not in text
+        assert "Nicht spielen" not in text

@@ -423,6 +423,10 @@ class Alert:
     #: Die verglichenen Quoten: Buchmacher -> Preis. Damit lässt sich der
     #: Alarm ohne Blick in die Datenbank überprüfen.
     references: dict[str, float] = field(default_factory=dict)
+    #: Handlungsempfehlung (siehe ``backend/core/recommendation.py``). Als
+    #: Dict statt als Objekt, damit dieses Modul frei von Auswertelogik
+    #: bleibt. Leer = noch nicht bewertet.
+    recommendation: dict[str, Any] = field(default_factory=dict)
 
     @property
     def detected_at_text(self) -> str:
@@ -454,6 +458,7 @@ class Alert:
             "fair_models": dict(self.fair_models),
             "score_components": dict(self.score_components),
             "references": dict(self.references),
+            "recommendation": dict(self.recommendation),
         }
 
     @classmethod
@@ -481,4 +486,5 @@ class Alert:
             fair_models=dict(data.get("fair_models") or {}),
             score_components=dict(data.get("score_components") or {}),
             references=dict(data.get("references") or {}),
+            recommendation=dict(data.get("recommendation") or {}),
         )

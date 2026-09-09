@@ -7,6 +7,7 @@ from fastapi import APIRouter, Query, Request
 from backend.api.deps import get_optional_repository
 from backend.core.filters import SUPPRESSION_LABELS
 from backend.core.logging import get_logger
+from backend.core.recommendation import GRADE_LABELS, PLAYABLE_GRADES
 from backend.core.verdict import VERDICT_LABELS
 from backend.models.schemas import StatsResponse, SuppressionReason, VerdictCount
 
@@ -38,6 +39,7 @@ async def stats(
     providers: list[dict] = []
     suppressed: dict[str, int] = {}
     verdicts: dict[str, int] = {}
+    grades: dict[str, int] = {}
     followups_pending = 0
     if state is not None:
         try:
@@ -45,6 +47,7 @@ async def stats(
             providers = await state.get_provider_health()
             suppressed = await state.get_suppressions()
             verdicts = await state.get_verdicts()
+            grades = await state.get_grades()
             followups_pending = await state.pending_followups()
         except Exception as exc:  # noqa: BLE001 - Kennzahlen dürfen nie 500 werfen
             log.debug("redis-kennzahlen nicht lesbar", error=str(exc))
@@ -75,4 +78,11 @@ async def stats(
         ],
         followups_pending=followups_pending,
         avg_clv_percent=avg_clv,
+        grades=[
+            SuppressionReason(code=code, label=GRADE_LABELS.get(code, code), count=count)
+            for code, count in sorted(grades.items(), key=lambda kv: kv[1], reverse=True)
+        ],
+        playable_alerts=sum(
+            count for code, count in grades.items() if code in {g.value for g in PLAYABLE_GRADES}
+        ),
     )

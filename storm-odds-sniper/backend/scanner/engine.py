@@ -50,6 +50,8 @@ from backend.core.metrics import (
 )
 from backend.core.normalization import EventMatcher, flip_market, flip_selection
 from backend.core.outlier import OutlierConfig, score_outlier
+from backend.core.recommendation import config_from_settings as recommendation_config
+from backend.core.recommendation import evaluate as recommend
 from backend.core.value_engine import (
     EngineConfig,
     MarketBook,
@@ -141,6 +143,10 @@ class ScannerEngine:
             )
         )
         self.verdict_config = VerdictConfig(move_percent=self.settings.followup_move_percent)
+        #: Aus einem Alarm wird eine Handlungsempfehlung. Sie wird hier
+        #: berechnet und mitgeschrieben, damit Dashboard, Telegram und
+        #: API dieselbe Zahl zeigen - statt drei eigene Rechnungen.
+        self.recommendation_config = recommendation_config(self.settings)
 
         self._queue: asyncio.Queue[ProviderMessage] = asyncio.Queue(
             maxsize=self.settings.scanner_queue_size
@@ -159,6 +165,9 @@ class ScannerEngine:
         self._suppressed: Counter[str] = Counter()
         #: Urteile der Nachkontrolle, gebündelt wie die Unterdrückungen.
         self._verdicts: Counter[str] = Counter()
+        #: Wie die Alarme empfohlen wurden - je Grad. Ohne diese Zählung
+        #: sieht man nur die Alarme und nie, wie viele davon spielbar waren.
+        self._grades: Counter[str] = Counter()
         #: Urteile, deren Alarm beim Schreiben noch nicht in der Datenbank
         #: stand. Der Writer arbeitet gebündelt und kann unter Last hinter der
         #: Nachkontrolle liegen - ohne diesen Puffer ginge das Urteil verloren.
@@ -256,6 +265,9 @@ class ScannerEngine:
             if self._verdicts:
                 await self.state.add_verdicts(dict(self._verdicts))
                 self._verdicts.clear()
+            if self._grades:
+                await self.state.add_grades(dict(self._grades))
+                self._grades.clear()
         log.info("scanner gestoppt", **{k: v for k, v in self.stats.items()})
 
     async def _enqueue(self, message: ProviderMessage) -> None:
@@ -686,6 +698,13 @@ class ScannerEngine:
     async def _publish(self, alert: Alert) -> Alert:
         self.stats["alerts"] += 1
         ALERTS_EMITTED.labels(alert.kind.value, alert.event.sport.value).inc()
+        if self.settings.recommend_enabled:
+            # Genau ein Ort, an dem die Empfehlung entsteht. Danach hängt sie
+            # am Alarm und geht mit ihm nach Redis, in die Datenbank und in
+            # jede Oberfläche - dieselbe Zahl überall.
+            suggestion = recommend(alert, self.recommendation_config)
+            alert.recommendation = suggestion.to_json()
+            self._grades[suggestion.grade.value] += 1
         await self.state.publish_alert(alert)
         await self._queue_db("alert", alert)
         if self.settings.followup_enabled:
@@ -708,6 +727,8 @@ class ScannerEngine:
             value=f"{alert.value_percent:+.1f}%",
             confidence=alert.confidence,
             error_score=alert.error_score,
+            empfehlung=alert.recommendation.get("grade", "-"),
+            einsatz=alert.recommendation.get("stake_percent", 0.0),
         )
         return alert
 
@@ -948,6 +969,10 @@ class ScannerEngine:
                     verdicts = dict(self._verdicts)
                     self._verdicts.clear()
                     await self.state.add_verdicts(verdicts)
+                if self._grades:
+                    grades = dict(self._grades)
+                    self._grades.clear()
+                    await self.state.add_grades(grades)
                 counters = await self.state.counters()
                 LIVE_EVENTS.set(counters["live_events"])
                 TRACKED_EVENTS.set(counters["tracked_events"])
