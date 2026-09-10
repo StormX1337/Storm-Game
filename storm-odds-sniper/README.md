@@ -687,7 +687,48 @@ vs
 
 ## 14. Schwellen einstellen
 
-Die wichtigsten Werte in der `.env`:
+### Live und vor dem Anpfiff sind zwei Märkte
+
+Das Dashboard hat oben zwei Ansichten: **Live** und **Vor dem Anpfiff**. Das
+ist kein Filter auf denselben Daten, sondern eine echte Trennung — vor dem
+Anpfiff sind mehr Buchmacher da, alle hatten Tage Zeit, und die Preise stehen
+dichter beieinander. Mit den Live-Schwellen käme dort fast nichts durch, und
+was durchkäme, wäre eher ein Datenfehler als ein Vorteil.
+
+Einschalten:
+
+```bash
+PREMATCH_ENABLED=true
+```
+
+Standardmäßig **aus**, weil es zusätzliches API-Kontingent kostet — nach einem
+Update soll sich niemandes Rechnung ändern, ohne dass er es eingeschaltet hat.
+
+Prematch bekommt einen **eigenen, langsamen Abruf** mit eigenem Seitenbudget.
+Der Grund ist nicht Ordnungsliebe: bei einem gemeinsamen Abruf würden die
+vielen kommenden Spiele die wenigen laufenden aus dem Kontingent verdrängen —
+der Live-Teil liefe leer, ohne dass irgendwo ein Fehler stünde.
+
+| Variable | Standard | Bedeutung |
+|---|---|---|
+| `PREMATCH_ENABLED` | `false` | zweiter Abruf für Spiele vor dem Anpfiff |
+| `PREMATCH_POLL_INTERVAL` | `60` | eigener Takt (live: 5 s) |
+| `PREMATCH_MAX_PAGES` | `2` | eigenes Seitenbudget |
+| `PREMATCH_MIN_VALUE_PERCENT` | `4` | leer = wie live |
+| `PREMATCH_MIN_OUTLIER_PERCENT` | `6` | leer = wie live |
+| `PREMATCH_MIN_BOOKMAKERS` | `5` | vor dem Anpfiff sind mehr Bücher da |
+
+Diese Zahlen sind ein **Startpunkt, kein Naturgesetz**. Prüf sie mit
+`./scripts/backtest.sh` an deinen eigenen Daten, sobald genug Prematch-Alarme
+nachkontrolliert sind.
+
+Jeder Alarm trägt seitdem seine Welt mit (`phase`: `live` oder `prematch`) —
+in der Datenbank als eigene Spalte, in der API als Filter
+(`/alerts?phase=prematch`) und im WebSocket. Alarme aus der Zeit davor tragen
+`unknown`: welcher davon zu einem laufenden Spiel gehörte, steht nirgends
+verlässlich, und Raten wäre hier Erfinden.
+
+### Die wichtigsten Werte in der `.env`
 
 | Variable | Standard | Bedeutung |
 |---|---|---|

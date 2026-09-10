@@ -290,6 +290,7 @@ class Repository:
                 error_score=alert.error_score,
                 bookmaker_count=alert.bookmaker_count,
                 provider=alert.provider,
+                phase=alert.phase,
                 fingerprint=alert.fingerprint,
                 detected_at=_dt(alert.detected_at),
                 payload=alert.to_json(),
@@ -505,6 +506,7 @@ class Repository:
         min_value: float | None = None,
         since: datetime | None = None,
         grade: str | None = None,
+        phase: str | None = None,
     ) -> list[AlertRow]:
         stmt: Select = (
             select(AlertRow).order_by(AlertRow.detected_at.desc()).limit(limit).offset(offset)
@@ -519,6 +521,8 @@ class Repository:
             stmt = stmt.where(AlertRow.detected_at >= since)
         if grade:
             stmt = stmt.where(AlertRow.recommendation_grade == grade)
+        if phase:
+            stmt = stmt.where(AlertRow.phase == phase)
         async with self.session_factory() as session:
             return list((await session.execute(stmt)).scalars().all())
 

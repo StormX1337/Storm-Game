@@ -8,6 +8,18 @@
   "use strict";
 
   const API = window.STORM_API_BASE || "/api";
+
+  // Live oder vor dem Anpfiff. Die Wahl überlebt einen Neuladen - wer sich
+  // die Prematch-Ansicht eingestellt hat, will sie beim nächsten Blick aufs
+  // Handy nicht wieder suchen.
+  let phase = "live";
+  try {
+    const gespeichert = localStorage.getItem("storm.phase");
+    if (gespeichert === "live" || gespeichert === "prematch") phase = gespeichert;
+  } catch {
+    /* Privates Fenster oder gesperrter Speicher - dann eben live. */
+  }
+  const istLive = () => phase === "live";
   const MAX_ALERTS = 150;
   const MAX_MOVES = 40;
   // Unter so vielen ausgewerteten Alarmen wird kein Durchschnitt angezeigt -
@@ -598,10 +610,15 @@
     // Der Server markiert solche Events als `stale`; hier fliegen sie aus der
     // Live-Liste, statt als laufend weiterzustehen.
     const events = [...state.events.values()]
-      .filter((e) => e.status === "LIVE" && !e.stale)
+      .filter((e) => (istLive() ? e.status === "LIVE" : e.status === "PRE_MATCH") && !e.stale)
       .sort((a, b) => (a.sport || "").localeCompare(b.sport || ""));
     $("live-count").textContent = String(events.length);
     if (!events.length) {
+      if (!istLive()) {
+        list.innerHTML =
+          '<li class="empty">Keine Spiele vor dem Anpfiff — ist PREMATCH_ENABLED gesetzt?</li>';
+        return;
+      }
       const veraltet = [...state.events.values()].filter((e) => e.stale).length;
       list.innerHTML = veraltet
         ? `<li class="empty">Keine laufenden Events — ${veraltet} ohne frische Daten (beendet oder Quelle still)</li>`
@@ -1080,6 +1097,12 @@
   function ingestAlert(alert, fresh) {
     if (!alert || !alert.kind) return;
     const normalized = normalizeAlert(alert);
+    // Der WebSocket liefert beide Welten. Was nicht zur offenen Ansicht
+    // gehört, gehört auch nicht in ihre Listen und Zähler - sonst stünde in
+    // der Live-Ansicht plötzlich ein Spiel von morgen.
+    if (normalized.phase && normalized.phase !== "unknown" && normalized.phase !== phase) {
+      return;
+    }
     normalized.__fresh = !!fresh;
     if (normalized.kind === "odds_move") {
       state.moves.unshift(normalized);
@@ -1109,6 +1132,9 @@
           : null;
       return {
         kind: raw.kind,
+        // Vom Server, nicht hier erraten: der Alarm weiß selbst, in welcher
+        // Welt er entstanden ist.
+        phase: raw.phase || "unknown",
         sport: ev.sport,
         event_id: ev.event_id,
         event_title: `${ev.home} vs ${ev.away}`,
@@ -1274,9 +1300,13 @@
       stats: "/stats",
       providers: "/health/providers",
       events: "/events?limit=120",
-      alerts: "/alerts?limit=80",
+      alerts: `/alerts?limit=80&phase=${phase}`,
       scorecard: "/alerts/scorecard",
-      recommendations: "/alerts/recommendations?window_minutes=30",
+      // Vor dem Anpfiff ist ein Preis von vor einer halben Stunde noch
+      // aktuell; live wäre er Geschichte. Darum zwei Fenster.
+      recommendations: `/alerts/recommendations?window_minutes=${
+        istLive() ? 30 : 180
+      }&phase=${phase}`,
       arbitrage: "/arbitrage",
       ledger: "/bets/ledger",
       bets: "/bets?limit=12",
@@ -1305,6 +1335,12 @@
     // steht nicht. Ohne diesen Hinweis bleiben alle Kacheln stumm auf
     // "Lade…" - und das sieht aus wie ein Fehler im Dashboard.
     reportApiDown(Object.keys(data).length === 0);
+    // "Nichts gefunden" und "gar nicht gesucht" sehen im Dashboard gleich aus.
+    // Genau dieser Unterschied gehört hingeschrieben.
+    const prematchAus = $("prematch-off");
+    if (prematchAus) {
+      prematchAus.hidden = istLive() || !data.health || data.health.prematch_enabled !== false;
+    }
 
     const {
       health,
@@ -1431,6 +1467,40 @@
 
   /* -------------------------------------------------------------- Start */
 
+  /** Ansicht umschalten: Live <-> vor dem Anpfiff. */
+  function setzePhase(neu) {
+    if (neu !== "live" && neu !== "prematch") return;
+    if (neu === phase) return;
+    phase = neu;
+    try {
+      localStorage.setItem("storm.phase", phase);
+    } catch {
+      /* Ohne Speicher gilt die Wahl nur für diese Sitzung - kein Grund
+         abzubrechen. */
+    }
+    document.querySelectorAll(".phase").forEach((button) => {
+      const an = button.dataset.phase === phase;
+      button.classList.toggle("is-active", an);
+      button.setAttribute("aria-selected", an ? "true" : "false");
+    });
+    const titel = $("events-title");
+    if (titel) titel.textContent = istLive() ? "Live-Events" : "Spiele vor dem Anpfiff";
+    // Die alten Alarme gehören zur anderen Welt - sie stehen zu lassen,
+    // während oben "Vor dem Anpfiff" leuchtet, wäre schlicht falsch.
+    state.alerts = [];
+    state.moves = [];
+    state.bookmakers.clear();
+    renderAlerts();
+    renderMoves();
+    renderBookmakers();
+    renderEvents();
+    refresh();
+  }
+
+  document.querySelectorAll(".phase").forEach((button) => {
+    button.addEventListener("click", () => setzePhase(button.dataset.phase));
+  });
+
   document.querySelectorAll(".chip").forEach((chip) => {
     chip.addEventListener("click", () => {
       document.querySelectorAll(".chip").forEach((c) => c.classList.remove("chip--on"));
@@ -1448,6 +1518,13 @@
   setInterval(() => {
     if (state.socket && state.socket.readyState === WebSocket.OPEN) state.socket.send("ping");
   }, 25000);
+
+  // Gespeicherte Wahl sichtbar machen, bevor die ersten Daten kommen.
+  if (phase !== "live") {
+    const gewaehlt = phase;
+    phase = "live";
+    setzePhase(gewaehlt);
+  }
 
   setInterval(refresh, 10000);
   refresh();

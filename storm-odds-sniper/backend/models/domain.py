@@ -442,9 +442,24 @@ class Alert:
     def detected_at_text(self) -> str:
         return datetime.fromtimestamp(self.detected_at).strftime("%H:%M:%S.%f")[:-3]
 
+    @property
+    def phase(self) -> str:
+        """Läuft das Spiel schon - oder ist es noch vor dem Anpfiff?
+
+        Alles, was weder das eine noch das andere sicher ist, heißt hier
+        ``unknown``. Einen Alarm ohne bekannten Eventzustand ins Live- oder
+        Prematch-Fach zu sortieren, wäre geraten und nicht gemessen.
+        """
+        if self.event.status is EventStatus.LIVE:
+            return "live"
+        if self.event.status is EventStatus.PRE_MATCH:
+            return "prematch"
+        return "unknown"
+
     def to_json(self) -> dict[str, Any]:
         return {
             "kind": self.kind.value,
+            "phase": self.phase,
             "event": self.event.to_json(),
             "market": self.market.key,
             "market_label": self.market.label,

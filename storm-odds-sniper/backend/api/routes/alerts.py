@@ -42,6 +42,7 @@ def _row_to_response(row) -> AlertResponse:
         score_text = f"{score['home']}:{score['away']}"
     return AlertResponse(
         id=row.id,
+        phase=getattr(row, "phase", None) or "unknown",
         fingerprint=row.fingerprint,
         kind=row.kind,
         sport=row.sport,
@@ -132,6 +133,15 @@ async def list_alerts(
         pattern="^(strong|moderate|weak|skip)$",
         description="Nur Alarme mit diesem Empfehlungsgrad.",
     ),
+    phase: str | None = Query(
+        default=None,
+        pattern="^(live|prematch)$",
+        description=(
+            "Nur laufende Spiele oder nur solche vor dem Anpfiff. Ohne Angabe "
+            "kommt beides. Alarme aus der Zeit vor dieser Spalte tragen "
+            "'unknown' und erscheinen deshalb in keiner der beiden Auswahlen."
+        ),
+    ),
 ) -> list[AlertResponse]:
     repo = get_optional_repository(request)
     if repo is None:
@@ -145,6 +155,7 @@ async def list_alerts(
         min_value=min_value,
         since=since,
         grade=grade,
+        phase=phase,
     )
     return [_row_to_response(row) for row in rows]
 
@@ -207,6 +218,15 @@ async def recommendations(
     scan_limit: int = Query(
         default=300, ge=1, le=500, description="Wie viele Alarme höchstens geprüft werden."
     ),
+    phase: str | None = Query(
+        default=None,
+        pattern="^(live|prematch)$",
+        description=(
+            "Nur laufende Spiele oder nur solche vor dem Anpfiff. Ohne Angabe "
+            "kommt beides. Alarme aus der Zeit vor dieser Spalte tragen "
+            "'unknown' und erscheinen deshalb in keiner der beiden Auswahlen."
+        ),
+    ),
 ) -> RecommendationsResponse:
     settings = app_settings(request)
     config = config_from_settings(settings)
@@ -220,7 +240,7 @@ async def recommendations(
         return response
 
     since = datetime.now(UTC) - timedelta(minutes=window_minutes)
-    rows = await repo.list_alerts(limit=scan_limit, sport=sport, since=since)
+    rows = await repo.list_alerts(limit=scan_limit, sport=sport, since=since, phase=phase)
 
     pairs: list[tuple[Alert, Recommendation]] = []
     unreadable = 0

@@ -25,6 +25,30 @@
     </div>
   </header>
 
+  <!--
+    Live und Prematch sind zwei verschiedene Märkte, keine zwei Filter auf
+    denselben Daten: vor dem Anpfiff sind mehr Bücher da, die Preise stehen
+    dichter beieinander, und es gelten eigene Schwellen. Deshalb zwei
+    Ansichten statt einer gemischten Liste, in der man beides nicht
+    auseinanderhalten könnte.
+  -->
+  <nav class="phases" role="tablist" aria-label="Ansicht">
+    <button class="phase is-active" id="phase-live" role="tab" aria-selected="true"
+            data-phase="live">Live</button>
+    <button class="phase" id="phase-prematch" role="tab" aria-selected="false"
+            data-phase="prematch">Vor dem Anpfiff</button>
+  </nav>
+
+  <div id="prematch-off" class="banner banner--warn" role="status" hidden>
+    <strong>Prematch ist nicht eingeschaltet</strong>
+    <span>
+      Es werden keine Spiele vor dem Anpfiff abgerufen, deshalb bleibt diese
+      Ansicht leer. Einschalten mit <code>PREMATCH_ENABLED=true</code> in der
+      <code>.env</code>, danach <code>docker compose up -d</code>. Das kostet
+      zusätzliches API-Kontingent — der Live-Abruf bleibt davon unberührt.
+    </span>
+  </div>
+
   <div id="api-down" class="banner banner--warn" role="status" hidden>
     <strong>⚠️ Die API antwortet nicht</strong>
     <span>
@@ -138,7 +162,7 @@
     </section>
 
     <section class="card">
-      <header class="card__head"><h2>Live-Events</h2><span class="badge" id="live-count">0</span></header>
+      <header class="card__head"><h2 id="events-title">Live-Events</h2><span class="badge" id="live-count">0</span></header>
       <ul class="list" id="live-list"><li class="empty">Keine laufenden Events</li></ul>
     </section>
 

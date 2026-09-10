@@ -46,6 +46,7 @@ async def health(request: Request) -> HealthResponse:
         version=settings.app_version,
         environment=settings.environment,
         uptime_seconds=round(now_ts() - started, 1),
+        prematch_enabled=settings.prematch_enabled,
         components=components,
     )
 

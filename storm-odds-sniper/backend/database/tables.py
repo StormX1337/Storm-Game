@@ -189,6 +189,14 @@ class AlertRow(Base):
     error_score: Mapped[int] = mapped_column(Integer)
     bookmaker_count: Mapped[int] = mapped_column(Integer)
     provider: Mapped[str] = mapped_column(String(32), default="")
+    #: "live" oder "prematch" - der Zustand des Events zum Zeitpunkt des
+    #: Alarms. Steht als eigene Spalte da und nicht nur im payload, weil
+    #: danach gefiltert wird und ein JSON-Feld dafür keinen Index bekommt.
+    #: "unknown" tragen nur Zeilen aus der Zeit vor dieser Spalte - die
+    #: nachträglich einzusortieren hieße, Daten zu erfinden.
+    phase: Mapped[str] = mapped_column(
+        String(12), index=True, default="unknown", server_default="unknown"
+    )
     fingerprint: Mapped[str] = mapped_column(String(32), unique=True)
     detected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     payload: Mapped[dict | None] = mapped_column(JSONType, nullable=True)

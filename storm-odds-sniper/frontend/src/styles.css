@@ -358,3 +358,35 @@ a:hover { text-decoration: underline; }
 @media (prefers-reduced-motion: reduce) {
   .row--new { animation: none; }
 }
+
+
+/* ------------------------------------------------- Live / Vor dem Anpfiff */
+/* Zwei Ansichten, ein Griff. Auf dem Handy die erste Reihe unter dem Kopf -
+   wer hier steht, muss ohne Scrollen sehen, welche Welt er gerade ansieht. */
+.phases {
+  display: flex;
+  gap: 6px;
+  margin: 0 0 14px;
+  padding: 4px;
+  background: var(--card, #161a21);
+  border: 1px solid var(--line, #232833);
+  border-radius: 12px;
+}
+.phase {
+  flex: 1;
+  padding: 10px 12px;
+  min-height: 44px; /* Daumengröße, nicht Mauszeigergröße */
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted, #8b93a3);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.phase:hover { color: var(--text, #e6e9ef); }
+.phase.is-active {
+  background: var(--accent-soft, rgba(90, 140, 255, 0.16));
+  color: var(--accent, #6f9bff);
+}
+.phase:focus-visible { outline: 2px solid var(--accent, #6f9bff); outline-offset: 2px; }

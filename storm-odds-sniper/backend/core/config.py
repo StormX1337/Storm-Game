@@ -142,6 +142,34 @@ class Settings(BaseSettings):
     scan_prematch: bool = True
     sports_enabled: str = "football,tennis"
 
+    # ------------------------------------------------------- Vor dem Anpfiff
+    #
+    # Prematch ist nicht Live mit anderem Etikett, sondern ein anderer Markt:
+    # es sind mehr Buchmacher da, alle hatten Tage Zeit, und die Preise stehen
+    # dichter beieinander. Mit den Live-Schwellen käme darum fast nichts durch -
+    # und was durchkäme, wäre eher ein Datenfehler als ein Vorteil. Deshalb
+    # eigene Schwellen. ``None`` heißt "wie live".
+    #
+    # Standardmäßig AUS: Prematch kostet zusätzliches Kontingent, und das darf
+    # sich nach einem Update niemandes Rechnung ändern, ohne dass er es
+    # eingeschaltet hat.
+    prematch_enabled: bool = False
+    #: Prematch-Preise bewegen sich in Minuten, nicht in Sekunden. Ein eigener,
+    #: langsamer Takt hält den Live-Abruf schnell und das Kontingent heil.
+    prematch_poll_interval: float = 60.0
+    #: Eigenes Seitenbudget - sonst verdrängen die vielen Prematch-Events die
+    #: laufenden Spiele aus dem gemeinsamen Kontingent.
+    prematch_max_pages: int = 2
+    #: Engere Märkte, also niedrigere Schwelle. Zahlen sind ein Startpunkt und
+    #: gehören mit ./scripts/backtest.sh an den eigenen Daten geprüft.
+    prematch_min_value_percent: float | None = 4.0
+    prematch_min_outlier_percent: float | None = 6.0
+    #: Vor dem Anpfiff sind mehr Bücher da - ein Konsens aus dreien ist hier
+    #: schwächer als live, wo drei schon viel sind.
+    prematch_min_bookmakers: int | None = 5
+    prematch_min_confidence: int | None = None
+    prematch_min_error_score: int | None = None
+
     # ----------------------------------------------------- Bewegungsalarme
     move_alerts_enabled: bool = True
     #: Ab dieser Preisbewegung innerhalb von ``move_alert_window`` wird gemeldet.

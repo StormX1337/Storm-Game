@@ -23,6 +23,10 @@ class HealthResponse(BaseModel):
     version: str
     environment: str
     uptime_seconds: float
+    #: Werden auch Spiele vor dem Anpfiff abgerufen? Das Dashboard sagt sonst
+    #: "keine Daten", wo in Wahrheit gar nicht gesucht wird - der Unterschied
+    #: zwischen "nichts gefunden" und "nicht eingeschaltet".
+    prematch_enabled: bool = False
     components: list[HealthComponent]
 
 
@@ -191,6 +195,8 @@ class OddsHistoryResponse(BaseModel):
 
 class AlertResponse(BaseModel):
     id: int | None = None
+    #: "live", "prematch" oder "unknown" - siehe Alert.phase.
+    phase: str = "unknown"
     #: Eindeutige Kennung des Alarms - damit lässt sich eine Wette später
     #: genau diesem Alarm zuordnen.
     fingerprint: str = ""

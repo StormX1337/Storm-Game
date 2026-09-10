@@ -231,6 +231,13 @@ class SportsGameOddsProvider(OddsProvider):
         leagues: str = "",
         sport_ids: str = "SOCCER,TENNIS",
         live_only: bool = False,
+        #: Laufende Spiele überspringen. Für den zweiten, langsamen Abruf
+        #: gedacht: die laufenden holt der schnelle Live-Abruf im
+        #: Fünf-Sekunden-Takt, hier wären sie nur veraltete Dubletten.
+        exclude_live: bool = False,
+        #: Zwei Instanzen derselben Quelle brauchen zwei Namen, sonst
+        #: überschreiben sie einander in der Anbieter-Gesundheit.
+        name: str | None = None,
         poll_interval: float = 20.0,
         max_pages: int = 3,
         page_limit: int = 50,
@@ -246,6 +253,9 @@ class SportsGameOddsProvider(OddsProvider):
         self.leagues = leagues
         self.sport_ids = sport_ids
         self.live_only = live_only
+        self.exclude_live = exclude_live
+        if name:
+            self.name = name
         self.poll_interval = poll_interval
         self.max_pages = max(1, max_pages)
         self.page_limit = max(1, min(page_limit, 100))
@@ -319,7 +329,13 @@ class SportsGameOddsProvider(OddsProvider):
                 },
                 follow_redirects=True,
             )
-        self.mark_connected("live" if self.live_only else "pre-match + live")
+        if self.live_only:
+            modus = "live"
+        elif self.exclude_live:
+            modus = "nur vor dem Anpfiff"
+        else:
+            modus = "pre-match + live"
+        self.mark_connected(modus)
         log.info(
             "sportsgameodds verbunden",
             leagues=self.leagues or "(alle)",
@@ -671,6 +687,11 @@ class SportsGameOddsProvider(OddsProvider):
                 if parsed is None:
                     continue
                 snapshot, event_quotes = parsed
+                if self.exclude_live and snapshot.status is EventStatus.LIVE:
+                    # Nicht verschweigen, sondern zählen: sonst sieht es
+                    # aus, als lieferte die Quelle weniger als sie tut.
+                    self.skipped["laufend - vom Live-Abruf abgedeckt"] += 1
+                    continue
                 events.append(snapshot)
                 quotes.extend(event_quotes)
             cursor = payload.get("nextCursor") or None

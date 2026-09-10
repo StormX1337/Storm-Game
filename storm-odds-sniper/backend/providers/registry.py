@@ -128,6 +128,32 @@ def _make_sportsgameodds(settings: Settings) -> OddsProvider:
     )
 
 
+def _make_sportsgameodds_prematch(settings: Settings) -> OddsProvider:
+    """Zweiter Abruf derselben Quelle - nur für Spiele vor dem Anpfiff.
+
+    Warum getrennt und nicht einfach ``live_only=false``: beide Sorten kämen
+    dann aus einem Abruf und teilten sich dasselbe Seitenbudget. Prematch-
+    Events sind ein Vielfaches der laufenden, sie würden die Live-Spiele
+    schlicht verdrängen - der Live-Teil des Dashboards liefe leer, ohne dass
+    irgendwo ein Fehler stünde. Zwei Ströme mit eigenem Takt und eigenem
+    Budget halten beides am Leben.
+    """
+    return SportsGameOddsProvider(
+        api_key=settings.sgo_api_key,
+        base_url=settings.sgo_base_url,
+        leagues=settings.sgo_leagues,
+        sport_ids=settings.sgo_sport_ids,
+        live_only=False,
+        exclude_live=True,
+        name="sportsgameodds_prematch",
+        poll_interval=settings.prematch_poll_interval,
+        max_pages=settings.prematch_max_pages,
+        page_limit=settings.sgo_page_limit,
+        bookmakers=settings.sgo_bookmakers,
+        rate_limit_per_minute=settings.sgo_rate_limit_per_minute,
+    )
+
+
 FACTORIES: dict[str, Callable[[Settings], OddsProvider]] = {
     "sportsgameodds": _make_sportsgameodds,
     "the_odds_api": _make_the_odds_api,
@@ -164,6 +190,25 @@ def build_providers(settings: Settings) -> list[OddsProvider]:
             log.warning("provider nicht startbar", provider=key, error=str(exc))
         except Exception as exc:  # noqa: BLE001 - ein defekter Adapter darf nicht alles stoppen
             log.error("provider-initialisierung fehlgeschlagen", provider=key, error=str(exc))
+
+    # Prematch hängt an derselben Quelle und denselben Zugangsdaten - es ist
+    # ein zweiter Abruf, kein zweiter Anbieter. Darum ein Schalter statt eines
+    # weiteren Eintrags in PROVIDERS.
+    if settings.prematch_enabled and any(p.name == "sportsgameodds" for p in providers):
+        try:
+            providers.append(_make_sportsgameodds_prematch(settings))
+            log.info(
+                "prematch-abruf aktiv",
+                takt_s=settings.prematch_poll_interval,
+                seiten=settings.prematch_max_pages,
+            )
+        except Exception as exc:  # noqa: BLE001 - der Live-Abruf muss weiterlaufen
+            log.error("prematch-abruf nicht startbar", error=str(exc))
+    elif settings.prematch_enabled:
+        log.warning(
+            "PREMATCH_ENABLED=true, aber sportsgameodds läuft nicht - "
+            "ohne diese Quelle gibt es keinen Prematch-Abruf."
+        )
 
     if not providers:
         log.error(

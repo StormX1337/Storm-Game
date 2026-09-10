@@ -106,6 +106,24 @@ def thresholds_from_settings(settings: Settings) -> FilterThresholds:
     )
 
 
+def prematch_thresholds_from_settings(
+    settings: Settings, live: FilterThresholds
+) -> FilterThresholds:
+    """Schwellen für Spiele vor dem Anpfiff.
+
+    Abgeleitet von den Live-Schwellen, damit nichts doppelt gepflegt werden
+    muss: gesetzt wird nur, was in der .env ausdrücklich anders steht. Wer
+    nichts einträgt, bekommt exakt die Live-Werte - keine stillen Extras.
+    """
+    return live.with_overrides(
+        min_value_percent=settings.prematch_min_value_percent,
+        min_outlier_percent=settings.prematch_min_outlier_percent,
+        min_bookmakers=settings.prematch_min_bookmakers,
+        min_confidence=settings.prematch_min_confidence,
+        min_error_score=settings.prematch_min_error_score,
+    )
+
+
 class ScannerEngine:
     """Verbindet Provider, Redis, Datenbank und Analyse."""
 
@@ -123,6 +141,9 @@ class ScannerEngine:
         self.providers = providers or []
 
         self.thresholds = thresholds_from_settings(self.settings)
+        # Vor dem Anpfiff gelten andere Maßstäbe - siehe
+        # prematch_thresholds_from_settings.
+        self.prematch_thresholds = prematch_thresholds_from_settings(self.settings, self.thresholds)
         self.value_engine = ValueEngine(
             EngineConfig(
                 max_quote_age=self.settings.max_odds_age_seconds,
@@ -405,6 +426,12 @@ class ScannerEngine:
         return quote
 
     # -------------------------------------------------------------- Analyse
+    def _thresholds_for(self, event: EventSnapshot) -> FilterThresholds:
+        """Live oder vor dem Anpfiff - dieselbe Frage, andere Maßstäbe."""
+        if event.status is EventStatus.LIVE:
+            return self.thresholds
+        return self.prematch_thresholds
+
     def _suppress(self, code: str) -> None:
         """Eine Unterdrückung vermerken - lokal, Übertragung erfolgt gebündelt."""
         ALERTS_SUPPRESSED.labels(code).inc()
@@ -575,7 +602,8 @@ class ScannerEngine:
         market_drift: float | None = None,
     ) -> Alert | None:
         quote = change.quote
-        decision = check_quote(quote, event, self.thresholds, reference=reference)
+        schwellen = self._thresholds_for(event)
+        decision = check_quote(quote, event, schwellen, reference=reference)
         if not decision.passed:
             self._suppress(decision.code)
             return None
@@ -611,7 +639,7 @@ class ScannerEngine:
             return None
         if (
             fair.fair_probability > self.settings.max_fair_probability
-            or fair.fair_odds > self.thresholds.max_odds
+            or fair.fair_odds > schwellen.max_odds
         ):
             # Praktisch entschiedener Markt bzw. extremer Außenseiter jenseits
             # des Quotenbands - dort ist jede Value-Angabe Modellrauschen.
@@ -647,13 +675,13 @@ class ScannerEngine:
             bookmaker_count=fair.bookmaker_count,
             error_score=outlier.error_score,
             confidence=fair.confidence,
-            thresholds=self.thresholds,
+            thresholds=schwellen,
         )
         value_ok = check_value_signal(
             value_percent=value,
             bookmaker_count=fair.bookmaker_count,
             confidence=fair.confidence,
-            thresholds=self.thresholds,
+            thresholds=schwellen,
         )
         if error_ok.passed:
             kind = AlertKind.FIXED_ERROR
@@ -724,10 +752,11 @@ class ScannerEngine:
         # Dieselbe Quotenprüfung wie bei Value/Error: Quotenband, Alter,
         # Suspendierung, Sportart. Ohne sie melden praktisch entschiedene
         # Märkte absurde Sprünge (1.04 -> 200.00).
-        if not check_quote(quote, event, self.thresholds).passed:
+        schwellen = self._thresholds_for(event)
+        if not check_quote(quote, event, schwellen).passed:
             return None
         if change.previous_price is not None and not (
-            self.thresholds.min_odds <= change.previous_price <= self.thresholds.max_odds
+            schwellen.min_odds <= change.previous_price <= schwellen.max_odds
         ):
             return None
 
@@ -753,9 +782,7 @@ class ScannerEngine:
         alert.fingerprint = fingerprint(alert)
         gate = AlertGate(
             self.state,
-            self.thresholds.with_overrides(
-                alert_cooldown_seconds=self.settings.move_alert_cooldown
-            ),
+            schwellen.with_overrides(alert_cooldown_seconds=self.settings.move_alert_cooldown),
         )
         allowed = await gate.allow(alert)
         if not allowed.passed:
