@@ -169,6 +169,14 @@ class Settings(BaseSettings):
     prematch_min_bookmakers: int | None = 5
     prematch_min_confidence: int | None = None
     prematch_min_error_score: int | None = None
+    #: Abkühlzeit vor dem Anpfiff - deutlich länger als live, und zwar aus
+    #: einem gemessenen Grund: eine Fehlquote, die stundenlang steht, zappelt
+    #: dabei um ein, zwei Cent. Jede dieser Winzigkeiten ist eine Änderung,
+    #: also eine neue Bewertung - und nach Ablauf der Sperre ein neuer Alarm.
+    #: Mit den Live-Werten (60 s) wären das rund 180 Telegram-Nachrichten für
+    #: EINE Wette, die drei Stunden lang gültig ist. Live ist das kein Thema:
+    #: dort ändern sich Preise wirklich, und ein Spiel dauert 90 Minuten.
+    prematch_alert_cooldown: int = 1800
 
     # ----------------------------------------------------- Bewegungsalarme
     move_alerts_enabled: bool = True

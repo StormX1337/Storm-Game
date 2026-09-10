@@ -717,6 +717,16 @@ der Live-Teil liefe leer, ohne dass irgendwo ein Fehler stünde.
 | `PREMATCH_MIN_VALUE_PERCENT` | `4` | leer = wie live |
 | `PREMATCH_MIN_OUTLIER_PERCENT` | `6` | leer = wie live |
 | `PREMATCH_MIN_BOOKMAKERS` | `5` | vor dem Anpfiff sind mehr Bücher da |
+| `PREMATCH_ALERT_COOLDOWN` | `1800` | Sperre je Quotenzeile (live: `60`) |
+
+Die lange Sperre ist kein Geschmack, sondern gemessen. Eine Fehlquote, die
+stundenlang steht, **zappelt** dabei um ein, zwei Cent. Jede dieser
+Winzigkeiten ist eine Preisänderung, also eine neue Bewertung — und sobald
+die Sperre abgelaufen ist, ein neuer Alarm. Mit den Live-Werten (60 s) und
+einem Prematch-Takt von 60 s wären das rund **180 Telegram-Nachrichten für
+eine einzige Wette**, die drei Stunden gültig ist. Live ist das kein Thema:
+dort ändern sich Preise wirklich, und ein Spiel dauert 90 Minuten statt zwei
+Tagen.
 
 Diese Zahlen sind ein **Startpunkt, kein Naturgesetz**. Prüf sie mit
 `./scripts/backtest.sh` an deinen eigenen Daten — der Bericht trennt die

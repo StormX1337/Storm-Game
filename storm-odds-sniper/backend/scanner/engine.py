@@ -121,6 +121,7 @@ def prematch_thresholds_from_settings(
         min_bookmakers=settings.prematch_min_bookmakers,
         min_confidence=settings.prematch_min_confidence,
         min_error_score=settings.prematch_min_error_score,
+        alert_cooldown_seconds=settings.prematch_alert_cooldown,
     )
 
 
@@ -154,7 +155,12 @@ class ScannerEngine:
             min_deviation_percent=self.settings.min_outlier_percent,
             max_quote_age=self.settings.max_odds_age_seconds,
         )
+        # Zwei Torwächter, weil die Abkühlzeit je Welt eine andere ist. Mit
+        # einem gemeinsamen (den Live-Werten) hätte eine Fehlquote vor dem
+        # Anpfiff im Poll-Takt weitergemeldet - stundenlang, für eine einzige
+        # Wette.
         self.gate = AlertGate(state, self.thresholds)
+        self.prematch_gate = AlertGate(state, self.prematch_thresholds)
         self.matcher = EventMatcher(threshold=self.settings.event_match_threshold)
         # Für die Nachkontrolle gilt ein großzügigeres Alter: hier wird nicht
         # gewettet, sondern gemessen. Die Redis-TTL begrenzt die Daten ohnehin.
@@ -790,8 +796,13 @@ class ScannerEngine:
             return None
         return await self._publish(alert)
 
+    def _gate_for(self, event: EventSnapshot) -> AlertGate:
+        if event.status is EventStatus.LIVE:
+            return self.gate
+        return self.prematch_gate
+
     async def _emit(self, alert: Alert) -> Alert | None:
-        allowed = await self.gate.allow(alert)
+        allowed = await self._gate_for(alert.event).allow(alert)
         if not allowed.passed:
             self._suppress(allowed.code)
             return None

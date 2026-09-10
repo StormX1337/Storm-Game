@@ -8,10 +8,12 @@ halten die Trennung fest: eigene Schwellen, eigener Abruf, eigene Ansicht.
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from backend.core.config import Settings
-from backend.models.domain import Alert
+from backend.models.domain import Alert, now_ts
 from backend.models.enums import AlertKind, EventStatus
 from backend.providers.registry import build_providers
 from backend.scanner.engine import (
@@ -176,3 +178,72 @@ class TestPhaseAmAlarm:
             bookmaker_count=4,
         )
         assert alert.phase == erwartet
+
+
+class TestAbkuehlzeit:
+    """Eine Fehlquote, die stundenlang steht, zappelt dabei um ein, zwei Cent.
+
+    Jede dieser Winzigkeiten ist eine Preisänderung, also eine neue
+    Bewertung - und sobald die Sperre abgelaufen ist, ein neuer Alarm. Mit
+    den Live-Werten (60 s) und einem Prematch-Takt von 60 s wären das rund
+    180 Telegram-Nachrichten für EINE Wette, die drei Stunden gültig ist.
+    Gemessen, nicht vermutet: ohne die längere Sperre kamen hier sechs
+    Alarme für eine einzige zappelnde Quote.
+    """
+
+    BUECHER = {"b1": 2.02, "b2": 2.00, "b3": 2.00, "b4": 1.99}
+
+    async def _runden(self, redis_state, status, *, runden=4, **overrides):
+        einstellungen = {
+            "alert_cooldown_seconds": 1,
+            "prematch_min_value_percent": 4.0,
+            "prematch_min_outlier_percent": 6.0,
+            "prematch_min_bookmakers": 3,
+        }
+        einstellungen.update(overrides)
+        engine = ScannerEngine(
+            scanner_settings(**einstellungen), state=redis_state, repository=None, providers=[]
+        )
+        event = make_event(status=status, provider_event_id="p-1")
+        gesamt = 0
+        for runde in range(runden):
+            # Zappeln um einen Cent - weit innerhalb der Duplikat-Toleranz,
+            # also derselbe Fund, aber eine echte Preisänderung.
+            preise = dict(self.BUECHER, b5=2.30 if runde % 2 == 0 else 2.31)
+            alarme = await engine.handle_message(
+                market_message(preise, event=event, ts=now_ts() + runde * 0.001)
+            )
+            gesamt += len([a for a in alarme if a.kind is not AlertKind.ODDS_MOVE])
+            await asyncio.sleep(1.1)
+        return gesamt
+
+    async def test_lange_sperre_meldet_nur_einmal(self, redis_state):
+        gemeldet = await self._runden(
+            redis_state, EventStatus.PRE_MATCH, prematch_alert_cooldown=60
+        )
+        assert gemeldet == 1
+
+    async def test_ohne_lange_sperre_kaeme_die_flut(self, redis_state):
+        """Der Gegenbeweis - sonst belegt der Test oben nur, dass irgendetwas
+        anderes die Alarme verschluckt."""
+        gemeldet = await self._runden(redis_state, EventStatus.PRE_MATCH, prematch_alert_cooldown=1)
+        assert gemeldet >= 3
+
+    async def test_live_wird_nicht_mitgedrosselt(self, redis_state):
+        """Live bleibt schnell: dort ändern sich Preise wirklich, und ein
+        Spiel dauert 90 Minuten, keine zwei Tage."""
+        gemeldet = await self._runden(
+            redis_state,
+            EventStatus.LIVE,
+            prematch_alert_cooldown=600,
+            min_value_percent=4.0,
+            min_outlier_percent=6.0,
+        )
+        assert gemeldet >= 3
+
+    async def test_schwellen_tragen_die_eigene_sperre(self):
+        settings = Settings(_env_file=None, alert_cooldown_seconds=60, prematch_alert_cooldown=1800)
+        live = thresholds_from_settings(settings)
+        vor = prematch_thresholds_from_settings(settings, live)
+        assert live.alert_cooldown_seconds == 60
+        assert vor.alert_cooldown_seconds == 1800
