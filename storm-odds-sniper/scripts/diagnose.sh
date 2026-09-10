@@ -73,6 +73,60 @@ dienst_ok() {
     esac
 }
 
+#: docker exec mit Zeitlimit - ein festhängender Container darf die
+#: Diagnose nicht mit einfrieren.
+in_container() {
+    cid=$1
+    shift
+    if command -v timeout >/dev/null 2>&1; then
+        timeout 10 docker exec "$cid" "$@" 2>/dev/null
+    else
+        docker exec "$cid" "$@" 2>/dev/null
+    fi
+}
+
+#: Können die Container einander überhaupt beim Namen finden? Ist das
+#: kaputt, sind ALLE anderen Befunde nur Folgeerscheinungen: die API
+#: erreicht die Datenbank nicht, der Scanner den Anbieter nicht, nginx die
+#: API nicht - sieben Symptome, eine Ursache.
+dns_pruefen() {
+    for dienst in api scanner frontend; do
+        cid=$(docker compose ps -q "$dienst" 2>/dev/null | head -n1)
+        [ -z "$cid" ] && continue
+        if in_container "$cid" getent hosts postgres >/dev/null; then
+            echo "ok"
+        else
+            echo "kaputt $dienst"
+        fi
+        return 0
+    done
+    echo "unbekannt"
+}
+
+#: Veröffentlicht der Dashboard-Container wirklich einen Host-Port?
+#: Ein laufender Container ohne Portabbildung ist genau das Bild, das der
+#: Browser als "refused" zeigt - und in "docker compose ps" sieht er
+#: ansonsten kerngesund aus.
+port_veroeffentlicht() {
+    cid=$(docker compose ps -q frontend 2>/dev/null | head -n1)
+    [ -z "$cid" ] && return 1
+    docker inspect -f '{{json .NetworkSettings.Ports}}' "$cid" 2>/dev/null \
+        | grep -q 'HostPort'
+}
+
+#: Aus welchem Verzeichnis wurden die laufenden Container erzeugt?
+#: Der Projektname steht in der compose-Datei fest. Zwei Arbeitskopien auf
+#: derselben Maschine steuern deshalb DENSELBEN Stack - wer im falschen
+#: Verzeichnis "up -d" tippt, startet stillschweigend fremden Code mit
+#: fremder .env, und im richtigen Verzeichnis sieht alles korrekt aus.
+erzeugt_in() {
+    cid=$(docker compose ps -aq api 2>/dev/null | head -n1)
+    [ -z "$cid" ] && return 0
+    docker inspect \
+        -f '{{index .Config.Labels "com.docker.compose.project.working_dir"}}' \
+        "$cid" 2>/dev/null
+}
+
 #: Was am Dashboard vorbei kaputt ist. Ein stilles Loch im Scanner sieht
 #: von außen aus wie "keine Alarme, ist wohl gerade nichts los".
 nebenbefund() {
@@ -165,6 +219,26 @@ befund() {
         return 0
     fi
 
+    # Vor allen Einzelbefunden: geht die Namensauflösung? Wenn nicht, ist
+    # jeder folgende Befund nur eine Folge davon.
+    dns=$(dns_pruefen)
+    case "$dns" in
+        kaputt*)
+            echo "  Die Container finden einander nicht beim Namen - im"
+            echo "  Container \"$(echo "$dns" | cut -d' ' -f2)\" lässt sich \"postgres\" nicht auflösen."
+            echo
+            echo "  Das erklärt alles andere auf einmal: die API kommt nicht an"
+            echo "  die Datenbank, der Scanner nicht an den Anbieter, nginx nicht"
+            echo "  an die API. Ursache ist das Docker-Netz, nicht der Code."
+            echo
+            echo "  Nächster Schritt (Daten bleiben erhalten, es gibt kein -v):"
+            echo "    docker compose down"
+            echo "    systemctl restart docker"
+            echo "    docker compose up -d"
+            nebenbefund
+            return 0 ;;
+    esac
+
     case "$schuld" in
         "")
             ;;
@@ -197,6 +271,23 @@ befund() {
             echo "    docker compose logs frontend | tail -40"
             nebenbefund; return 0 ;;
     esac
+
+    # Läuft der Dashboard-Container, ohne einen Host-Port zu veröffentlichen?
+    # Dann ist er von aussen unerreichbar und sieht trotzdem gesund aus.
+    if ! port_veroeffentlicht; then
+        echo "  Der Dashboard-Container läuft, veröffentlicht aber KEINEN Port"
+        echo "  auf dem Server. Von aussen ist er damit unerreichbar - genau"
+        echo "  das meldet der Browser als \"refused\"."
+        echo
+        echo "  Das passiert, wenn der Docker-Dienst neu gestartet wurde,"
+        echo "  während der Container lief. Der Container überlebt, seine"
+        echo "  Portabbildung nicht. Neu erzeugen hilft:"
+        echo
+        echo "  Nächster Schritt:"
+        echo "    docker compose up -d --force-recreate frontend"
+        nebenbefund
+        return 0
+    fi
 
     # Alle Glieder heil - dann liegt es zwischen Server und Browser.
     antwort=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 \
@@ -233,7 +324,22 @@ dashboard_port=${dashboard_port:-8080}
 befund
 
 line "Codestand"
-if [ -d .git ]; then
+# Der Stack läuft womöglich aus einem anderen Verzeichnis als dem hier.
+if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+    quelle=$(erzeugt_in)
+    hier=$(pwd -P)
+    if [ -n "${quelle:-}" ] && [ "$quelle" != "$hier" ]; then
+        echo "ACHTUNG: die laufenden Container stammen aus einem ANDEREN Verzeichnis."
+        echo "  hier:      $hier"
+        echo "  gestartet: $quelle"
+        echo "Der Projektname steht fest, beide Kopien steuern denselben Stack."
+        echo "Was du hier änderst, läuft erst nach einem 'docker compose up -d'"
+        echo "aus GENAU diesem Verzeichnis."
+        echo
+    fi
+fi
+# Das Git-Verzeichnis kann eine Ebene höher liegen (Unterordner im Repo).
+if git rev-parse --git-dir >/dev/null 2>&1; then
     printf 'Commit:  %s\n' "$(git rev-parse --short HEAD 2>/dev/null || echo '?')"
     printf 'Branch:  %s\n' "$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo '?')"
     changed=$(git status --porcelain 2>/dev/null | wc -l)

@@ -1527,6 +1527,40 @@ Berichts ist Belegmaterial darunter. Vier Dinge, die er nebenbei erledigt:
   Portfreigabe beim Anbieter.
 * **Ohne Docker-Daemon** steht genau das da, statt sieben Folgefehlern.
 
+Drei Ursachen, die der Befund seit diesem Ausfall ausdrücklich kennt, weil
+sie im Browser alle gleich aussehen:
+
+**1. Die Container finden einander nicht beim Namen.** Steht auf dem Host
+`systemd-resolved`, kann `nameserver 127.0.0.53` in den Container
+durchschlagen — eine Adresse, die es im Netz-Namensraum des Containers nicht
+gibt. Dann erreicht die API die Datenbank nicht, der Scanner den Anbieter
+nicht, nginx die API nicht: sieben Symptome, eine Ursache. Der Befund prüft
+das zuerst und meldet es *statt* der Folgefehler.
+
+```bash
+docker compose down          # kein -v: die Daten bleiben
+systemctl restart docker
+docker compose up -d
+```
+
+**2. Der Dashboard-Container läuft, veröffentlicht aber keinen Port.** Wird
+der Docker-Dienst neu gestartet, während der Container läuft, überlebt der
+Container — seine Portabbildung nicht. In `docker compose ps` sieht er
+kerngesund aus, die Spalte `PORTS` ist nur leer, und von aussen ist er
+unerreichbar.
+
+```bash
+docker compose up -d --force-recreate frontend
+```
+
+**3. Zwei Arbeitskopien auf einer Maschine.** Der Projektname steht in der
+compose-Datei fest. Liegt das Projekt zweimal auf dem Server, steuern **beide
+Verzeichnisse denselben Stack** — wer im falschen `docker compose up -d`
+tippt, startet stillschweigend fremden Code mit fremder `.env`, und im
+richtigen Verzeichnis sieht alles korrekt aus. Der Bericht vergleicht deshalb
+das Verzeichnis, aus dem die Container erzeugt wurden, mit dem aktuellen und
+warnt bei Abweichung.
+
 Der schnellste Versuch, wenn gar kein Container existiert:
 
 ```bash
