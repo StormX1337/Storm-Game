@@ -1161,6 +1161,57 @@ auftaucht, was über Telegram eingetragen wurde — die Telegram-ID steht dabei
 > Telegram geht es auch ohne: dort ist der Absender bekannt, und jeder sieht
 > nur seine eigenen Wetten.
 
+### Schritt 14 — stimmt das Modell überhaupt?
+
+Das Empfehlungsmodul trifft eine starke Behauptung: eine sehr große
+gemeldete Abweichung sei **kein** Vorteil, sondern ein Datenfehler — und ein
+Alarm mit +11 % darum die bessere Wette als einer mit +45 %. Das ist
+begründet (Schritt 10), aber es ist eine Behauptung.
+
+Prüfbar ist sie mit Daten, die längst in deiner Datenbank liegen: jeder
+Alarm bekommt aus der Nachkontrolle einen Closing Line Value.
+
+```bash
+./scripts/backtest.sh              # letzte 7 Tage
+./scripts/backtest.sh --days 30
+./scripts/backtest.sh --json > pruefung.json
+```
+
+Zwei Fragen, beide mit genau zwei möglichen Antworten:
+
+```
+1) Trennt der Grad?
+  Grad                Alarme  davon CLV     Ø CLV  schlägt Markt
+  Spielen                 34         34    +6.3 %           88 %
+  Kleiner Einsatz         58         58    +6.5 %           95 %
+  Nur beobachten          28         28    +5.5 %           93 %
+  Nicht spielen          120        120    -4.9 %           12 %
+
+  ✅ Spielbare Alarme haben besseren CLV als verworfene.
+
+2) Hilft die Schrumpfung?
+    glaubwürdigem Vorteil : Ø CLV +6.7 %
+    gemeldetem Value      : Ø CLV -3.3 %
+
+  Die Schrumpfung liegt vorn (+10.1 Prozentpunkte CLV).
+```
+
+**Die Prüfung kann auch nein sagen** — und das ist ihr Sinn. Fällt sie
+andersherum aus, steht dort „Der Grad sortiert nichts" und der Hinweis auf
+`PLAUSIBLE_EDGE_PERCENT`. Ein Test, der nur bestätigen kann, prüft nichts.
+Bei zu wenigen ausgewerteten Alarmen (unter 20 je Gruppe) sagt sie
+ausdrücklich „noch keine Aussage", statt eine Zahl hinzustellen.
+
+Das Skript liest nur — es schreibt nichts und ruft nichts beim Anbieter ab.
+Alarme aus der Zeit vor dem Empfehlungsmodul werden mit den *heutigen*
+Einstellungen nachgerechnet; genau darum geht es ja: wie hätte das Modell
+entschieden?
+
+> Und noch einmal, weil es hier besonders leicht zu überlesen ist: **CLV ist
+> kein Gewinn.** Ein Modell kann jeden Vergleich in dieser Auswertung
+> gewinnen und trotzdem kein Geld verdienen. Was Geld gebracht hat, steht im
+> Wett-Tagebuch (Schritt 13) — und nur dort.
+
 ---
 
 ## 16. API
@@ -1243,6 +1294,7 @@ Abgedeckt sind unter anderem:
 | Empfehlung: Grad, Kelly-Einsatz, Entdopplung | `test_recommendation.py` |
 | Wett-Tagebuch: Abrechnung und Bilanz | `test_betlog.py` |
 | Sichere Wetten: Erkennung und Einsatzverteilung | `test_arbitrage.py` |
+| Modellprüfung gegen echte Alarme | `test_backtest.py` |
 | Secret-Redaction im Logging | `test_logging.py` |
 
 Linting:
@@ -1659,6 +1711,7 @@ storm-odds-sniper/
 │   │   ├── recommendation.py Empfehlung: Grad, Kelly-Einsatz, Bestenliste
 │   │   ├── betlog.py         Wett-Tagebuch: Abrechnung und Bilanz
 │   │   ├── arbitrage.py      Sichere Wetten: Widersprüche zwischen Büchern
+│   │   ├── backtest.py       Modellprüfung: trennt der Grad, hilft die Schrumpfung?
 │   │   ├── backoff.py        exponentielles Backoff
 │   │   └── metrics.py        Prometheus
 │   ├── models/
