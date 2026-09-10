@@ -1472,6 +1472,67 @@ Steht ein Schlüssel mehrfach drin, gilt der **letzte**. Wer den ersten ändert,
 wundert sich, dass nichts passiert. `./scripts/diagnose.sh` meldet solche
 Dubletten inzwischen von selbst.
 
+### „This site can't be reached" / ERR_CONNECTION_REFUSED
+
+Die Seite lädt **gar nicht**, der Browser bekommt schon keine Verbindung. Das
+ist etwas anderes als eine leere Seite (siehe nächster Abschnitt): dort
+antwortet jemand und hat nichts zu sagen — hier antwortet niemand.
+
+Die Dienste hängen in einer Kette, und jedes Glied startet erst, wenn das
+davor gesund ist:
+
+```
+postgres ──> migrate ──> api ──> frontend (Port 8080)
+redis    ──────────────┘
+```
+
+Reißt die Kette irgendwo, ist am Ende Port 8080 tot — und der Browser meldet
+„refused", völlig unabhängig davon, *wo* es wirklich klemmt. Eine
+fehlgeschlagene Datenbank-Migration sieht im Browser exakt so aus wie ein
+abgestürzter nginx. Deshalb hilft die Container-Liste allein selten weiter.
+
+`./scripts/diagnose.sh` beginnt darum mit einem **Befund**, der das erste
+kaputte Glied nennt — nicht das letzte:
+
+```
+== BEFUND ==
+  Speicherplatz .             29309 MB frei
+  Arbeitsspeicher              1544 MB frei
+
+  postgres       läuft, gesund
+  redis          läuft, gesund
+  migrate        ABGEBROCHEN (Code 1)
+  api            existiert nicht
+  frontend       existiert nicht
+
+  Die Datenbank-Migration ist nicht durchgelaufen. Ohne sie
+  startet die API nicht, und ohne API kein Dashboard.
+
+  Nächster Schritt:
+    docker compose logs migrate | tail -40
+```
+
+Der Befund steht **ganz oben** und passt auf einen Bildschirm; der Rest des
+Berichts ist Belegmaterial darunter. Vier Dinge, die er nebenbei erledigt:
+
+* **Speicherplatz und Arbeitsspeicher zuerst.** Eine volle Platte sieht aus
+  wie zehn verschiedene Fehler und ist doch nur einer. `Code 137` bei einem
+  Dienst heißt: vom Kernel abgeschossen, fast immer Speichermangel.
+* **Scanner und Telegram-Bot werden nicht mitbeschuldigt.** Sie hängen nicht
+  am Dashboard. Verschwiegen werden sie trotzdem nicht — ein stiller Scanner
+  heißt „keine Alarme mehr" und ist der Fehler, den man am längsten nicht
+  bemerkt.
+* **Läuft alles und antwortet Port 8080 auf dem Server selbst**, dann sitzt
+  das Problem zwischen Server und Browser: Firewall (`ufw status`) oder
+  Portfreigabe beim Anbieter.
+* **Ohne Docker-Daemon** steht genau das da, statt sieben Folgefehlern.
+
+Der schnellste Versuch, wenn gar kein Container existiert:
+
+```bash
+docker compose up -d
+```
+
 ### Alles leer, roter Punkt, „Verbinde…"
 
 Das Dashboard lädt, aber **keine einzige** Kachel füllt sich und oben steht
@@ -1744,7 +1805,7 @@ storm-odds-sniper/
 ├── frontend/src/             Dashboard (HTML, CSS, JS)
 ├── docker/nginx/             nginx-Konfiguration
 ├── scripts/
-│   ├── diagnose.sh           Zustand einsammeln (ohne Geheimnisse)
+│   ├── diagnose.sh           Befund + Zustand einsammeln (ohne Geheimnisse)
 │   ├── set-dashboard-password.sh  Zugangsschutz fürs Dashboard
 │   ├── setup-provider.sh     echte Datenquelle prüfen und übernehmen
 │   ├── setup_provider.py     die eigentliche Prüflogik

@@ -14,6 +14,224 @@ line() { printf '\n== %s ==\n' "$1"; }
 
 echo "Storm Odds Sniper - Diagnose  ($(date '+%F %T'))"
 
+# ---------------------------------------------------------------- Befund
+#
+# Der Rest dieses Skripts sammelt Material. Das hier beantwortet die Frage,
+# die man tatsächlich hat: WAS ist kaputt und WAS mache ich jetzt?
+#
+# Die Dienste hängen voneinander ab:
+#
+#   postgres ──> migrate ──> api ──> frontend (Port 8080)
+#   redis    ──────────────┘
+#
+# Reißt die Kette irgendwo, ist am Ende Port 8080 tot - der Browser meldet
+# dann "refused", und zwar völlig unabhängig davon, wo es wirklich klemmt.
+# Darum wird hier das ERSTE kaputte Glied genannt, nicht das letzte.
+
+#: Zustand eines Dienstes als "status|gesundheit|exitcode".
+dienst_zustand() {
+    cid=$(docker compose ps -aq "$1" 2>/dev/null | head -n1)
+    if [ -z "$cid" ]; then
+        echo "fehlt|-|-"
+        return 0
+    fi
+    # Über docker inspect statt "compose ps --format", weil das Format je
+    # nach Compose-Version anders aussieht - die Vorlage hier nicht.
+    docker inspect \
+        -f '{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{else}}-{{end}}|{{.State.ExitCode}}' \
+        "$cid" 2>/dev/null || echo "unbekannt|-|-"
+}
+
+#: Aus dem Zustand einen deutschen Satz machen.
+zustand_text() {
+    case "$1|$2" in
+        "fehlt|"*)        echo "existiert nicht" ;;
+        "running|healthy")   echo "läuft, gesund" ;;
+        "running|starting")  echo "startet gerade" ;;
+        "running|unhealthy") echo "läuft, aber UNGESUND" ;;
+        "running|"*)      echo "läuft" ;;
+        "restarting|"*)   echo "startet immer wieder neu (Absturzschleife)" ;;
+        "created|"*)      echo "angelegt, aber nie gestartet" ;;
+        "exited|"*)
+            case "$3" in
+                0)   echo "sauber beendet" ;;
+                # 137 = vom Kernel per SIGKILL beendet. Auf einem kleinen
+                # Server heißt das fast immer: der Arbeitsspeicher war alle.
+                137) echo "ABGESCHOSSEN (Code 137 - meist zu wenig Arbeitsspeicher)" ;;
+                *)   echo "ABGEBROCHEN (Code $3)" ;;
+            esac ;;
+        *)                echo "$1" ;;
+    esac
+}
+
+#: Ist der Dienst für die Kette in Ordnung?
+dienst_ok() {
+    case "$1" in
+        migrate) [ "$2" = "exited" ] && [ "$4" = "0" ] ;;
+        frontend) [ "$2" = "running" ] ;;
+        *) [ "$2" = "running" ] && { [ "$3" = "healthy" ] || [ "$3" = "-" ]; } ;;
+    esac
+}
+
+#: Was am Dashboard vorbei kaputt ist. Ein stilles Loch im Scanner sieht
+#: von außen aus wie "keine Alarme, ist wohl gerade nichts los".
+nebenbefund() {
+    [ -z "${nebenbei:-}" ] && return 0
+    echo
+    for dienst in $nebenbei; do
+        case "$dienst" in
+            scanner)
+                echo "  Nebenbei: der Scanner läuft nicht. Das Dashboard geht"
+                echo "  davon zwar auf, es kommen aber KEINE neuen Alarme mehr."
+                echo "    docker compose logs scanner | tail -40" ;;
+            telegram-bot)
+                echo "  Nebenbei: der Telegram-Bot läuft nicht. Alarme entstehen"
+                echo "  weiter, sie werden nur nicht verschickt."
+                echo "    docker compose logs telegram-bot | tail -40" ;;
+        esac
+    done
+}
+
+befund() {
+    line "BEFUND"
+
+    if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
+        echo "  Docker läuft nicht. Damit ist nichts erreichbar."
+        echo
+        echo "  Nächster Schritt:"
+        echo "    systemctl start docker && docker compose up -d"
+        return 0
+    fi
+
+    # Speicherplatz zuerst. Eine volle Platte sieht aus wie zehn
+    # verschiedene Fehler und ist doch nur einer - Container sterben,
+    # Postgres verweigert Schreibzugriffe, Builds brechen ab.
+    for pfad in /var/lib/docker .; do
+        frei=$(df -Pm "$pfad" 2>/dev/null | awk 'NR==2 {print $4}')
+        [ -z "${frei:-}" ] && continue
+        if [ "$frei" -lt 1024 ]; then
+            printf '  %-26s %6s MB frei  <-- ZU WENIG\n' "Speicherplatz $pfad" "$frei"
+            eng=1
+        else
+            printf '  %-26s %6s MB frei\n' "Speicherplatz $pfad" "$frei"
+        fi
+    done
+    ram=$(free -m 2>/dev/null | awk '/^Mem:/ {print $7}')
+    [ -n "${ram:-}" ] && printf '  %-26s %6s MB frei\n' "Arbeitsspeicher" "$ram"
+    echo
+
+    schuld=""
+    nebenbei=""
+    fehlend=0
+    gesamt=0
+    for dienst in postgres redis migrate api scanner telegram-bot frontend; do
+        zustand=$(dienst_zustand "$dienst")
+        status=${zustand%%|*}
+        rest=${zustand#*|}
+        health=${rest%%|*}
+        exitcode=${rest##*|}
+        printf '  %-14s %s\n' "$dienst" "$(zustand_text "$status" "$health" "$exitcode")"
+
+        gesamt=$((gesamt + 1))
+        [ "$status" = "fehlt" ] && fehlend=$((fehlend + 1))
+
+        # scanner und telegram-bot hängen NICHT am Dashboard - ein toter
+        # Telegram-Bot (etwa ohne Token) darf hier nicht als Ursache für
+        # eine unerreichbare Seite dastehen. Verschwiegen wird er trotzdem
+        # nicht: ein stiller Scanner heißt keine Alarme, und das ist der
+        # Fehler, den man am längsten nicht bemerkt.
+        case "$dienst" in
+            scanner|telegram-bot)
+                # "existiert nicht" beim Bot ist kein Fehler - ohne Token
+                # ist er schlicht nicht eingerichtet.
+                if ! dienst_ok "$dienst" "$status" "$health" "$exitcode" \
+                   && [ "$status" != "fehlt" ]; then
+                    nebenbei="$nebenbei $dienst"
+                fi
+                continue ;;
+        esac
+        if [ -z "$schuld" ] && ! dienst_ok "$dienst" "$status" "$health" "$exitcode"; then
+            schuld="$dienst"
+        fi
+    done
+
+    echo
+    if [ "$fehlend" -eq "$gesamt" ]; then
+        echo "  Es existiert kein einziger Container. Der Stack wurde gestoppt"
+        echo "  oder nie gestartet - deshalb nimmt Port ${dashboard_port} nichts an."
+        echo
+        echo "  Nächster Schritt:"
+        echo "    docker compose up -d"
+        return 0
+    fi
+
+    case "$schuld" in
+        "")
+            ;;
+        postgres|redis)
+            echo "  Die Datenbank bzw. Redis läuft nicht. Alles andere wartet"
+            echo "  auf sie und startet gar nicht erst."
+            echo
+            echo "  Nächster Schritt:"
+            echo "    docker compose logs $schuld | tail -40"
+            nebenbefund; return 0 ;;
+        migrate)
+            echo "  Die Datenbank-Migration ist nicht durchgelaufen. Ohne sie"
+            echo "  startet die API nicht, und ohne API kein Dashboard."
+            echo
+            echo "  Nächster Schritt:"
+            echo "    docker compose logs migrate | tail -40"
+            nebenbefund; return 0 ;;
+        api)
+            echo "  Die API ist nicht gesund. Das Dashboard startet erst, wenn"
+            echo "  sie es ist - darum nimmt Port ${dashboard_port} nichts an."
+            echo
+            echo "  Nächster Schritt:"
+            echo "    docker compose logs api | tail -40"
+            nebenbefund; return 0 ;;
+        frontend)
+            echo "  Der Dashboard-Container läuft nicht. Genau er hält Port"
+            echo "  ${dashboard_port} offen - deshalb kommt \"refused\"."
+            echo
+            echo "  Nächster Schritt:"
+            echo "    docker compose logs frontend | tail -40"
+            nebenbefund; return 0 ;;
+    esac
+
+    # Alle Glieder heil - dann liegt es zwischen Server und Browser.
+    antwort=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 \
+        "http://127.0.0.1:${dashboard_port}/healthz" 2>/dev/null)
+    if [ "${antwort:-000}" = "200" ]; then
+        echo "  Die Kette zum Dashboard ist vollständig, und auf dem Server"
+        echo "  selbst antwortet Port ${dashboard_port}. Meldet der Browser trotzdem"
+        echo "  \"refused\", sitzt es dazwischen: Firewall, Portfreigabe beim"
+        echo "  Anbieter, oder es wird die falsche Adresse aufgerufen."
+        echo
+        echo "  Prüfen mit:"
+        echo "    ss -tlnp | grep ${dashboard_port}   # lauscht überhaupt etwas?"
+        echo "    ufw status                # blockt die Firewall?"
+    else
+        echo "  Die Kette zum Dashboard ist vollständig, aber auf dem Server"
+        echo "  selbst antwortet Port ${dashboard_port} nicht (${antwort:-keine Antwort})."
+        echo
+        echo "  Nächster Schritt:"
+        echo "    docker compose logs frontend | tail -40"
+    fi
+
+    nebenbefund
+    if [ -n "${eng:-}" ]; then
+        echo
+        echo "  Und der Speicherplatz oben ist knapp. Alte Images aufräumen:"
+        echo "    docker image prune -af"
+    fi
+}
+
+# Der Port steht in der .env - ohne sie gilt der Standard.
+dashboard_port=$(grep -E '^DASHBOARD_PORT=' .env 2>/dev/null | cut -d= -f2)
+dashboard_port=${dashboard_port:-8080}
+
+befund
+
 line "Codestand"
 if [ -d .git ]; then
     printf 'Commit:  %s\n' "$(git rev-parse --short HEAD 2>/dev/null || echo '?')"
@@ -85,8 +303,7 @@ docker compose exec -T frontend sh -c \
     2>&1 | tail -3
 
 line "Antwortet das Dashboard von außen?"
-port=$(grep -E '^DASHBOARD_PORT=' .env 2>/dev/null | cut -d= -f2)
-port=${port:-8080}
+port=$dashboard_port
 for path in /healthz /api/health /api/stats /api/health/providers; do
     code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "http://127.0.0.1:${port}${path}" 2>/dev/null)
     printf '  %-24s %s\n' "$path" "${code:-keine Antwort}"
