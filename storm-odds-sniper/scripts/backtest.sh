@@ -19,9 +19,15 @@ if [ ! -f .env ]; then
 fi
 
 run_in_docker() {
+    # --user root: die .env auf dem Host gehört meist root und ist nur für
+    # root lesbar. Der Container läuft sonst als unprivilegierter Benutzer und
+    # scheitert schon beim Einlesen der Einstellungen - noch bevor überhaupt
+    # eine Datenbankverbindung versucht wird. Geschrieben wird hier nichts,
+    # die .env bleibt darum zusätzlich schreibgeschützt eingehängt (:ro).
+    #
     # backend/ und scripts/ vom Host hineinreichen, damit immer der aktuelle
     # Stand läuft - sonst gilt der Code aus dem gebauten Image.
-    docker compose run --rm --no-deps \
+    docker compose run --rm --no-deps --user root \
         -e PYTHONDONTWRITEBYTECODE=1 \
         -v "$(pwd)/.env:/app/.env:ro" \
         -v "$(pwd)/backend:/app/backend:ro" \
@@ -30,13 +36,15 @@ run_in_docker() {
 }
 
 if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
-    echo "[i] Starte im API-Container …"
+    # Hinweise gehören auf stderr: sonst landen sie bei "--json > datei"
+    # mitten in der Datei und machen sie unlesbar.
+    echo "[i] Starte im API-Container …" >&2
     run_in_docker "$@"
     exit $?
 fi
 
 if [ -x .venv/bin/python ]; then
-    echo "[i] Starte in .venv …"
+    echo "[i] Starte in .venv …" >&2
     PYTHONPATH=. .venv/bin/python scripts/backtest.py "$@"
     exit $?
 fi

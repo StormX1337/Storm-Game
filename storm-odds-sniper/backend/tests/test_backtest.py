@@ -7,11 +7,24 @@ aus fünf Alarmen sieht aus wie Erkenntnis und ist Rauschen.
 
 from __future__ import annotations
 
+import asyncio
+import importlib.util
+from pathlib import Path
+
 import pytest
 
 from backend.core.backtest import HEAD_TO_HEAD, Sample, analyse, sample_from
 from backend.core.recommendation import Grade, evaluate
 from backend.tests.test_recommendation import make_alert
+
+SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "backtest.py"
+
+
+def load_script():
+    spec = importlib.util.spec_from_file_location("backtest_script", SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def s(grade, *, credible=3.0, raw=11.0, clv=5.0):
@@ -151,3 +164,57 @@ class TestAusEinerEchtenEmpfehlung:
         probe = sample_from(evaluate(make_alert(250.0)), clv_percent=None)
         assert probe.grade == Grade.SKIP.value
         assert probe.clv_percent is None
+
+
+class TestMeldetDenEchtenFehler:
+    """Was schiefging, muss dastehen - nicht das, was zufällig danach kommt.
+
+    Die .env gehört auf einem Server meist root. Lief das Skript als anderer
+    Benutzer, scheiterte schon das Einlesen der Einstellungen - gemeldet wurde
+    aber „Datenbank nicht erreichbar". Damit sucht man am falschen Ende: an
+    Netz, Passwort und Container, während die Datenbank nie im Spiel war.
+    """
+
+    @pytest.fixture(scope="class")
+    def script(self):
+        return load_script()
+
+    def _lauf(self, script, monkeypatch, capsys, *, fehler, wo):
+        monkeypatch.setattr(script.sys, "argv", ["backtest.py", "--days", "7"])
+        if wo == "settings":
+            monkeypatch.setattr(script, "get_settings", lambda: (_ for _ in ()).throw(fehler))
+        else:
+            monkeypatch.setattr(script, "get_settings", lambda: object())
+
+            async def kaputt(*_args, **_kwargs):
+                raise fehler
+
+            monkeypatch.setattr(script, "sammeln", kaputt)
+        code = asyncio.run(script.main())
+        return code, capsys.readouterr().err
+
+    def test_rechtefehler_an_der_env_ist_kein_datenbankfehler(self, script, monkeypatch, capsys):
+        code, err = self._lauf(
+            script,
+            monkeypatch,
+            capsys,
+            fehler=PermissionError(13, "Permission denied", ".env"),
+            wo="settings",
+        )
+        assert code == 1
+        assert "Einstellungen nicht lesbar" in err
+        assert "Datenbank nicht erreichbar" not in err
+        # Und der Ausweg steht dabei, sonst hilft die Diagnose niemandem.
+        assert "root" in err
+
+    def test_echter_datenbankfehler_heisst_weiterhin_so(self, script, monkeypatch, capsys):
+        code, err = self._lauf(
+            script,
+            monkeypatch,
+            capsys,
+            fehler=OSError("connection refused"),
+            wo="datenbank",
+        )
+        assert code == 1
+        assert "Datenbank nicht erreichbar" in err
+        assert "Einstellungen nicht lesbar" not in err

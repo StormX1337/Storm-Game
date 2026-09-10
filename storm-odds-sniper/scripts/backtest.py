@@ -29,7 +29,7 @@ from sqlalchemy import select  # noqa: E402
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine  # noqa: E402
 
 from backend.core.backtest import MIN_PER_GROUP, Sample, analyse  # noqa: E402
-from backend.core.config import get_settings  # noqa: E402
+from backend.core.config import Settings, get_settings  # noqa: E402
 from backend.core.recommendation import (  # noqa: E402
     GRADE_LABELS,
     Recommendation,
@@ -42,14 +42,16 @@ from backend.models.domain import Alert  # noqa: E402
 BALKEN = "─" * 64
 
 
-async def sammeln(days: int, limit: int) -> tuple[list[Sample], int, int]:
+async def sammeln(settings: Settings, days: int, limit: int) -> tuple[list[Sample], int, int]:
     """Alarme laden und je Alarm eine Probe bilden.
 
     Alarme aus der Zeit vor dem Empfehlungsmodul tragen keinen Grad. Sie
     werden mit den *heutigen* Einstellungen nachgerechnet - genau das ist
     hier der Sinn: wie hätte das Modell entschieden?
+
+    Die Einstellungen kommen von außen: was beim *Lesen der .env* schiefgeht,
+    ist kein Datenbankproblem und darf auch nicht als eines gemeldet werden.
     """
-    settings = get_settings()
     config = config_from_settings(settings)
     engine = create_async_engine(settings.sqlalchemy_dsn)
     factory = async_sessionmaker(bind=engine, expire_on_commit=False, autoflush=False)
@@ -150,8 +152,24 @@ async def main() -> int:
     parser.add_argument("--json", action="store_true", help="Maschinenlesbar ausgeben")
     args = parser.parse_args()
 
+    # Zwei Schritte, zwei Meldungen. Ein Rechtefehler an der .env als
+    # "Datenbank nicht erreichbar" auszugeben, schickt beim Suchen in die
+    # völlig falsche Richtung - die Datenbank war dann nie im Spiel.
     try:
-        proben, nachgerechnet, unlesbar = await sammeln(args.days, args.limit)
+        settings = get_settings()
+    except Exception as exc:  # noqa: BLE001 - ohne Einstellungen geht nichts
+        print(f"Einstellungen nicht lesbar: {exc}", file=sys.stderr)
+        if isinstance(exc, PermissionError):
+            print(
+                "Die .env gehört auf einem Server üblicherweise root. Der "
+                "Container muss sie darum als root lesen - ./scripts/backtest.sh "
+                "macht das selbst. Von Hand gestartet: mit sudo.",
+                file=sys.stderr,
+            )
+        return 1
+
+    try:
+        proben, nachgerechnet, unlesbar = await sammeln(settings, args.days, args.limit)
     except Exception as exc:  # noqa: BLE001 - ohne Datenbank gibt es nichts zu prüfen
         print(f"Datenbank nicht erreichbar: {exc}", file=sys.stderr)
         return 1
