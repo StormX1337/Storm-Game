@@ -260,6 +260,10 @@ class Bet(Base):
     #: die Einheit steht in der Bilanz dabei, damit niemand Euro liest, wo
     #: keine Euro gemeint sind.
     stake: Mapped[float] = mapped_column(Float)
+    #: In welcher Einheit ``stake`` steht: percent | currency. Ohne diese
+    #: Angabe ließe sich später nicht mehr unterscheiden, ob 0,7 ein Anteil
+    #: oder ein Betrag war - und die Bilanz summierte beides stumm.
+    stake_unit: Mapped[str] = mapped_column(String(8), default="percent")
     #: open | won | lost | void
     status: Mapped[str] = mapped_column(String(8), default="open", index=True)
     #: Netto, erst beim Abrechnen gesetzt.

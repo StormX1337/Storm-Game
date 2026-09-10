@@ -11,7 +11,12 @@ from __future__ import annotations
 
 import pytest
 
-from backend.core.arbitrage import ArbitrageConfig, find_arbitrage, stake_split
+from backend.core.arbitrage import (
+    ArbitrageConfig,
+    effective_odds,
+    find_arbitrage,
+    stake_split,
+)
 from backend.core.value_engine import MarketBook
 from backend.models.domain import MarketKey, OddsQuote, Selection, now_ts
 from backend.models.enums import MarketType, Period, SelectionCode
@@ -188,3 +193,92 @@ class TestDarstellung:
         for leg in payload["legs"]:
             assert leg["bookmaker"]
             assert leg["odds"] > 1
+
+
+class TestBoersenkommission:
+    """Börsen behalten 2-5 % des Nettogewinns. Reale Arbitragen liegen bei
+    0,5-3 % - also regelmäßig *unter* der Gebühr. Ohne Abzug würde das Modul
+    einen Verlust als risikofrei ausweisen."""
+
+    @staticmethod
+    def _boerse(selection, bookmaker, price, **kwargs):
+        q = quote(selection, bookmaker, price, **kwargs)
+        q.is_exchange = True
+        return q
+
+    def test_effektive_quote_zieht_vom_gewinn_ab(self):
+        """2.15 bei 5 % Kommission: 1 + 1.15 * 0.95 = 2.0925."""
+        assert effective_odds(2.15, is_exchange=True, commission=0.05) == pytest.approx(2.0925)
+
+    def test_normales_buch_bleibt_unberuehrt(self):
+        assert effective_odds(2.15, is_exchange=False, commission=0.05) == 2.15
+        assert effective_odds(2.15, is_exchange=True, commission=0.0) == 2.15
+
+    def test_knappe_arbitrage_ueberlebt_die_kommission_nicht(self):
+        """+1,0 % roh, aber die Börse nimmt 5 % vom Gewinn - dann ist nichts
+        mehr da. Genau dieser Fund wäre vorher als sicher gemeldet worden."""
+        ohne_abzug = find_arbitrage(
+            book(quote(OVER, "a", 2.02), quote(UNDER, "b", 2.02)),
+            config=ArbitrageConfig(exchange_commission=0.0),
+        )
+        assert ohne_abzug is not None
+        assert ohne_abzug.profit_percent == pytest.approx(1.0, abs=0.05)
+
+        mit_boerse = find_arbitrage(book(quote(OVER, "a", 2.02), self._boerse(UNDER, "b", 2.02)))
+        assert mit_boerse is None
+
+    def test_grosse_arbitrage_ueberlebt_sie(self):
+        arb = find_arbitrage(book(quote(OVER, "a", 2.30), self._boerse(UNDER, "b", 2.30)))
+        assert arb is not None
+        assert arb.has_exchange is True
+        boersenbein = next(leg for leg in arb.legs if leg.is_exchange)
+        assert boersenbein.odds == 2.30
+        assert boersenbein.effective_odds < 2.30
+        # Gespielt wird zur angezeigten Quote - die muss erhalten bleiben.
+        assert boersenbein.to_json()["odds"] == 2.30
+
+    def test_gewinn_wird_nach_abzug_ausgewiesen(self):
+        mit = find_arbitrage(book(quote(OVER, "a", 2.30), self._boerse(UNDER, "b", 2.30)))
+        ohne = find_arbitrage(
+            book(quote(OVER, "a", 2.30), self._boerse(UNDER, "b", 2.30)),
+            config=ArbitrageConfig(exchange_commission=0.0),
+        )
+        assert mit.profit_percent < ohne.profit_percent
+
+    def test_rueckfluss_rechnet_mit_der_effektiven_quote(self):
+        arb = find_arbitrage(book(quote(OVER, "a", 2.30), self._boerse(UNDER, "b", 2.30)))
+        for leg in arb.legs:
+            assert 100.0 * leg.stake_share * leg.effective_odds == pytest.approx(
+                arb.payout(100.0), abs=0.01
+            )
+
+    def test_bestes_bein_wird_nach_abzug_gewaehlt(self):
+        """Eine Börse mit nominal besserer Quote kann nach Gebühr schlechter
+        sein als ein normales Buch."""
+        arb = find_arbitrage(
+            book(
+                quote(OVER, "buch", 2.20),
+                self._boerse(OVER, "boerse", 2.24),
+                quote(UNDER, "b", 2.30),
+            )
+        )
+        assert arb is not None
+        over = next(leg for leg in arb.legs if leg.selection_key == "over")
+        assert over.bookmaker == "buch"
+
+    def test_duenne_liquiditaet_wird_vermerkt(self):
+        dünn = self._boerse(UNDER, "b", 2.30)
+        dünn.liquidity = 5.0
+        arb = find_arbitrage(
+            book(quote(OVER, "a", 2.30), dünn),
+            config=ArbitrageConfig(min_liquidity=50.0),
+        )
+        assert arb is not None
+        assert arb.thin_liquidity is True
+
+    def test_unbekannte_liquiditaet_gilt_nicht_als_duenn(self):
+        arb = find_arbitrage(
+            book(quote(OVER, "a", 2.30), quote(UNDER, "b", 2.30)),
+            config=ArbitrageConfig(min_liquidity=50.0),
+        )
+        assert arb.thin_liquidity is False

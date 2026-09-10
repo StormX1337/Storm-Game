@@ -1082,6 +1082,16 @@ System sagt das an drei Stellen offen:
   kann eine davon weg sein, bevor die zweite Wette steht. Wer nur eine Seite
   bekommt, hat eine ungewollte Einzelwette. Das Alter der ältesten
   beteiligten Quote steht überall dabei.
+* **Börsen nehmen Kommission.** Betfair & Co. behalten 2–5 % des
+  *Nettogewinns*. Reale Arbitragen liegen bei 0,5–3 % — also regelmäßig
+  **unterhalb** dieser Gebühr. Gerechnet wird deshalb mit der effektiven
+  Quote `1 + (Quote − 1) × (1 − Kommission)`; angezeigt und gespielt wird
+  die echte. Ein Fund mit Börsenbein wird zusätzlich gekennzeichnet, weil
+  dein Konto eine andere Gebühr haben kann als `ARBITRAGE_EXCHANGE_COMMISSION`.
+
+Weil der Einsatz nicht wirklich risikofrei ist (es füllt vielleicht nur ein
+Bein), gilt auch hier `MAX_TOTAL_STAKE_PERCENT` als Deckel — nicht die ganze
+Bankroll auf einen Fund.
 
 Zusätzliche API-Aufrufe kostet das **keine**: der Markt liegt beim Prüfen
 ohnehin schon vollständig vor. Dasselbe gilt für den **Quotenverlauf** in
@@ -1132,9 +1142,17 @@ Drei Dinge, die dieses Modul bewusst *nicht* tut:
   Hinweis, dass die Prozentzahl Zufall wäre — dieselbe Haltung wie bei der
   Trefferbilanz.
 
-Ohne `BANKROLL` sind Einsätze **Prozentpunkte der Bankroll**, keine Beträge;
-die Einheit steht überall dabei, damit niemand Euro liest, wo keine gemeint
-sind.
+Ohne `BANKROLL` sind Einsätze **Prozentpunkte der Bankroll**, keine Beträge.
+Die Einheit steht nicht nur in der Anzeige, sondern **an jeder Zeile**: wer
+`BANKROLL` mittendrin setzt, hätte sonst Anteile und Beträge in einer Summe
+— eine Zahl ohne Bedeutung. Kommt beides vor, sagt die Bilanz es.
+
+**Wem gehört welche Zeile?** Über Telegram ist der Absender bekannt, über
+HTTP nicht — dort gibt es keine Anmeldung. Daraus folgen zwei Regeln:
+Ändern und Löschen über HTTP betrifft **nur Zeilen ohne Nutzer** (also was
+auch über HTTP entstand); gelesen wird das ganze Buch, damit im Dashboard
+auftaucht, was über Telegram eingetragen wurde — die Telegram-ID steht dabei
+**nicht** in der Antwort.
 
 > **Zum Schreibzugriff über die API:** `BETLOG_API_WRITES` ist standardmäßig
 > **aus**. Die API ist genau so geschützt wie das Dashboard davor — steht das

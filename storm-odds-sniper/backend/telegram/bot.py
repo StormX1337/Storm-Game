@@ -175,7 +175,11 @@ class AlertDispatcher:
         """
         if not self.settings.arbitrage_telegram:
             return 0
-        text = fmt.format_arbitrage(item, bankroll=self.settings.bankroll)
+        text = fmt.format_arbitrage(
+            item,
+            bankroll=self.settings.bankroll,
+            max_total_percent=self.settings.max_total_stake_percent,
+        )
         sent = 0
         for chat_id, user_settings in await self.recipients():
             if user_settings is not None and user_settings.paused:

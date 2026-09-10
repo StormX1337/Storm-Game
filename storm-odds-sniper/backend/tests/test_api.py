@@ -762,11 +762,30 @@ class TestQuotenverlauf:
         body = (
             await client.get(
                 "/odds/history",
-                params={"event_id": "gibtsnicht", "market": "m", "selection": "s"},
+                params={
+                    "event_id": "gibtsnicht",
+                    "market": "m",
+                    "selection": "s",
+                    "bookmaker": "b1",
+                },
             )
         ).json()
         assert body["points"] == []
         assert body["change_percent"] is None
+
+    async def test_ohne_buchmacher_wird_abgelehnt(self, client, repository):
+        """Ohne ihn lägen Preise verschiedener Bücher in einer Kurve, und die
+        Änderung wäre nur der Abstand zwischen zwei Häusern."""
+        event, quote = await self._verlauf(repository, [2.30, 2.10])
+        response = await client.get(
+            "/odds/history",
+            params={
+                "event_id": event.event_id,
+                "market": quote.market.key,
+                "selection": quote.selection.key,
+            },
+        )
+        assert response.status_code == 422
 
     async def test_buchmacher_laesst_sich_eingrenzen(self, client, repository):
         event, quote = await self._verlauf(repository, [2.30, 2.10], bookmaker="b1")
@@ -794,9 +813,102 @@ class TestQuotenverlauf:
                     "event_id": event.event_id,
                     "market": quote.market.key,
                     "selection": quote.selection.key,
+                    "bookmaker": "b1",
                     "minutes": 1,
                 },
             )
         ).json()
         assert body["minutes"] == 1
         assert len(body["points"]) <= 3
+
+
+class TestWettenGehoerenJemandem:
+    """Über Telegram ist der Absender bekannt, über HTTP nicht. Also darf
+    über HTTP auch nichts angefasst werden, was jemandem gehört."""
+
+    @pytest_asyncio.fixture
+    async def schreib_client(self, redis_state, repository):
+        settings = Settings(
+            _env_file=None,
+            api_rate_limit_per_minute=1000,
+            log_json=False,
+            betlog_api_writes=True,
+        )
+        app = create_app(settings)
+        app.state.redis = redis_state
+        app.state.repository = repository
+        app.state.hub = None
+        app.state.started_at = now_ts()
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as http:
+            yield http
+
+    async def test_fremde_wette_laesst_sich_nicht_abrechnen(self, schreib_client, repository):
+        fremd = await repository.create_bet(
+            user_id=999, event_id="e1", odds=2.0, stake=5.0, status="open"
+        )
+        response = await schreib_client.post(f"/bets/{fremd.id}/settle", json={"status": "won"})
+        assert response.status_code == 404
+        assert "Telegram" in response.json()["detail"]
+        assert (await repository.list_bets(user_id=999))[0].status == "open"
+
+    async def test_fremde_wette_laesst_sich_nicht_loeschen(self, schreib_client, repository):
+        fremd = await repository.create_bet(
+            user_id=999, event_id="e1", odds=2.0, stake=5.0, status="open"
+        )
+        assert (await schreib_client.delete(f"/bets/{fremd.id}")).status_code == 404
+        assert len(await repository.list_bets(user_id=999)) == 1
+
+    async def test_eigene_http_wette_laesst_sich_abrechnen(self, schreib_client):
+        bet_id = (
+            await schreib_client.post("/bets", json={"event_id": "e1", "odds": 2.0, "stake": 5.0})
+        ).json()["id"]
+        response = await schreib_client.post(f"/bets/{bet_id}/settle", json={"status": "won"})
+        assert response.status_code == 200
+        assert response.json()["profit"] == pytest.approx(5.0)
+
+    async def test_telegram_id_steht_nicht_in_der_antwort(self, client, repository):
+        """Eine offene Schnittstelle muss keine Nutzerkennungen ausliefern."""
+        await repository.create_bet(user_id=4711, event_id="e1", odds=2.0, stake=5.0, status="open")
+        row = (await client.get("/bets")).json()[0]
+        assert "user_id" not in row
+        assert row["via_telegram"] is True
+        assert "4711" not in str(row)
+
+    async def test_zweimal_eintragen_ergibt_eine_zeile(self, schreib_client, repository):
+        """Der Knopf bleibt stehen - ein zweiter Klick darf die Bilanz nicht
+        verdoppeln."""
+        from backend.core.recommendation import evaluate
+        from backend.tests.test_database import make_alert
+
+        alert = make_alert(kind=AlertKind.VALUE, odds=2.50, value_percent=11.0)
+        alert.recommendation = evaluate(alert).to_json()
+        await repository.write_batch(alerts=[alert])
+
+        erste = (
+            await schreib_client.post("/bets", json={"alert_fingerprint": alert.fingerprint})
+        ).json()
+        zweite = (
+            await schreib_client.post("/bets", json={"alert_fingerprint": alert.fingerprint})
+        ).json()
+        assert erste["id"] == zweite["id"]
+        assert len(await repository.list_bets()) == 1
+
+    async def test_einheit_steht_an_der_zeile(self, schreib_client):
+        """Ohne Bankroll ist der Einsatz ein Anteil - das muss die Zeile
+        selbst wissen, nicht die Einstellung von heute."""
+        row = (
+            await schreib_client.post("/bets", json={"event_id": "e1", "odds": 2.0, "stake": 5.0})
+        ).json()
+        assert row["stake_unit"] == "percent"
+
+    async def test_gemischte_einheiten_werden_gemeldet(self, client, repository):
+        await repository.create_bet(
+            event_id="e1", odds=2.0, stake=0.7, status="won", profit=0.7, stake_unit="percent"
+        )
+        await repository.create_bet(
+            event_id="e2", odds=2.0, stake=7.0, status="won", profit=7.0, stake_unit="currency"
+        )
+        body = (await client.get("/bets/ledger")).json()
+        assert body["mixed_units"] is True
+        assert any("zwei Maßstäbe" in note for note in body["notes"])

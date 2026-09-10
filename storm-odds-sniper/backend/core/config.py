@@ -227,6 +227,12 @@ class Settings(BaseSettings):
     arbitrage_max_profit_percent: float = 12.0
     #: Beide Seiten müssen frisch sein - eine alte Quote ist keine Wette.
     arbitrage_max_age: float = 15.0
+    #: Anteil des Nettogewinns, den eine Börse einbehält (Betfair: 2-5 %).
+    #: Reale Arbitragen liegen bei 0,5-3 % - ohne Abzug würde ein Verlust
+    #: als risikofrei ausgewiesen. Lieber zu hoch als zu niedrig ansetzen.
+    arbitrage_exchange_commission: float = 0.05
+    #: Darunter gilt eine Quote als zu dünn für den Einsatz. 0 = nicht prüfen.
+    arbitrage_min_liquidity: float = 0.0
     #: Wie lange ein Fund im Dashboard stehen bleibt.
     arbitrage_ttl_seconds: int = 120
     #: Abstand zwischen zwei Meldungen zum selben Markt.

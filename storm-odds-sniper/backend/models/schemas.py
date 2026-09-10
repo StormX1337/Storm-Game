@@ -337,7 +337,9 @@ class BetResponse(BaseModel):
     """Eine festgehaltene Wette."""
 
     id: int
-    user_id: int | None = None
+    #: Über Telegram eingetragen? Die Telegram-ID selbst bleibt drin - eine
+    #: offene Schnittstelle muss keine Nutzerkennungen ausliefern.
+    via_telegram: bool = False
     alert_fingerprint: str | None = None
     event_id: str
     event_title: str = ""
@@ -348,6 +350,8 @@ class BetResponse(BaseModel):
     #: Der Preis, zu dem tatsächlich gespielt wurde.
     odds: float
     stake: float
+    #: percent = Anteil der Bankroll, currency = Betrag.
+    stake_unit: str = "percent"
     status: str
     status_label: str = ""
     profit: float | None = None
@@ -385,6 +389,8 @@ class LedgerResponse(BaseModel):
     #: "Einheiten" ohne hinterlegte Bankroll - dann sind Einsätze
     #: Prozentpunkte der Bankroll, keine Beträge.
     unit: str = "Einheiten"
+    #: Kamen Anteile *und* Beträge vor? Dann ist die Summe zweierlei Maß.
+    mixed_units: bool = False
     notes: list[str] = Field(default_factory=list)
     #: Ist der Schreibzugriff über die API offen?
     writes_enabled: bool = False
@@ -419,7 +425,12 @@ class ArbitrageLeg(BaseModel):
     selection: str
     selection_label: str = ""
     bookmaker: str
+    #: Die angezeigte Quote - die, zu der man spielt.
     odds: float
+    #: Nach Abzug der Börsenkommission. Danach wird gerechnet.
+    effective_odds: float = 0.0
+    is_exchange: bool = False
+    liquidity: float | None = None
     #: Anteil des Gesamteinsatzes, damit jeder Ausgang gleich viel zurückgibt.
     stake_share: float = 0.0
     stake_percent: float = 0.0
@@ -440,6 +451,11 @@ class ArbitrageItem(BaseModel):
     max_age: float = 0.0
     #: Zu gut, um wahr zu sein - praktisch immer ein Datenfehler.
     suspicious: bool = False
+    #: Börse beteiligt? Dann steckt eine angenommene Kommission in der
+    #: Rechnung, die je nach Konto anders ausfällt.
+    has_exchange: bool = False
+    #: Zu wenig Geld hinter einer Quote, um den Einsatz aufzunehmen.
+    thin_liquidity: bool = False
     detected_at: float = 0.0
 
 

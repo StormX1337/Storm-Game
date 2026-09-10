@@ -9,7 +9,11 @@ from __future__ import annotations
 from html import escape
 
 from backend.core.betlog import STATUS_ICONS, STATUS_LABELS
-from backend.core.recommendation import GRADE_FILTER_LABELS, GRADE_LABELS
+from backend.core.recommendation import (
+    GRADE_FILTER_LABELS,
+    GRADE_LABELS,
+    PLAYABLE_GRADES,
+)
 from backend.core.recommendation import REASON_LABELS as RECOMMENDATION_REASONS
 from backend.core.verdict import VERDICT_LABELS
 from backend.models.domain import Alert, EventSnapshot, now_ts
@@ -408,7 +412,7 @@ def format_bet_line(bet, *, index: int | None = None) -> str:
     return "\n".join(zeilen)
 
 
-def format_ledger(ledger, *, bankroll: float = 0.0) -> str:
+def format_ledger(ledger) -> str:
     """Die Kasse: was die gespielten Wetten gebracht haben.
 
     Bewusst zuerst die Zählerstände, dann erst die Rendite - und die nur,
@@ -451,7 +455,7 @@ def format_ledger(ledger, *, bankroll: float = 0.0) -> str:
     return "\n".join(lines)
 
 
-def format_arbitrage(item: dict, *, bankroll: float = 0.0) -> str:
+def format_arbitrage(item: dict, *, bankroll: float = 0.0, max_total_percent: float = 6.0) -> str:
     """Ein Widerspruch zwischen Büchern, mit Einsatzverteilung.
 
     Anders als beim Rest steht hier kein "vermutlich": die Rechnung geht auf,
@@ -467,14 +471,20 @@ def format_arbitrage(item: dict, *, bankroll: float = 0.0) -> str:
         f"📋 {esc(item.get('market_label') or item.get('market'))}",
         "",
     ]
-    einsatz_basis = bankroll if bankroll > 0 else 100.0
+    # Rechnerisch ist eine Arbitrage risikofrei - praktisch ist sie es nicht:
+    # füllt nur ein Bein, steht man mit einer ungewollten Einzelwette da.
+    # Deshalb gilt hier derselbe Gesamtdeckel wie für alles andere, statt
+    # die ganze Bankroll auf einen Fund zu legen.
+    einsatz_basis = bankroll * max_total_percent / 100.0 if bankroll > 0 else 100.0
     einheit = "" if bankroll > 0 else " %"
     for leg in item.get("legs", []):
         anteil = float(leg.get("stake_percent", 0.0))
         betrag = einsatz_basis * anteil / 100.0
+        boerse = " 🔁" if leg.get("is_exchange") else ""
         lines.append(
             f"• <b>{esc(leg.get('selection_label') or leg.get('selection'))}</b> "
-            f"bei {esc(leg.get('bookmaker'))} zu <code>{float(leg.get('odds', 0)):.2f}</code>"
+            f"bei {esc(leg.get('bookmaker'))}{boerse} zu "
+            f"<code>{float(leg.get('odds', 0)):.2f}</code>"
         )
         lines.append(f"    Einsatz {betrag:.2f}{einheit} ({anteil:.1f} % des Gesamteinsatzes)")
     if item.get("legs"):
@@ -491,7 +501,25 @@ def format_arbitrage(item: dict, *, bankroll: float = 0.0) -> str:
         ]
     if bankroll <= 0:
         lines.append("<i>Beträge je 100 Einsatz; mit BANKROLL werden es echte Beträge.</i>")
+    else:
+        lines.append(
+            f"<i>Gesamteinsatz {max_total_percent:.1f} % der Bankroll "
+            f"({einsatz_basis:.2f}) - nicht mehr, weil ein Bein ausfallen kann.</i>"
+        )
 
+    if item.get("has_exchange"):
+        lines += [
+            "",
+            "🔁 <b>Börse beteiligt.</b> Gerechnet ist mit der angenommenen",
+            "Kommission auf den Nettogewinn; dein Konto kann eine andere",
+            "haben. Spielen musst du zur angezeigten Quote.",
+        ]
+    if item.get("thin_liquidity"):
+        lines += [
+            "",
+            "💧 <b>Wenig Geld dahinter.</b> Die Börsenquote nimmt den Einsatz",
+            "womöglich gar nicht auf - dann steht der Fund nur auf dem Papier.",
+        ]
     if item.get("suspicious"):
         lines += [
             "",
@@ -549,11 +577,17 @@ def format_digest(
         lines += ["💰 <b>Deine Wetten</b>", "   Nichts eingetragen.", ""]
 
     # 2) Was das System gemeldet hat.
-    spielbar = sum(count for grade, count in grades.items() if grade in {"strong", "moderate"})
     lines.append("🚨 <b>Alarme</b>")
     lines.append(f"   {stats.get('alerts_window', 0)} in diesem Zeitraum")
     if grades:
-        lines.append(f"   davon spielbar: <b>{spielbar}</b>")
+        # Die Gradzähler laufen in Redis über eine Woche und lassen sich
+        # nicht auf 24 Stunden zurückschneiden. Sie als Anteil der
+        # Tageszahl zu zeigen, ergäbe Sätze wie "120 Alarme, davon 340
+        # spielbar" - deshalb steht der Zeitraum ausdrücklich dabei.
+        spielbar = sum(count for grade, count in grades.items() if grade in PLAYABLE_GRADE_VALUES)
+        lines.append("")
+        lines.append("🎯 <b>Empfehlungsgrade</b> <i>(laufende Woche)</i>")
+        lines.append(f"   spielbar: <b>{spielbar}</b> von {sum(grades.values())}")
         for grade in ("strong", "moderate", "weak", "skip"):
             if grades.get(grade):
                 lines.append(
@@ -598,8 +632,11 @@ def format_event_line(event: EventSnapshot) -> str:
     return "\n".join(parts)
 
 
-#: Klartext des Mindestgrads - dieselben Worte wie am Knopf.
-GRADE_FILTER_TEXT: dict[str, str] = dict(GRADE_FILTER_LABELS)
+#: Werte der spielbaren Grade - einmal abgeleitet statt dreimal getippt.
+PLAYABLE_GRADE_VALUES: frozenset[str] = frozenset(g.value for g in PLAYABLE_GRADES)
+
+#: Klartext des Mindestgrads - eine Quelle, nicht drei Kopien.
+GRADE_FILTER_TEXT = GRADE_FILTER_LABELS
 
 
 def format_settings(settings_row) -> str:

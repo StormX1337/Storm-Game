@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
+from backend.core.recommendation import GRADE_FILTER_LABELS
+
 MAIN_MENU = [
     [
         InlineKeyboardButton("⚽ Fußball", callback_data="filter:sport:football"),
@@ -61,12 +63,15 @@ def bet_settle_buttons(bet_id: int) -> InlineKeyboardMarkup:
     )
 
 
-GRADE_BUTTON_LABELS = {
-    "any": "📢 Alle Alarme",
-    "weak": "⚪ Ab beobachten",
-    "moderate": "🟡 Ab kleiner Einsatz",
-    "strong": "🟢 Nur spielen",
-}
+#: Symbol je Mindestgrad. Die Worte kommen aus GRADE_FILTER_LABELS - eine
+#: dritte Kopie derselben vier Begriffe würde irgendwann auseinanderlaufen.
+GRADE_BUTTON_ICONS = {"any": "📢", "weak": "⚪", "moderate": "🟡", "strong": "🟢"}
+
+
+def grade_button_label(min_grade: str) -> str:
+    grade = min_grade or "any"
+    wort = GRADE_FILTER_LABELS.get(grade, GRADE_FILTER_LABELS["any"])
+    return f"{GRADE_BUTTON_ICONS.get(grade, '📢')} {wort.capitalize()}"
 
 
 def settings_menu(settings_row) -> InlineKeyboardMarkup:
@@ -106,9 +111,7 @@ def settings_menu(settings_row) -> InlineKeyboardMarkup:
                 # Der wirksamste Filter von allen - deshalb eine eigene Zeile
                 # und nicht versteckt zwischen den Zahlenreglern.
                 InlineKeyboardButton(
-                    GRADE_BUTTON_LABELS.get(
-                        getattr(settings_row, "min_grade", "any") or "any", "📢 Alle Alarme"
-                    ),
+                    grade_button_label(getattr(settings_row, "min_grade", "any")),
                     callback_data="cycle:min_grade",
                 ),
             ],

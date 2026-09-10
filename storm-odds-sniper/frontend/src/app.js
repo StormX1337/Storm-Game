@@ -348,17 +348,42 @@
      der Markt abrutscht, ist der klassische vergessene Preis.
 
      Eine Linie, keine Legende - die Überschrift nennt das Buch. */
-  function sparkline(points) {
-    const werte = points.filter((p) => !p.suspended).map((p) => p.price);
-    if (werte.length < 2) return "";
-    const min = Math.min(...werte);
-    const max = Math.max(...werte);
+  function sparkline(points, windowMinutes) {
+    const reihe = points
+      .filter((p) => !p.suspended)
+      .map((p) => ({ t: Date.parse(p.ts) / 1000, preis: p.price }))
+      .filter((p) => !Number.isNaN(p.t));
+    if (!reihe.length) return "";
+
+    // Ein Preis ändert sich selten, und gespeichert wird nur die Änderung.
+    // Über den Index gezeichnet sähen drei Sprünge in zehn Sekunden aus wie
+    // eine halbe Stunde gleichmäßiger Bewegung - und ein Preis, der die
+    // ganze Zeit stillstand, hätte nur einen Punkt und gar keine Kurve.
+    // Beides ist genau der Fall, um den es hier geht. Also: über die Zeit
+    // zeichnen und den letzten Preis bis jetzt fortschreiben.
+    const jetzt = Date.now() / 1000;
+    const von = jetzt - windowMinutes * 60;
+    const stufen = [{ t: Math.min(reihe[0].t, von), preis: reihe[0].preis }, ...reihe];
+    stufen.push({ t: jetzt, preis: reihe[reihe.length - 1].preis });
+
+    const preise = stufen.map((p) => p.preis);
+    const min = Math.min(...preise);
+    const max = Math.max(...preise);
     const spanne = max - min || 1;
+    const spanneT = stufen[stufen.length - 1].t - stufen[0].t || 1;
     // Etwas Luft oben und unten, sonst klebt die Linie am Rand.
     const y = (preis) => 26 - ((preis - min) / spanne) * 22;
-    const x = (index) => (index / (werte.length - 1)) * 100;
-    const d = werte.map((preis, i) => `${i ? "L" : "M"}${x(i).toFixed(2)} ${y(preis).toFixed(2)}`).join(" ");
-    const steigend = werte[werte.length - 1] >= werte[0];
+    const x = (t) => ((t - stufen[0].t) / spanneT) * 100;
+
+    // Treppe statt Gerade: zwischen zwei Beobachtungen *stand* der Preis,
+    // er wanderte nicht gleichmäßig. Eine schräge Linie behauptete etwas,
+    // das wir nicht gesehen haben.
+    let d = `M${x(stufen[0].t).toFixed(2)} ${y(stufen[0].preis).toFixed(2)}`;
+    for (let i = 1; i < stufen.length; i += 1) {
+      d += ` L${x(stufen[i].t).toFixed(2)} ${y(stufen[i - 1].preis).toFixed(2)}`;
+      d += ` L${x(stufen[i].t).toFixed(2)} ${y(stufen[i].preis).toFixed(2)}`;
+    }
+    const steigend = preise[preise.length - 1] >= preise[0];
     return `<svg class="spark" viewBox="0 0 100 30" preserveAspectRatio="none" aria-hidden="true">
       <path d="${d}" class="spark__line ${steigend ? "spark__line--up" : "spark__line--down"}"
         vector-effect="non-scaling-stroke" />
@@ -367,32 +392,49 @@
 
   async function loadHistory(root, alert) {
     const box = root.querySelector("[data-history]");
-    if (!box || !alert.market || !alert.selection) return;
+    if (!box) return;
+    // Ohne Buchmacher gäbe es keine Kurve, sondern ein Gemisch aus mehreren
+    // Büchern - der Endpunkt lehnt das zu Recht ab.
+    if (!alert.market || !alert.selection || !alert.bookmaker) {
+      box.innerHTML =
+        '<h4>Verlauf</h4><div class="event-sub">Für diesen Alarm ist keine Quotenzeile hinterlegt.</div>';
+      return;
+    }
     const params = new URLSearchParams({
       event_id: alert.event_id,
       market: alert.market,
       selection: alert.selection,
       minutes: "30",
+      bookmaker: alert.bookmaker,
     });
-    if (alert.bookmaker) params.set("bookmaker", alert.bookmaker);
     try {
       const data = await fetchJson(`/odds/history?${params}`);
       const points = data.points || [];
-      if (points.length < 2) {
+      if (!points.length) {
         box.innerHTML =
-          '<h4>Verlauf</h4><div class="event-sub">Noch kein Verlauf gespeichert — der Preis wurde erst einmal gesehen.</div>';
+          '<h4>Verlauf</h4><div class="event-sub">Noch nichts gespeichert — der Preis wurde erst jetzt gesehen.</div>';
         return;
       }
+      // Ein einziger Punkt ist kein Mangel, sondern eine Aussage: der Preis
+      // hat sich im ganzen Fenster nicht bewegt. Genau das ist der
+      // vergessene Preis.
+      const steht = points.length === 1;
       const richtung = data.change_percent >= 0 ? "pos" : "neg";
       box.innerHTML = `<h4>Verlauf · ${esc(alert.bookmaker || "")} · ${data.minutes} Min</h4>
-        ${sparkline(points)}
+        ${sparkline(points, data.minutes)}
         <div class="row">
           <span class="event-sub mono">${fmtOdds(data.first_price)} → ${fmtOdds(
         data.last_price
       )}</span>
           <span class="event-sub mono ${richtung}">${fmtPct(data.change_percent)}</span>
         </div>
-        <div class="event-sub">${points.length} Beobachtungen</div>`;
+        <div class="event-sub">${
+          steht
+            ? "unverändert im ganzen Fenster — steht seit mindestens " +
+              data.minutes +
+              " Min"
+            : points.length + " Beobachtungen"
+        }</div>`;
     } catch (error) {
       // Ohne Datenbank gibt es keinen Verlauf - das ist kein Defekt.
       box.innerHTML =
@@ -1073,6 +1115,12 @@
         league: ev.league,
         status: ev.status,
         score,
+        // Die Schlüssel, nicht nur die Beschriftungen: der Verlauf fragt
+        // damit die Zeitreihe ab. Ohne sie blieb er bei jedem Live-Alarm
+        // für immer auf "Lade…" stehen - ausgerechnet bei denen, für die
+        // er gebaut wurde.
+        market: raw.market,
+        selection: raw.selection,
         market_label: raw.market_label || raw.market,
         selection_label: raw.selection_label || raw.selection,
         bookmaker: raw.bookmaker,

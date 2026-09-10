@@ -24,6 +24,20 @@ from enum import StrEnum
 from typing import Any
 
 
+class StakeUnit(StrEnum):
+    """In welcher Einheit ein Einsatz festgehalten wurde.
+
+    Ohne hinterlegte Bankroll ist ein Einsatz ein *Anteil* (0,7 = 0,7 % der
+    Bankroll), mit Bankroll ein *Betrag* (7,00). Beides in einer Summe wäre
+    stiller Unsinn: zehn Anteile und zehn Beträge ergäben eine Zahl, die
+    nichts bedeutet. Deshalb steht die Einheit an jeder Zeile - und die
+    Bilanz sagt es, wenn beides vorkommt.
+    """
+
+    PERCENT = "percent"
+    CURRENCY = "currency"
+
+
 class BetStatus(StrEnum):
     """Ausgang einer Wette."""
 
@@ -66,9 +80,22 @@ def stake_from_recommendation(recommendation: dict, *, bankroll: float) -> float
     """
     prozent = float(recommendation.get("stake_percent") or 0.0)
     if bankroll > 0:
-        math = recommendation.get("math") or {}
-        return float(math.get("stake_amount") or bankroll * prozent / 100.0)
+        # Bewusst *immer* neu gerechnet und nicht der gespeicherte Betrag:
+        # der entstand gegen die Bankroll von damals. Wer sein Konto
+        # verdoppelt, würde sonst weiter die alten Beträge eintragen.
+        return bankroll * prozent / 100.0
     return prozent
+
+
+def stake_unit_label(bankroll: float) -> str:
+    """Beträge oder Prozentpunkte?
+
+    Ohne hinterlegte Bankroll ist ein Einsatz kein Betrag, sondern ein
+    Anteil. Das muss dranstehen, sonst liest jemand Euro, wo keine gemeint
+    sind - und zwar überall mit demselben Wort, sonst beschriften API und
+    Telegram dieselbe Zahl verschieden.
+    """
+    return "Kontowährung" if bankroll > 0 else "% der Bankroll"
 
 
 def settle_profit(status: str, *, stake: float, odds: float) -> float | None:
@@ -107,6 +134,8 @@ class Ledger:
     expected_profit: float = 0.0
     #: Beträge oder Prozentpunkte der Bankroll - siehe ``unit``.
     unit: str = "Einheiten"
+    #: Kamen Anteile *und* Beträge vor? Dann ist die Summe zweierlei Maß.
+    mixed_units: bool = False
     notes: list[str] = field(default_factory=list)
 
     @property
@@ -151,6 +180,7 @@ class Ledger:
             "reliable": self.reliable,
             "min_settled": MIN_SETTLED,
             "unit": self.unit,
+            "mixed_units": self.mixed_units,
             "notes": list(self.notes),
         }
 
@@ -168,10 +198,12 @@ def summarise(rows: Iterable[Any], *, unit: str = "Einheiten") -> Ledger:
     handgeschriebene Fälle prüfen.
     """
     ledger = Ledger(unit=unit)
+    einheiten: set[str] = set()
     for row in rows:
         ledger.total += 1
         stake = float(getattr(row, "stake", 0.0) or 0.0)
         status = str(getattr(row, "status", BetStatus.OPEN))
+        einheiten.add(str(getattr(row, "stake_unit", None) or StakeUnit.PERCENT))
 
         if status == BetStatus.OPEN:
             ledger.open_count += 1
@@ -201,6 +233,16 @@ def summarise(rows: Iterable[Any], *, unit: str = "Einheiten") -> Ledger:
         elif status == BetStatus.LOST:
             ledger.losses += 1
 
+    if len(einheiten) > 1:
+        # Anteile und Beträge in einer Summe ergäben eine Zahl ohne
+        # Bedeutung. Rechnen tun wir trotzdem - aber schweigend wäre es
+        # eine Lüge.
+        ledger.notes.append(
+            "Achtung: einige Einsätze sind Prozentpunkte der Bankroll, andere "
+            "Beträge (BANKROLL wurde zwischendurch gesetzt oder entfernt). "
+            "Summe und Rendite mischen damit zwei Maßstäbe."
+        )
+        ledger.mixed_units = True
     if ledger.settled and not ledger.reliable:
         ledger.notes.append(
             f"Nur {ledger.settled} abgerechnete Wetten - eine Rendite daraus ist "

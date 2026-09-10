@@ -7,6 +7,20 @@ später eine Bilanz ergeben soll. Deshalb ist ``BETLOG_API_WRITES``
 standardmäßig aus; über Telegram geht es immer, dort ist der Absender
 bekannt.
 
+**Wem gehört welche Zeile?** Über Telegram ist der Absender bekannt, über
+HTTP nicht - dort gibt es keine Anmeldung. Daraus folgen zwei Regeln, die
+zusammengehören:
+
+* **Ändern und Löschen über HTTP betrifft nur Zeilen ohne Nutzer**, also
+  genau das, was auch über HTTP entstanden ist. Sonst könnte ein Aufruf ohne
+  jede Identität die Wetten eines Telegram-Nutzers abrechnen oder löschen -
+  im Bot verhindert das eine Besitzprüfung, und die darf über HTTP nicht
+  einfach fehlen.
+* **Gelesen wird das ganze Buch**, damit im Dashboard auch auftaucht, was
+  über Telegram eingetragen wurde. Die Telegram-ID steht deshalb *nicht* in
+  der Antwort: eine offene Schnittstelle muss keine Nutzerkennungen
+  ausliefern, damit eine Bilanz stimmt.
+
 Der Bot setzt weiterhin nichts. Er hält fest, was ein Mensch gespielt hat.
 """
 
@@ -17,7 +31,13 @@ from datetime import UTC, datetime, timedelta
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from backend.api.deps import app_settings, get_optional_repository, get_repository
-from backend.core.betlog import STATUS_LABELS, BetStatus, stake_from_recommendation
+from backend.core.betlog import (
+    STATUS_LABELS,
+    BetStatus,
+    StakeUnit,
+    stake_from_recommendation,
+    stake_unit_label,
+)
 from backend.core.logging import get_logger
 from backend.models.domain import Alert
 from backend.models.schemas import (
@@ -31,20 +51,12 @@ log = get_logger("api.bets")
 router = APIRouter(prefix="/bets", tags=["bets"])
 
 
-def _unit(settings) -> str:
-    """Beträge oder Prozentpunkte?
-
-    Ohne hinterlegte Bankroll ist ein Einsatz kein Betrag, sondern ein
-    Anteil. Das muss dranstehen, sonst liest jemand Euro, wo keine gemeint
-    sind.
-    """
-    return "Kontowährung" if settings.bankroll > 0 else "% der Bankroll"
-
-
 def _to_response(row) -> BetResponse:
     return BetResponse(
         id=row.id,
-        user_id=row.user_id,
+        # Die Telegram-ID bleibt drin: eine offene Schnittstelle muss keine
+        # Nutzerkennungen ausliefern, damit eine Bilanz stimmt.
+        via_telegram=row.user_id is not None,
         alert_fingerprint=row.alert_fingerprint,
         event_id=row.event_id,
         event_title=row.event_title,
@@ -54,6 +66,7 @@ def _to_response(row) -> BetResponse:
         bookmaker=row.bookmaker,
         odds=row.odds,
         stake=row.stake,
+        stake_unit=row.stake_unit,
         status=row.status,
         status_label=STATUS_LABELS.get(row.status, row.status),
         profit=row.profit,
@@ -112,9 +125,11 @@ async def ledger(
     settings = app_settings(request)
     repo = get_optional_repository(request)
     if repo is None:
-        return LedgerResponse(unit=_unit(settings), writes_enabled=settings.betlog_api_writes)
+        return LedgerResponse(
+            unit=stake_unit_label(settings.bankroll), writes_enabled=settings.betlog_api_writes
+        )
     since = datetime.now(UTC) - timedelta(hours=since_hours) if since_hours else None
-    result = await repo.bet_ledger(since=since, unit=_unit(settings))
+    result = await repo.bet_ledger(since=since, unit=stake_unit_label(settings.bankroll))
     return LedgerResponse(
         **result.to_json(),
         writes_enabled=settings.betlog_enabled and settings.betlog_api_writes,
@@ -130,6 +145,11 @@ async def create_bet(request: Request, payload: BetCreateRequest) -> BetResponse
     values: dict = {
         "note": payload.note,
         "status": BetStatus.OPEN.value,
+        # Ohne Bankroll ist der Einsatz ein Anteil, kein Betrag. Das muss an
+        # der Zeile stehen, sonst summiert die Bilanz später zweierlei Maß.
+        "stake_unit": (
+            StakeUnit.CURRENCY.value if settings.bankroll > 0 else StakeUnit.PERCENT.value
+        ),
     }
 
     if payload.alert_fingerprint:
@@ -141,6 +161,11 @@ async def create_bet(request: Request, payload: BetCreateRequest) -> BetResponse
         except Exception as exc:  # noqa: BLE001 - defensiv gegen alte Payload-Formate
             log.warning("alarm nicht lesbar", error=str(exc))
             raise HTTPException(status_code=422, detail="Alarm nicht lesbar") from exc
+        # Zweimal tippen darf keine zweite Zeile erzeugen - sonst zählt die
+        # Bilanz Einsatz und Gewinn doppelt.
+        vorhanden = await repo.find_bet_for_alert(alert.fingerprint, user_id=None)
+        if vorhanden is not None:
+            return _to_response(vorhanden)
         recommendation = alert.recommendation or {}
         # Ohne Bankroll ist der Einsatz ein Anteil, kein Betrag - und das
         # bleibt so bis in die Bilanz hinein.
@@ -194,9 +219,18 @@ async def create_bet(request: Request, payload: BetCreateRequest) -> BetResponse
 async def settle_bet(request: Request, bet_id: int, payload: BetSettleRequest) -> BetResponse:
     _require_writes(app_settings(request))
     repo = get_repository(request)
-    row = await repo.settle_bet(bet_id, payload.status)
+    # Nur Zeilen ohne Nutzer - siehe Modulkopf. Über HTTP gibt es keine
+    # Identität, also darf über HTTP auch nichts Fremdes angefasst werden.
+    row = await repo.settle_bet(bet_id, payload.status, only_unowned=True)
     if row is None:
-        raise HTTPException(status_code=404, detail="Wette unbekannt")
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "Wette unbekannt - oder über Telegram eingetragen. Solche "
+                "Wetten lassen sich nur dort abrechnen, wo klar ist, wem sie "
+                "gehören."
+            ),
+        )
     return _to_response(row)
 
 
@@ -204,5 +238,8 @@ async def settle_bet(request: Request, bet_id: int, payload: BetSettleRequest) -
 async def delete_bet(request: Request, bet_id: int) -> None:
     _require_writes(app_settings(request))
     repo = get_repository(request)
-    if not await repo.delete_bet(bet_id):
-        raise HTTPException(status_code=404, detail="Wette unbekannt")
+    if not await repo.delete_bet(bet_id, only_unowned=True):
+        raise HTTPException(
+            status_code=404,
+            detail="Wette unbekannt - oder über Telegram eingetragen.",
+        )

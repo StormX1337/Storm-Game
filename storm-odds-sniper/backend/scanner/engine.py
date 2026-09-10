@@ -155,6 +155,8 @@ class ScannerEngine:
             min_profit_percent=self.settings.arbitrage_min_profit_percent,
             max_profit_percent=self.settings.arbitrage_max_profit_percent,
             max_age=self.settings.arbitrage_max_age,
+            exchange_commission=self.settings.arbitrage_exchange_commission,
+            min_liquidity=self.settings.arbitrage_min_liquidity,
         )
 
         self._queue: asyncio.Queue[ProviderMessage] = asyncio.Queue(
@@ -190,6 +192,7 @@ class ScannerEngine:
             "dropped": 0,
             "resolved": 0,
             "arbitrage": 0,
+            "arbitrage_suspicious": 0,
         }
 
     # ------------------------------------------------------------- Lifecycle
@@ -475,6 +478,17 @@ class ScannerEngine:
                 arb.key, payload, ttl=self.settings.arbitrage_ttl_seconds
             )
         self.stats["arbitrage"] += 1
+        if arb.suspicious:
+            # Zu gut, um wahr zu sein. Die Lesepfade blenden solche Funde aus;
+            # der Push wäre sonst der einzige Kanal, der sie doch anpreist -
+            # und der einzige, dem man nicht ausweichen kann.
+            self.stats["arbitrage_suspicious"] += 1
+            log.info(
+                "arbitrage verdächtig - nicht gemeldet",
+                title=arb.event_title,
+                gewinn=f"{arb.profit_percent:.2f}%",
+            )
+            return
         # Melden nur einmal je Markt und Abkühlzeit - ein Widerspruch, der
         # eine Minute steht, wäre sonst dreißig Nachrichten.
         neu = True

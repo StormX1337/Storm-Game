@@ -14,7 +14,12 @@ from telegram.ext import (
     ContextTypes,
 )
 
-from backend.core.betlog import BetStatus, stake_from_recommendation
+from backend.core.betlog import (
+    BetStatus,
+    StakeUnit,
+    stake_from_recommendation,
+    stake_unit_label,
+)
 from backend.core.config import get_settings
 from backend.core.logging import get_logger
 from backend.core.recommendation import Recommendation, build_slip, config_from_settings
@@ -286,10 +291,6 @@ async def cmd_scorecard(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 # ------------------------------------------------------------ Wett-Tagebuch
 
 
-def _bet_unit(settings) -> str:
-    return "Kontowährung" if settings.bankroll > 0 else "% der Bankroll"
-
-
 async def cmd_bets(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Gespielte Wetten - offene zuerst, mit Knöpfen zum Abrechnen."""
     repo = _repo(context)
@@ -330,12 +331,12 @@ async def cmd_ledger(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         return
     settings = context.application.bot_data.get("settings") or get_settings()
     try:
-        ledger = await repo.bet_ledger(user_id=user.id, unit=_bet_unit(settings))
+        ledger = await repo.bet_ledger(user_id=user.id, unit=stake_unit_label(settings.bankroll))
     except Exception as exc:  # noqa: BLE001 - eine Kennzahl darf den Bot nie stoppen
         log.warning("kasse nicht lesbar", error=str(exc))
         await _reply(update, "⚠️ Kasse gerade nicht abrufbar.")
         return
-    await _reply(update, fmt.format_ledger(ledger, bankroll=settings.bankroll), back_to_menu())
+    await _reply(update, fmt.format_ledger(ledger), back_to_menu())
 
 
 async def _bet_from_alert(update, context, fingerprint: str) -> None:
@@ -362,6 +363,18 @@ async def _bet_from_alert(update, context, fingerprint: str) -> None:
         await query.answer("Alarm nicht lesbar", show_alert=True)
         return
 
+    vorhanden = await repo.find_bet_for_alert(alert.fingerprint, user_id=user.id)
+    if vorhanden is not None:
+        # Der Knopf bleibt nach dem Tippen stehen. Ein zweiter Tipper darf
+        # keine zweite Zeile erzeugen, sonst zählt die Bilanz doppelt.
+        await query.answer("Steht schon im Buch")
+        await _reply_new(
+            update,
+            "📓 <b>Schon eingetragen</b>\n\n" + fmt.format_bet_line(vorhanden),
+            bet_settle_buttons(vorhanden.id),
+        )
+        return
+
     empfehlung = alert.recommendation or {}
     # Ohne Bankroll ist der Einsatz ein Anteil, kein Betrag.
     einsatz = stake_from_recommendation(empfehlung, bankroll=settings.bankroll)
@@ -382,6 +395,7 @@ async def _bet_from_alert(update, context, fingerprint: str) -> None:
         bookmaker=alert.bookmaker,
         odds=alert.odds,
         stake=float(einsatz),
+        stake_unit=(StakeUnit.CURRENCY.value if settings.bankroll > 0 else StakeUnit.PERCENT.value),
         status=BetStatus.OPEN.value,
         expected_edge_percent=empfehlung.get("credible_edge_percent"),
     )
@@ -456,7 +470,14 @@ async def cmd_arbitrage(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     await _reply(update, f"🔒 <b>Sichere Wetten</b> — {len(echte)} gefunden")
     for item in echte[:5]:
-        await _reply_new(update, fmt.format_arbitrage(item, bankroll=settings.bankroll))
+        await _reply_new(
+            update,
+            fmt.format_arbitrage(
+                item,
+                bankroll=settings.bankroll,
+                max_total_percent=settings.max_total_stake_percent,
+            ),
+        )
 
 
 async def cmd_digest(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -477,7 +498,9 @@ async def cmd_digest(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     try:
         stats = await repo.stats(window_hours=stunden)
         scorecard = await repo.scorecard(window_hours=stunden)
-        ledger = await repo.bet_ledger(user_id=user.id, since=seit, unit=_bet_unit(settings))
+        ledger = await repo.bet_ledger(
+            user_id=user.id, since=seit, unit=stake_unit_label(settings.bankroll)
+        )
     except Exception as exc:  # noqa: BLE001 - ein Bericht darf den Bot nie stoppen
         log.warning("bericht nicht erstellbar", error=str(exc))
         await _reply(update, "⚠️ Bericht gerade nicht erstellbar.")
@@ -593,7 +616,10 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
     if data == "cycle:min_grade":
         aktuell = getattr(settings_row, "min_grade", "any") or "any"
-        naechster = GRADE_CYCLE[(GRADE_CYCLE.index(aktuell) + 1) % len(GRADE_CYCLE)]
+        # Ein unbekannter Wert (alte oder von Hand geänderte Zeile) darf den
+        # Knopf nicht sprengen - dann fängt der Umlauf einfach von vorn an.
+        stelle = GRADE_CYCLE.index(aktuell) if aktuell in GRADE_CYCLE else -1
+        naechster = GRADE_CYCLE[(stelle + 1) % len(GRADE_CYCLE)]
         settings_row = await repo.update_user_settings(user.id, min_grade=naechster)
         await query.answer(fmt.GRADE_FILTER_TEXT.get(naechster, naechster))
         await _reply(update, fmt.format_settings(settings_row), settings_menu(settings_row))

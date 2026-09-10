@@ -863,7 +863,10 @@ class TestTagesbericht:
         assert "Deine Wetten" in text
         assert "+5.00" in text
         assert "1231" in text
-        assert "davon spielbar: <b>11</b>" in text
+        assert "spielbar: <b>11</b>" in text
+        # Die Gradzähler laufen über eine Woche - das muss dranstehen,
+        # sonst liest man sie als Anteil der Tageszahl.
+        assert "laufende Woche" in text
         assert "+3.2" in text
         assert "kein Gewinn" in text
 

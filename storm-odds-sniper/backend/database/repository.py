@@ -756,6 +756,25 @@ class Repository:
         ]
 
     # ------------------------------------------------------- Wett-Tagebuch
+    async def find_bet_for_alert(self, fingerprint: str, *, user_id: int | None) -> Bet | None:
+        """Gibt es zu diesem Alarm schon eine Wette dieses Nutzers?
+
+        Der Knopf am Alarm bleibt nach dem Tippen stehen, und im Dashboard
+        überlebt er jeden Neuaufbau der Liste. Ohne diese Prüfung stehen nach
+        zwei Tippern zwei identische Zeilen im Buch - und die Bilanz zählt
+        Einsatz und Gewinn doppelt.
+        """
+        if not fingerprint:
+            return None
+        stmt = select(Bet).where(Bet.alert_fingerprint == fingerprint)
+        stmt = (
+            stmt.where(Bet.user_id == user_id)
+            if user_id is not None
+            else stmt.where(Bet.user_id.is_(None))
+        )
+        async with self.session_factory() as session:
+            return (await session.execute(stmt.limit(1))).scalar_one_or_none()
+
     async def create_bet(self, **values) -> Bet:
         """Eine gespielte Wette festhalten."""
         bet = Bet(**values)
@@ -766,7 +785,12 @@ class Repository:
         return bet
 
     async def settle_bet(
-        self, bet_id: int, status: str, *, user_id: int | None = None
+        self,
+        bet_id: int,
+        status: str,
+        *,
+        user_id: int | None = None,
+        only_unowned: bool = False,
     ) -> Bet | None:
         """Eine Wette abrechnen. Der Gewinn folgt aus Ausgang, Einsatz, Quote.
 
@@ -780,6 +804,10 @@ class Repository:
             stmt = select(Bet).where(Bet.id == bet_id)
             if user_id is not None:
                 stmt = stmt.where(Bet.user_id == user_id)
+            elif only_unowned:
+                # Für Aufrufer ohne Identität (HTTP): nur was ohne Nutzer
+                # angelegt wurde, also was über denselben Weg entstand.
+                stmt = stmt.where(Bet.user_id.is_(None))
             bet = (await session.execute(stmt)).scalar_one_or_none()
             if bet is None:
                 return None
@@ -793,11 +821,15 @@ class Repository:
             await session.refresh(bet)
         return bet
 
-    async def delete_bet(self, bet_id: int, *, user_id: int | None = None) -> bool:
+    async def delete_bet(
+        self, bet_id: int, *, user_id: int | None = None, only_unowned: bool = False
+    ) -> bool:
         async with self.session_factory() as session:
             stmt = delete(Bet).where(Bet.id == bet_id)
             if user_id is not None:
                 stmt = stmt.where(Bet.user_id == user_id)
+            elif only_unowned:
+                stmt = stmt.where(Bet.user_id.is_(None))
             result = await session.execute(stmt)
             await session.commit()
         return bool(result.rowcount)

@@ -58,8 +58,12 @@ async def list_odds(
     response_model=OddsHistoryResponse,
     summary="Preisverlauf einer Quotenzeile",
     description=(
-        "Wie sich ein Preis in den letzten Minuten bewegt hat — aus den "
-        "gespeicherten Snapshots, ohne zusätzlichen Abruf beim Anbieter.\n\n"
+        "Wie sich ein Preis **eines Buchmachers** in den letzten Minuten "
+        "bewegt hat — aus den gespeicherten Snapshots, ohne zusätzlichen "
+        "Abruf beim Anbieter.\n\n"
+        "`bookmaker` ist Pflicht: ohne ihn lägen die Preise verschiedener "
+        "Bücher in einer Kurve, und `change_percent` wäre nur der Abstand "
+        "zwischen zwei Häusern statt einer Bewegung.\n\n"
         "Eine Quote, die seit zehn Minuten unverändert steht, während der "
         "Markt abrutscht, ist etwas ganz anderes als eine, die eben erst "
         "dort angekommen ist. Genau das zeigt der Verlauf."
@@ -70,7 +74,14 @@ async def odds_history(
     event_id: str = Query(..., max_length=64),
     market: str = Query(..., max_length=96, description="z. B. over_under|2.5|full_time"),
     selection: str = Query(..., max_length=96),
-    bookmaker: str | None = Query(default=None, max_length=64),
+    bookmaker: str = Query(
+        ...,
+        max_length=64,
+        description=(
+            "Pflicht: ohne ihn lägen Preise verschiedener Bücher in einer "
+            "Kurve, und die Änderung wäre nur der Abstand zwischen ihnen."
+        ),
+    ),
     minutes: int = Query(default=30, ge=1, le=1440),
     limit: int = Query(default=120, ge=2, le=500),
 ) -> OddsHistoryResponse:
