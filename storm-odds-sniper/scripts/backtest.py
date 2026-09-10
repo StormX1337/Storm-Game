@@ -104,12 +104,73 @@ async def sammeln(settings: Settings, days: int, limit: int) -> tuple[list[Sampl
                 raw_edge=empfehlung.raw_edge_percent,
                 clv_percent=row.clv_percent,
                 verdict=row.verdict,
+                phase=getattr(row, "phase", None) or "unknown",
             )
         )
     return proben, nachgerechnet, unlesbar
 
 
-def ausgeben(ergebnis, *, days: int, nachgerechnet: int, unlesbar: int) -> None:
+WELT_TITEL = {"live": "LAUFENDE SPIELE", "prematch": "VOR DEM ANPFIFF", "unknown": "OHNE ZUORDNUNG"}
+
+
+def _aufteilen(proben: list[Sample], *, erzwungen: str | None) -> dict[str, list[Sample]]:
+    """Nach Welten trennen - aber nur, wenn beide auch etwas belegen können.
+
+    Eine Welt mit drei nachkontrollierten Alarmen als eigenen Bericht
+    hinzustellen, sähe nach Aussage aus und wäre keine. Solche Reste bleiben
+    beim gemeinsamen Bericht, und der sagt dann, dass er gemischt ist.
+    """
+    if erzwungen:
+        return {erzwungen: proben}
+    nach_welt: dict[str, list[Sample]] = {}
+    for probe in proben:
+        nach_welt.setdefault(probe.phase, []).append(probe)
+    tragfaehig = [
+        welt
+        for welt, teil in nach_welt.items()
+        if welt in ("live", "prematch")
+        and sum(1 for p in teil if p.clv_percent is not None) >= MIN_PER_GROUP
+    ]
+    if len(tragfaehig) < 2:
+        return {"": proben}
+    return {welt: nach_welt[welt] for welt in ("live", "prematch") if welt in tragfaehig}
+
+
+def _mischungshinweis(proben: list[Sample]) -> str:
+    """Sagen, wenn hier zwei Märkte in einem Topf stecken.
+
+    Getrennt wird erst, wenn beide Welten je genug nachkontrollierte Alarme
+    haben. Bis dahin steht hier ein gemischter Bericht - und wer das nicht
+    weiss, liest die Zahlen für die falsche Welt.
+    """
+    gezaehlt: dict[str, int] = {}
+    for probe in proben:
+        if probe.clv_percent is not None:
+            gezaehlt[probe.phase] = gezaehlt.get(probe.phase, 0) + 1
+    welten = {w: n for w, n in gezaehlt.items() if w in ("live", "prematch")}
+    if len(welten) < 2:
+        return ""
+    teile = ", ".join(f"{WELT_TITEL[w].lower()}: {n}" for w, n in sorted(welten.items()))
+    return (
+        f"Live und Prematch stehen hier gemeinsam ({teile}). Das sind zwei "
+        f"Märkte mit zwei Schwellensätzen - getrennt wird ab je "
+        f"{MIN_PER_GROUP} nachkontrollierten Alarmen, vorher mit --phase live "
+        "bzw. --phase prematch."
+    )
+
+
+def ausgeben(
+    ergebnis,
+    *,
+    days: int,
+    nachgerechnet: int,
+    unlesbar: int,
+    welt: str | None = None,
+    mischung: str = "",
+) -> None:
+    if welt:
+        print(f"\n{BALKEN}")
+        print(f"  {WELT_TITEL.get(welt, welt.upper())}")
     print(f"\nStorm Odds Sniper - Modellprüfung ({days} Tage)")
     print(BALKEN)
     print(f"Alarme geprüft         : {ergebnis.total}")
@@ -118,6 +179,8 @@ def ausgeben(ergebnis, *, days: int, nachgerechnet: int, unlesbar: int) -> None:
         print(f"ohne gespeicherten Grad: {nachgerechnet} (mit heutigen Einstellungen gerechnet)")
     if unlesbar:
         print(f"nicht lesbar           : {unlesbar}")
+    if mischung:
+        print(f"\n⚠️  {mischung}")
 
     print(f"\n1) Trennt der Grad?\n{BALKEN}")
     if not ergebnis.groups:
@@ -180,6 +243,11 @@ async def main() -> int:
     parser = argparse.ArgumentParser(description="Empfehlungsmodell gegen echte Alarme prüfen")
     parser.add_argument("--days", type=int, default=7, help="Zeitraum in Tagen (Standard 7)")
     parser.add_argument("--limit", type=int, default=20000, help="Höchstzahl Alarme")
+    parser.add_argument(
+        "--phase",
+        choices=("live", "prematch"),
+        help="Nur eine Welt auswerten. Ohne Angabe werden beide getrennt gezeigt.",
+    )
     parser.add_argument("--json", action="store_true", help="Maschinenlesbar ausgeben")
     args = parser.parse_args()
 
@@ -205,22 +273,38 @@ async def main() -> int:
         print(f"Datenbank nicht erreichbar: {exc}", file=sys.stderr)
         return 1
 
-    ergebnis = analyse(proben)
+    if args.phase:
+        proben = [p for p in proben if p.phase == args.phase]
+
+    # Live und vor dem Anpfiff sind zwei Märkte mit zwei Schwellensätzen. Sie
+    # in einen Mittelwert zu werfen ergäbe eine Zahl, die für keinen von
+    # beiden gilt - also getrennt, sobald beide etwas zu sagen haben.
+    welten = _aufteilen(proben, erzwungen=args.phase)
+
     if args.json:
         print(
             json.dumps(
                 {
-                    **ergebnis.to_json(),
                     "days": args.days,
                     "recomputed": nachgerechnet,
                     "unreadable": unlesbar,
+                    "phases": {name: analyse(teil).to_json() for name, teil in welten.items()},
                 },
                 indent=2,
                 ensure_ascii=False,
             )
         )
-    else:
-        ausgeben(ergebnis, days=args.days, nachgerechnet=nachgerechnet, unlesbar=unlesbar)
+        return 0
+
+    for index, (name, teil) in enumerate(welten.items()):
+        ausgeben(
+            analyse(teil),
+            days=args.days,
+            nachgerechnet=nachgerechnet if index == 0 else 0,
+            unlesbar=unlesbar if index == 0 else 0,
+            welt=name if len(welten) > 1 or args.phase else None,
+            mischung=_mischungshinweis(teil) if not name else "",
+        )
     return 0
 
 

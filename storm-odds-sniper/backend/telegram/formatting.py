@@ -6,6 +6,7 @@ Provider nicht liefert, werden schlicht weggelassen statt geraten.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from html import escape
 
 from backend.core.betlog import STATUS_ICONS, STATUS_LABELS
@@ -26,6 +27,15 @@ STATUS_ICON = {
     EventStatus.SUSPENDED: "⏸",
     EventStatus.FINISHED: "🏁",
     EventStatus.UNKNOWN: "⚪",
+}
+#: "PRE_MATCH" ist ein Feldwert, keine Auskunft. In einer Nachricht, die ein
+#: Mensch auf dem Handy liest, steht deutsch da, was Sache ist.
+STATUS_LABEL = {
+    EventStatus.LIVE: "LÄUFT",
+    EventStatus.PRE_MATCH: "VOR DEM ANPFIFF",
+    EventStatus.SUSPENDED: "AUSGESETZT",
+    EventStatus.FINISHED: "BEENDET",
+    EventStatus.UNKNOWN: "ZUSTAND UNBEKANNT",
 }
 KIND_TITLE = {
     AlertKind.FIXED_ERROR: "🎯 FIXED ODDS ERROR",
@@ -122,8 +132,45 @@ def tennis_context(event: EventSnapshot) -> list[str]:
     return lines
 
 
+def kickoff_text(event: EventSnapshot) -> str | None:
+    """Wie lange noch bis zum Anpfiff?
+
+    Bei einem Alarm vor dem Anpfiff ist das die wichtigste Zahl nach der
+    Quote: in zwanzig Minuten muss man sich jetzt entscheiden, in zwei Tagen
+    kann man in Ruhe vergleichen - und bis dahin ist der Preis ohnehin ein
+    anderer. Ohne diese Angabe ist so ein Alarm kaum verwertbar.
+
+    Liefert der Provider keine Anstoßzeit, steht hier nichts. Geraten wird
+    nicht.
+    """
+    if event.start_time is None:
+        return None
+    start = event.start_time
+    if start.tzinfo is None:
+        start = start.replace(tzinfo=UTC)
+    uhrzeit = start.strftime("%d.%m. %H:%M")
+    sekunden = (start - datetime.now(UTC)).total_seconds()
+    if sekunden <= 0:
+        # Angepfiffen, aber der Provider meldet noch PRE_MATCH. Dann ist die
+        # Uhrzeit die einzige ehrliche Auskunft - ein Countdown wäre falsch.
+        return f"Anpfiff {uhrzeit} (angesetzt)"
+    minuten = int(sekunden // 60)
+    if minuten < 60:
+        return f"Anpfiff in {minuten} Min ({uhrzeit})"
+    stunden, rest = divmod(minuten, 60)
+    if stunden < 24:
+        return f"Anpfiff in {stunden} Std {rest} Min ({uhrzeit})"
+    tage, reststunden = divmod(stunden, 24)
+    return f"Anpfiff in {tage} T {reststunden} Std ({uhrzeit})"
+
+
 def event_context(event: EventSnapshot) -> list[str]:
-    """Live-Details - nur was der Provider wirklich geliefert hat."""
+    """Details - nur was der Provider wirklich geliefert hat."""
+    if event.status is EventStatus.PRE_MATCH:
+        # Vor dem Anpfiff gibt es keine Minute und keinen Spielstand. Was es
+        # gibt, ist die verbleibende Zeit - und die zählt hier.
+        anpfiff = kickoff_text(event)
+        return [f"⏱ {esc(anpfiff)}"] if anpfiff else []
     if event.sport is Sport.FOOTBALL:
         return football_context(event)
     return tennis_context(event)
@@ -141,7 +188,7 @@ def format_alert(alert: Alert, *, compact: bool = False) -> str:
 
     lines = ["🚨 <b>STORM ODDS SNIPER</b>"]
     lines += [
-        f"{status_icon} <b>{event.status.value}</b> — {sport_name}",
+        f"{status_icon} <b>{STATUS_LABEL.get(event.status, event.status.value)}</b> — {sport_name}",
         f"{KIND_TITLE.get(alert.kind, '')}",
         "",
         f"{icon} <b>{esc(event.home)}</b>",

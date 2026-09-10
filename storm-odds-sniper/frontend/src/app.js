@@ -20,6 +20,25 @@
     /* Privates Fenster oder gesperrter Speicher - dann eben live. */
   }
   const istLive = () => phase === "live";
+
+  /**
+   * Wie lange noch bis zum Anpfiff?
+   *
+   * Vor dem Anpfiff ist das nach der Quote die wichtigste Zahl: in zwanzig
+   * Minuten muss man sich jetzt entscheiden, in zwei Tagen kann man in Ruhe
+   * vergleichen. Ohne Anstoßzeit steht hier nichts - geraten wird nicht.
+   */
+  function anpfiffText(startTime) {
+    if (!startTime) return null;
+    const start = new Date(startTime);
+    if (Number.isNaN(start.getTime())) return null;
+    const minuten = Math.round((start.getTime() - Date.now()) / 60000);
+    if (minuten <= 0) return "angesetzt";
+    if (minuten < 60) return `in ${minuten} Min`;
+    const stunden = Math.floor(minuten / 60);
+    if (stunden < 24) return `in ${stunden} Std ${minuten % 60} Min`;
+    return `in ${Math.floor(stunden / 24)} T ${stunden % 24} Std`;
+  }
   const MAX_ALERTS = 150;
   const MAX_MOVES = 40;
   // Unter so vielen ausgewerteten Alarmen wird kein Durchschnitt angezeigt -
@@ -629,6 +648,13 @@
       .slice(0, 40)
       .map((e) => {
         const detail = [];
+        // Vor dem Anpfiff gibt es weder Minute noch Spielstand. Was es gibt,
+        // ist die verbleibende Zeit - und die entscheidet, ob man den Preis
+        // überhaupt noch nutzen kann.
+        if (e.status === "PRE_MATCH") {
+          const anpfiff = anpfiffText(e.start_time);
+          if (anpfiff) detail.push(`⏱ Anpfiff ${anpfiff}`);
+        }
         if (e.football) {
           if (e.football.minute != null) detail.push(`${e.football.minute}'`);
           if (e.football.period) detail.push(e.football.period);

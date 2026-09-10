@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -60,7 +62,7 @@ class TestFootballFormatting:
     def test_contains_every_required_field(self):
         text = fmt.format_alert(football_alert())
         assert "STORM ODDS SNIPER" in text
-        assert "LIVE" in text and "FOOTBALL" in text
+        assert "LÄUFT" in text and "FOOTBALL" in text
         assert "Bayern München" in text
         assert "Borussia Dortmund" in text
         assert "67'" in text
@@ -77,11 +79,33 @@ class TestFootballFormatting:
         assert "Error-Score" not in fmt.format_alert(football_alert(kind=AlertKind.VALUE))
 
     def test_prematch_has_no_invented_minute(self):
+        """Vor dem Anpfiff gibt es keine Spielminute und keinen Spielstand -
+        beides zu zeigen hieße, es zu erfinden. Der Anpfiffzeitpunkt dagegen
+        ist echt und gehört hin."""
         event = make_event(status=EventStatus.PRE_MATCH, minute=None, score=None)
         text = fmt.format_alert(football_alert(event=event))
-        assert "PRE_MATCH" in text
-        assert "⏱" not in text
+        assert "VOR DEM ANPFIFF" in text
         assert "📊 Score:" not in text
+        # Keine Spielminute: die stünde als "67'" da.
+        assert not re.search(r"⏱ \d+'", text)
+        assert "Anpfiff" in text
+
+    def test_prematch_ohne_anstosszeit_erfindet_keine(self):
+        """Liefert der Provider keine Anstoßzeit, steht dort nichts."""
+        event = make_event(status=EventStatus.PRE_MATCH, minute=None, score=None)
+        event.start_time = None
+        text = fmt.format_alert(football_alert(event=event))
+        assert "Anpfiff" not in text
+
+    def test_prematch_zeigt_verbleibende_zeit(self):
+        event = make_event(
+            status=EventStatus.PRE_MATCH,
+            minute=None,
+            score=None,
+            start_time=datetime.now(UTC) + timedelta(hours=2, minutes=30),
+        )
+        text = fmt.format_alert(football_alert(event=event))
+        assert "Anpfiff in 2 Std 29 Min" in text or "Anpfiff in 2 Std 30 Min" in text
 
     def test_red_cards_are_shown_when_present(self):
         event = make_event()

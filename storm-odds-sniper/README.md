@@ -719,8 +719,24 @@ der Live-Teil liefe leer, ohne dass irgendwo ein Fehler stünde.
 | `PREMATCH_MIN_BOOKMAKERS` | `5` | vor dem Anpfiff sind mehr Bücher da |
 
 Diese Zahlen sind ein **Startpunkt, kein Naturgesetz**. Prüf sie mit
-`./scripts/backtest.sh` an deinen eigenen Daten, sobald genug Prematch-Alarme
-nachkontrolliert sind.
+`./scripts/backtest.sh` an deinen eigenen Daten — der Bericht trennt die
+beiden Welten von selbst, sobald jede genug nachkontrollierte Alarme hat:
+
+```bash
+./scripts/backtest.sh --days 30                  # beide, getrennt
+./scripts/backtest.sh --days 30 --phase prematch # nur vor dem Anpfiff
+```
+
+Reicht es in einer Welt noch nicht, steht ein **gemeinsamer** Bericht da —
+mit einem Hinweis darauf, dass hier zwei Märkte in einem Topf stecken. Eine
+Welt mit sieben ausgewerteten Alarmen als eigenen Bericht hinzustellen sähe
+nach Aussage aus und wäre keine.
+
+**Im Alarm selbst** steht vor dem Anpfiff die verbleibende Zeit —
+`⏱ Anpfiff in 3 Std 11 Min (10.09. 19:59)`, in Telegram wie im Dashboard.
+Nach der Quote ist das die wichtigste Zahl: in zwanzig Minuten muss man sich
+jetzt entscheiden, in zwei Tagen ist der Preis bis dahin ohnehin ein anderer.
+Liefert die Quelle keine Anstoßzeit, steht dort nichts.
 
 Jeder Alarm trägt seitdem seine Welt mit (`phase`: `live` oder `prematch`) —
 in der Datenbank als eigene Spalte, in der API als Filter

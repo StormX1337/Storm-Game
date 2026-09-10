@@ -298,6 +298,10 @@ class Sample:
     clv_percent: float | None
     #: Urteil aus ``verdict.py`` - der vom CLV unabhängige Beleg.
     verdict: str | None = None
+    #: "live" oder "prematch". Zwei verschiedene Märkte mit verschiedenen
+    #: Schwellen - sie in einen Mittelwert zu werfen, mittelt zwei Welten zu
+    #: einer Zahl, die für keine von beiden gilt.
+    phase: str = "unknown"
 
     @property
     def confirmed(self) -> bool:
@@ -308,6 +312,7 @@ def sample_from(
     recommendation: Recommendation,
     clv_percent: float | None,
     verdict: str | None = None,
+    phase: str = "unknown",
 ) -> Sample:
     return Sample(
         grade=recommendation.grade.value,
@@ -315,6 +320,7 @@ def sample_from(
         raw_edge=recommendation.raw_edge_percent,
         clv_percent=clv_percent,
         verdict=verdict,
+        phase=phase,
     )
 
 
