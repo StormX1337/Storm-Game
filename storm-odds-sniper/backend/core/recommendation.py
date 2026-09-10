@@ -44,6 +44,7 @@ import math
 from collections import Counter
 from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
+from datetime import UTC
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
@@ -132,6 +133,7 @@ REASON_LABELS: dict[str, str] = {
     "liste_voll": "Liste bereits voll - schwächere Empfehlung ausgelassen",
     "alarm_unlesbar": "gespeicherter Alarm nicht lesbar - übersprungen",
     "alarm_veraltet": "Alarm zu alt - der Preis steht so nicht mehr",
+    "angepfiffen": "Spiel läuft bereits - der Vorab-Preis gilt nicht mehr",
 }
 
 
@@ -182,6 +184,8 @@ class RecommendationConfig:
     #: Geschichte. Live-Quoten stehen keine Viertelstunde, und ein beendetes
     #: Spiel meldet sein Ende nicht - es hört nur auf zu erscheinen.
     max_alert_age: float = 180.0
+    #: Dasselbe für Spiele vor dem Anpfiff - dort steht ein Preis Stunden.
+    prematch_max_alert_age: float = 3600.0
 
 
 def config_from_settings(settings: Settings) -> RecommendationConfig:
@@ -199,6 +203,7 @@ def config_from_settings(settings: Settings) -> RecommendationConfig:
         max_odds_age=settings.recommend_max_odds_age,
         max_picks_per_event=settings.recommend_max_picks_per_event,
         max_alert_age=settings.event_stale_seconds,
+        prematch_max_alert_age=settings.prematch_max_alert_age,
     )
 
 
@@ -673,6 +678,21 @@ def _with_stake(
     )
 
 
+def _hat_begonnen(alert: Alert, reference: float) -> bool:
+    """Läuft das Spiel schon?
+
+    Nur mit echter Anstoßzeit beantwortbar. Fehlt sie, lautet die Antwort
+    "unbekannt" und damit nein - eine Empfehlung wegen einer geratenen
+    Uhrzeit zu streichen wäre genauso falsch wie sie stehen zu lassen.
+    """
+    start = alert.event.start_time
+    if start is None:
+        return False
+    if start.tzinfo is None:
+        start = start.replace(tzinfo=UTC)
+    return start.timestamp() <= reference
+
+
 def build_slip(
     pairs: Iterable[tuple[Alert, Recommendation]],
     *,
@@ -709,8 +729,23 @@ def build_slip(
 
     for alert, rec in pairs:
         slip.considered += 1
-        if cfg.max_alert_age > 0 and (ref - alert.detected_at) > cfg.max_alert_age:
+        vor_dem_anpfiff = alert.phase == "prematch"
+
+        # Die Frist hängt an der Welt, nicht am Modul: eine Live-Quote steht
+        # keine drei Minuten, dieselbe Quote vor dem Anpfiff steht Stunden.
+        # Mit der Live-Frist für beides verschwand jede Prematch-Empfehlung
+        # nach drei Minuten, obwohl der Preis noch stand.
+        grenze = cfg.prematch_max_alert_age if vor_dem_anpfiff else cfg.max_alert_age
+        if grenze > 0 and (ref - alert.detected_at) > grenze:
             slip.dropped["alarm_veraltet"] += 1
+            continue
+
+        # Und weil die Frist jetzt lang ist, braucht es den Riegel dazu: ist
+        # angepfiffen, ist der Vorab-Preis weg - egal wie frisch der Alarm
+        # noch wirkt. Ohne Anstoßzeit wird nichts angenommen, dann bleibt
+        # die Frist oben die einzige Schranke.
+        if vor_dem_anpfiff and _hat_begonnen(alert, ref):
+            slip.dropped["angepfiffen"] += 1
             continue
         if not rec.playable:
             code = rec.reason_code if rec.grade is Grade.SKIP else "rest_zu_klein"

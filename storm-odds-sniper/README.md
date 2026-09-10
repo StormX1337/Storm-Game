@@ -718,6 +718,19 @@ der Live-Teil liefe leer, ohne dass irgendwo ein Fehler stünde.
 | `PREMATCH_MIN_OUTLIER_PERCENT` | `6` | leer = wie live |
 | `PREMATCH_MIN_BOOKMAKERS` | `5` | vor dem Anpfiff sind mehr Bücher da |
 | `PREMATCH_ALERT_COOLDOWN` | `1800` | Sperre je Quotenzeile (live: `60`) |
+| `PREMATCH_MAX_ALERT_AGE` | `3600` | so lange bleibt ein Alarm eine Empfehlung (live: `180`) |
+
+Und die **Empfehlungskarte** vor dem Anpfiff: dort galt bis eben die
+Live-Frist von drei Minuten. Eine Live-Quote steht keine drei Minuten — vor
+dem Anpfiff steht dieselbe Quote stundenlang, und so verschwand jede
+Prematch-Empfehlung nach drei Minuten wieder, obwohl der Preis noch da war.
+Die Karte war praktisch immer leer.
+
+Die längere Frist verlangt aber einen Riegel: **ist angepfiffen, ist der
+Vorab-Preis weg** — egal wie frisch der Alarm noch wirkt. Solche Picks
+fliegen jetzt mit eigener Begründung raus („Spiel läuft bereits"). Liefert
+die Quelle keine Anstoßzeit, wird nichts angenommen; dann bleibt die Frist
+die einzige Schranke.
 
 Die lange Sperre ist kein Geschmack, sondern gemessen. Eine Fehlquote, die
 stundenlang steht, **zappelt** dabei um ein, zwei Cent. Jede dieser

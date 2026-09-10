@@ -88,6 +88,10 @@ def _alert_to_response(alert: Alert) -> AlertResponse:
     """
     score = alert.event.score
     return AlertResponse(
+        # Der Alarm weiß selbst, aus welcher Welt er stammt. Ohne diese Zeile
+        # stand an jedem Pick "unknown" - die Empfehlungen kamen zwar korrekt
+        # gefiltert an, behaupteten aber, ihre Herkunft nicht zu kennen.
+        phase=alert.phase,
         fingerprint=alert.fingerprint,
         kind=alert.kind.value,
         sport=alert.event.sport.value,

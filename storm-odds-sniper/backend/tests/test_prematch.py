@@ -9,10 +9,12 @@ halten die Trennung fest: eigene Schwellen, eigener Abruf, eigene Ansicht.
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from backend.core.config import Settings
+from backend.core.recommendation import RecommendationConfig, build_slip, evaluate
 from backend.models.domain import Alert, now_ts
 from backend.models.enums import AlertKind, EventStatus
 from backend.providers.registry import build_providers
@@ -247,3 +249,82 @@ class TestAbkuehlzeit:
         vor = prematch_thresholds_from_settings(settings, live)
         assert live.alert_cooldown_seconds == 60
         assert vor.alert_cooldown_seconds == 1800
+
+
+class TestEmpfehlungsfrist:
+    """Live-Fristen auf Prematch anzuwenden macht die Karte leer.
+
+    ``max_alert_age`` kommt von EVENT_STALE_SECONDS (180 s). Für eine
+    Live-Quote ist das richtig - sie steht keine drei Minuten. Vor dem
+    Anpfiff steht dieselbe Quote stundenlang, und mit der Live-Frist
+    verschwand jede Prematch-Empfehlung nach drei Minuten wieder, obwohl
+    der Preis noch stand. Die längere Frist verlangt aber den Riegel dazu:
+    ist angepfiffen, ist der Vorab-Preis weg.
+    """
+
+    def _alarm(self, *, anpfiff_in_min: float, erkannt_vor_min: float, phase_status):
+        event = make_event(
+            status=phase_status,
+            start_time=datetime.now(UTC) + timedelta(minutes=anpfiff_in_min),
+        )
+        return Alert(
+            kind=AlertKind.VALUE,
+            event=event,
+            market=OVER_UNDER_25,
+            selection=OVER,
+            bookmaker="b1",
+            odds=2.30,
+            fair_odds=2.10,
+            value_percent=9.4,
+            deviation_percent=9.4,
+            confidence=80,
+            error_score=80,
+            bookmaker_count=6,
+            detected_at=now_ts() - erkannt_vor_min * 60,
+        )
+
+    def _slip(self, alert, **cfg_overrides):
+        cfg = RecommendationConfig(**cfg_overrides)
+        return build_slip([(alert, evaluate(alert, cfg))], config=cfg)
+
+    def test_prematch_alarm_von_vorhin_bleibt_eine_empfehlung(self):
+        alarm = self._alarm(
+            anpfiff_in_min=120, erkannt_vor_min=30, phase_status=EventStatus.PRE_MATCH
+        )
+        slip = self._slip(alarm)
+        assert slip.picks, dict(slip.dropped)
+
+    def test_mit_der_live_frist_waere_er_verschwunden(self):
+        """Der Gegenbeweis zum Test darüber."""
+        alarm = self._alarm(
+            anpfiff_in_min=120, erkannt_vor_min=30, phase_status=EventStatus.PRE_MATCH
+        )
+        slip = self._slip(alarm, prematch_max_alert_age=180.0)
+        assert not slip.picks
+        assert slip.dropped["alarm_veraltet"] == 1
+
+    def test_angepfiffen_wird_nicht_mehr_empfohlen(self):
+        alarm = self._alarm(
+            anpfiff_in_min=-10, erkannt_vor_min=20, phase_status=EventStatus.PRE_MATCH
+        )
+        slip = self._slip(alarm)
+        assert not slip.picks
+        assert slip.dropped["angepfiffen"] == 1
+
+    def test_ohne_anstosszeit_entscheidet_allein_die_frist(self):
+        """Eine Empfehlung wegen einer geratenen Uhrzeit zu streichen wäre
+        genauso falsch wie sie stehen zu lassen."""
+        alarm = self._alarm(
+            anpfiff_in_min=120, erkannt_vor_min=30, phase_status=EventStatus.PRE_MATCH
+        )
+        alarm.event.start_time = None
+        slip = self._slip(alarm)
+        assert slip.picks
+        assert slip.dropped["angepfiffen"] == 0
+
+    def test_live_behaelt_die_kurze_frist(self):
+        """Ein Live-Alarm von vor einer halben Stunde ist Geschichte."""
+        alarm = self._alarm(anpfiff_in_min=-60, erkannt_vor_min=30, phase_status=EventStatus.LIVE)
+        slip = self._slip(alarm)
+        assert not slip.picks
+        assert slip.dropped["alarm_veraltet"] == 1

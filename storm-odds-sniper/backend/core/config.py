@@ -177,6 +177,13 @@ class Settings(BaseSettings):
     #: EINE Wette, die drei Stunden lang gültig ist. Live ist das kein Thema:
     #: dort ändern sich Preise wirklich, und ein Spiel dauert 90 Minuten.
     prematch_alert_cooldown: int = 1800
+    #: Wie lange ein Prematch-Alarm eine Empfehlung bleibt. Für Live gilt
+    #: EVENT_STALE_SECONDS (180 s) - eine Live-Quote steht keine drei Minuten.
+    #: Vor dem Anpfiff steht dieselbe Quote oft stundenlang; mit der
+    #: Live-Frist verschwand jede Prematch-Empfehlung nach drei Minuten
+    #: wieder, obwohl der Preis noch stand. Die Karte war praktisch immer
+    #: leer.
+    prematch_max_alert_age: float = 3600.0
 
     # ----------------------------------------------------- Bewegungsalarme
     move_alerts_enabled: bool = True
