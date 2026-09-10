@@ -82,6 +82,7 @@ class TestKopfAnKopf:
                     credible_edge=5.0,
                     raw_edge=11.0,
                     clv_percent=8.0 if schrumpfung_gewinnt else -4.0,
+                    verdict="corrected" if schrumpfung_gewinnt else "market_followed",
                 )
             )
         for _ in range(HEAD_TO_HEAD):
@@ -92,6 +93,7 @@ class TestKopfAnKopf:
                     credible_edge=0.1,
                     raw_edge=200.0,
                     clv_percent=-4.0 if schrumpfung_gewinnt else 8.0,
+                    verdict="market_followed" if schrumpfung_gewinnt else "corrected",
                 )
             )
         return rows
@@ -99,8 +101,8 @@ class TestKopfAnKopf:
     def test_schrumpfung_gewinnt_wird_erkannt(self):
         ergebnis = analyse(self._welt(True))
         duell = ergebnis.head_to_head
-        assert duell.credible_avg_clv == pytest.approx(8.0)
-        assert duell.raw_avg_clv == pytest.approx(-4.0)
+        assert duell.credible_median_clv == pytest.approx(8.0)
+        assert duell.raw_median_clv == pytest.approx(-4.0)
         assert duell.difference > 0
         assert "liegt vorn" in duell.verdict
 
@@ -109,7 +111,10 @@ class TestKopfAnKopf:
         nichts, sondern bestätigt nur."""
         duell = analyse(self._welt(False)).head_to_head
         assert duell.difference < 0
-        assert "liegt zurück" in duell.verdict
+        assert "zurück" in duell.verdict
+        # Verliert die Schrumpfung AUCH beim unabhängigen Maß, ist das der
+        # ernste Fall - und nur dann darf die Einstellung angezweifelt werden.
+        assert duell.corrected_difference < 0
         assert "PLAUSIBLE_EDGE_PERCENT" in duell.verdict
 
     def test_bei_duenner_lage_kein_urteil(self):
@@ -218,3 +223,78 @@ class TestMeldetDenEchtenFehler:
         assert code == 1
         assert "Datenbank nicht erreichbar" in err
         assert "Einstellungen nicht lesbar" not in err
+
+
+class TestKaputteReferenzen:
+    """Der erste Lauf gegen echte Daten lieferte für die verworfenen Alarme
+    einen mittleren CLV von +92 % und für die Value-Auswahl +768 %. Solche
+    Zahlen sind keine Vorteile, sondern zusammengebrochene faire Quoten. Die
+    Auswertung darf sich davon nicht umwerfen lassen."""
+
+    def _mit_ausreissern(self, n_normal: int, n_extrem: int, grade: str) -> list[Sample]:
+        rows = [s(grade, clv=2.0, credible=3.0, raw=11.0) for _ in range(n_normal)]
+        rows += [s(grade, clv=900.0, credible=0.1, raw=400.0) for _ in range(n_extrem)]
+        return rows
+
+    def test_median_bleibt_stehen_wo_der_mittelwert_kippt(self):
+        rows = self._mit_ausreissern(40, 5, "skip")
+        gruppe = analyse(rows).groups[0]
+        assert gruppe.median_clv_percent == pytest.approx(2.0)
+        # Der Mittelwert wird von fünf Zeilen aus dem Fenster getragen.
+        assert gruppe.avg_clv_percent > 90.0
+        assert gruppe.extreme == 5
+
+    def test_ausreisser_werden_gezaehlt_und_benannt(self):
+        ergebnis = analyse(self._mit_ausreissern(40, 5, "skip"))
+        assert ergebnis.extreme == 5
+        assert any("zusammengebrochene" in note for note in ergebnis.notes)
+
+    def test_trennung_entscheidet_ueber_den_median(self):
+        """Verworfene Alarme mit ein paar Fantasie-CLV dürfen die Trennung
+        nicht umdrehen - genau das ist am 10.09. passiert."""
+        spielbar = [s("strong", clv=6.0) for _ in range(30)]
+        verworfen = self._mit_ausreissern(30, 8, "skip")
+        ergebnis = analyse(spielbar + verworfen)
+        # Über den Mittelwert wäre "verworfen" scheinbar besser gewesen.
+        skip = next(g for g in ergebnis.groups if g.grade == "skip")
+        assert skip.avg_clv_percent > 6.0
+        assert skip.median_clv_percent < 6.0
+        assert ergebnis.separates is True
+
+    def test_value_auswahl_voller_ausreisser_ist_kein_urteil(self):
+        """Besteht die Value-Auswahl überwiegend aus kaputten Referenzen,
+        vergleicht der Kopf-an-Kopf nichts Sinnvolles - und sagt das."""
+        rows = [s("strong", clv=5.0, credible=9.0, raw=9.0) for _ in range(30)]
+        rows += [s("skip", clv=2000.0, credible=0.1, raw=500.0) for _ in range(30)]
+        duell = analyse(rows).head_to_head
+        assert duell.raw_extreme > duell.n / 2
+        assert "Nicht auswertbar" in duell.verdict
+
+    def test_unabhaengiges_mass_entscheidet_bei_befangenem_clv(self):
+        """CLV spricht für die Value-Auswahl, das Urteil für die Schrumpfung.
+        Dann muss der Satz beides nennen und darf nicht kippen."""
+        rows = [
+            Sample(
+                grade="strong",
+                credible_edge=20.0,
+                raw_edge=9.0,
+                clv_percent=1.0,
+                verdict="corrected",
+            )
+            for _ in range(25)
+        ]
+        rows += [
+            Sample(
+                grade="skip",
+                credible_edge=0.1,
+                raw_edge=300.0,
+                clv_percent=40.0,
+                verdict="market_followed",
+            )
+            for _ in range(25)
+        ]
+        duell = analyse(rows).head_to_head
+        assert duell.difference < 0
+        assert duell.corrected_difference > 0
+        assert "befangener Vergleich" in duell.verdict
+        assert "unabhängigen Maß liegt die Schrumpfung vorn" in duell.verdict

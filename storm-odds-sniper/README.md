@@ -1177,24 +1177,63 @@ Alarm bekommt aus der Nachkontrolle einen Closing Line Value.
 ./scripts/backtest.sh --json > pruefung.json
 ```
 
-Zwei Fragen, beide mit genau zwei möglichen Antworten:
+Zwei Fragen:
 
 ```
 1) Trennt der Grad?
-  Grad                Alarme  davon CLV     Ø CLV  schlägt Markt
-  Spielen                 34         34    +6.3 %           88 %
-  Kleiner Einsatz         58         58    +6.5 %           95 %
-  Nur beobachten          28         28    +5.5 %           93 %
-  Nicht spielen          120        120    -4.9 %           12 %
-
-  ✅ Spielbare Alarme haben besseren CLV als verworfene.
+  Grad                Alarme  davon   Median    Mittel  korrigiert  kaputt
+  Spielen                 34     34   +6.3 %    +6.8 %        61 %       0
+  Kleiner Einsatz         58     58   +6.5 %    +7.1 %        58 %       0
+  Nur beobachten          28     28   +5.5 %    +5.9 %        44 %       1
+  Nicht spielen          120    120   -4.9 %   +92.1 %         9 %      27
 
 2) Hilft die Schrumpfung?
-    glaubwürdigem Vorteil : Ø CLV +6.7 %
-    gemeldetem Value      : Ø CLV -3.3 %
-
-  Die Schrumpfung liegt vorn (+10.1 Prozentpunkte CLV).
+    glaubwürdigem Vorteil : Median-CLV   +6.7 %   selbst korrigiert 60 %
+    gemeldetem Value      : Median-CLV  +88.0 %   selbst korrigiert  0 %
 ```
+
+### Warum hier Median statt Mittelwert steht
+
+Der erste Lauf gegen echte Daten meldete für die **verworfenen** Alarme einen
+mittleren CLV von **+92 %** und für die nach Value sortierte Auswahl **+768 %**.
+Das sieht nach einer vernichtenden Widerlegung des Modells aus. Es ist keine.
+
+Ein CLV von +768 % hieße, der Preis war fast neunmal besser als der
+Marktkonsens. So etwas gibt es nicht. CLV ist
+
+```
+CLV = Alarmquote / spätere faire Quote − 1
+```
+
+Bricht der **Nenner** zusammen, explodiert der Bruch. Solche Zeilen messen
+keinen Vorteil, sondern eine kaputte Referenz — und ein Mittelwert über 300
+Zeilen kippt von einer Handvoll davon. Der Median tut das nicht; dieselbe
+Überlegung, aus der schon die faire Quote als Median gebildet wird. Die
+Ausreißer werden deshalb **nicht weggeworfen**, sondern gezählt und in der
+Spalte `kaputt` ausgewiesen: ihre Zahl ist selbst ein Befund.
+
+### Warum der CLV die Streitfrage nicht allein entscheiden kann
+
+```
+gemeldeter Value = Alarmquote / faire Quote         − 1
+CLV              = Alarmquote / spätere faire Quote − 1
+```
+
+Zweimal dieselbe Formel, nur eine spätere Referenz. Wer nach dem gemeldeten
+Value sortiert und mit dem CLV benotet, lässt eine Größe **über sich selbst**
+urteilen. Diese Auswahl gewinnt fast zwangsläufig — besonders dann, wenn die
+faire Quote kaputt war, denn derselbe Fehler steckt in beiden Zahlen.
+
+Deshalb steht daneben ein zweiter Schiedsrichter: **hat der Buchmacher seinen
+Preis am Ende selbst zurückgezogen?** Das ist keine Umskalierung derselben
+Größe, sondern eine unabhängige Beobachtung (`verdict.py`) — und damit die
+belastbarere Antwort auf „war der Fehlpreis echt?". Im Beispiel oben: 61 %
+bei „Spielen" gegen 9 % bei „Nicht spielen". Genau das ist die Spalte, auf
+die es ankommt.
+
+Besteht die Value-Auswahl überwiegend aus kaputten Referenzen, fällt die
+Auswertung **gar kein** Urteil, sondern sagt „nicht auswertbar". Ein Vergleich
+zweier Zahlenhaufen, von denen einer Unsinn ist, ist kein Ergebnis.
 
 **Die Prüfung kann auch nein sagen** — und das ist ihr Sinn. Fällt sie
 andersherum aus, steht dort „Der Grad sortiert nichts" und der Hinweis auf

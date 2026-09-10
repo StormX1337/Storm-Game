@@ -28,7 +28,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from sqlalchemy import select  # noqa: E402
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine  # noqa: E402
 
-from backend.core.backtest import MIN_PER_GROUP, Sample, analyse  # noqa: E402
+from backend.core.backtest import (  # noqa: E402
+    MAX_PLAUSIBLE_CLV,
+    MIN_PER_GROUP,
+    Sample,
+    analyse,
+)
 from backend.core.config import Settings, get_settings  # noqa: E402
 from backend.core.recommendation import (  # noqa: E402
     GRADE_LABELS,
@@ -39,7 +44,17 @@ from backend.core.recommendation import evaluate as recommend  # noqa: E402
 from backend.database.tables import AlertRow  # noqa: E402
 from backend.models.domain import Alert  # noqa: E402
 
-BALKEN = "─" * 64
+BALKEN = "─" * 72
+
+
+def _prozent(wert: float | None) -> str:
+    """CLV - das Vorzeichen gehört dazu."""
+    return f"{wert:+.1f} %" if wert is not None else "–"
+
+
+def _anteil(wert: float | None) -> str:
+    """Ein Anteil ist nie negativ - hier wäre ein Vorzeichen irreführend."""
+    return f"{wert:.0f} %" if wert is not None else "–"
 
 
 async def sammeln(settings: Settings, days: int, limit: int) -> tuple[list[Sample], int, int]:
@@ -88,6 +103,7 @@ async def sammeln(settings: Settings, days: int, limit: int) -> tuple[list[Sampl
                 credible_edge=empfehlung.credible_edge_percent,
                 raw_edge=empfehlung.raw_edge_percent,
                 clv_percent=row.clv_percent,
+                verdict=row.verdict,
             )
         )
     return proben, nachgerechnet, unlesbar
@@ -107,17 +123,24 @@ def ausgeben(ergebnis, *, days: int, nachgerechnet: int, unlesbar: int) -> None:
     if not ergebnis.groups:
         print("  Keine Alarme im Zeitraum.")
     else:
-        print(f"  {'Grad':<18}{'Alarme':>8}{'davon CLV':>11}{'Ø CLV':>10}{'schlägt Markt':>15}")
+        print(
+            f"  {'Grad':<18}{'Alarme':>8}{'davon':>7}{'Median':>9}"
+            f"{'Mittel':>10}{'korrigiert':>12}{'kaputt':>8}"
+        )
         for gruppe in ergebnis.groups:
-            clv = f"{gruppe.avg_clv_percent:+.1f} %" if gruppe.avg_clv_percent is not None else "–"
-            anteil = (
-                f"{gruppe.beat_close_share:.0f} %" if gruppe.beat_close_share is not None else "–"
-            )
+            median = _prozent(gruppe.median_clv_percent)
+            mittel = _prozent(gruppe.avg_clv_percent)
+            korrigiert = _anteil(gruppe.corrected_share)
             marke = "" if gruppe.reliable else "  (zu wenig)"
             print(
                 f"  {GRADE_LABELS.get(gruppe.grade, gruppe.grade):<18}"
-                f"{gruppe.count:>8}{gruppe.scored:>11}{clv:>10}{anteil:>15}{marke}"
+                f"{gruppe.count:>8}{gruppe.scored:>7}{median:>9}"
+                f"{mittel:>10}{korrigiert:>12}{gruppe.extreme:>8}{marke}"
             )
+        print()
+        print("  Median = belastbarer Wert · Mittel = vom Ausreißerschwanz verdorben")
+        print("  korrigiert = Buchmacher zog den Preis selbst zurück (unabhängiger Beleg)")
+        print(f"  kaputt = CLV über {MAX_PLAUSIBLE_CLV:.0f} %, also keine gültige Referenz")
     if ergebnis.separates is True:
         print("\n  ✅ Spielbare Alarme haben besseren CLV als verworfene.")
         print("     Der Grad sortiert also etwas Echtes.")
@@ -130,9 +153,17 @@ def ausgeben(ergebnis, *, days: int, nachgerechnet: int, unlesbar: int) -> None:
     duell = ergebnis.head_to_head
     print(f"\n2) Hilft die Schrumpfung?\n{BALKEN}")
     print(f"  Die {duell.n} besten Alarme nach ...")
-    if duell.credible_avg_clv is not None:
-        print(f"    glaubwürdigem Vorteil : Ø CLV {duell.credible_avg_clv:+.1f} %")
-        print(f"    gemeldetem Value      : Ø CLV {duell.raw_avg_clv:+.1f} %")
+    if duell.credible_median_clv is not None:
+        print(
+            f"    glaubwürdigem Vorteil : Median-CLV {duell.credible_median_clv:+7.1f} %"
+            f"   selbst korrigiert {_anteil(duell.credible_corrected_share)}"
+            f"   kaputt {duell.credible_extreme}"
+        )
+        print(
+            f"    gemeldetem Value      : Median-CLV {duell.raw_median_clv:+7.1f} %"
+            f"   selbst korrigiert {_anteil(duell.raw_corrected_share)}"
+            f"   kaputt {duell.raw_extreme}"
+        )
         print(f"    Überschneidung        : {duell.overlap} von {duell.n}")
     print(f"\n  {duell.verdict}")
 
