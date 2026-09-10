@@ -33,6 +33,7 @@ from backend.core.backtest import (  # noqa: E402
     MIN_PER_GROUP,
     Sample,
     analyse,
+    threshold_curve,
 )
 from backend.core.config import Settings, get_settings  # noqa: E402
 from backend.core.recommendation import (  # noqa: E402
@@ -105,6 +106,7 @@ async def sammeln(settings: Settings, days: int, limit: int) -> tuple[list[Sampl
                 clv_percent=row.clv_percent,
                 verdict=row.verdict,
                 phase=getattr(row, "phase", None) or "unknown",
+                odds=row.odds,
             )
         )
     return proben, nachgerechnet, unlesbar
@@ -159,6 +161,33 @@ def _mischungshinweis(proben: list[Sample]) -> str:
     )
 
 
+def _kurve_ausgeben(proben: list[Sample]) -> None:
+    """Wie streng muss es sein - und was kostet das an Gelegenheiten?"""
+    if not proben:
+        return
+    print(f"\n3) Wie streng lohnt sich?\n{BALKEN}")
+    print(
+        f"  {'ab Vorteil':>11}{'Alarme':>8}{'davon':>7}{'schlägt Markt':>15}"
+        f"{'korrigiert':>12}{'Ø Quote':>9}{'nötig':>8}"
+    )
+    for punkt in threshold_curve(proben):
+        marke = "" if punkt.reliable else "  (zu wenig)"
+        print(
+            f"  {punkt.min_edge:>9.0f} %{punkt.kept:>8}{punkt.scored:>7}"
+            f"{_anteil(punkt.beat_share):>15}{_anteil(punkt.corrected_share):>12}"
+            f"{(f'{punkt.avg_odds:.2f}' if punkt.avg_odds else '–'):>9}"
+            f"{_anteil(punkt.needed_share):>8}{marke}"
+        )
+    print()
+    print('  „nötig" = Trefferquote, die die Ø Quote zum Nullsummenspiel braucht.')
+    print("  Eine Trefferquote OHNE die Quote daneben ist keine Zahl: 85 % bei")
+    print("  Quote 1.15 ist ein Verlustgeschäft, dort wären 87 % nötig. Nur der")
+    print("  Abstand zwischen erreicht und nötig ist ein Vorteil.")
+    print("  Und: mehr Strenge heißt weniger Gelegenheiten. Eine Schwelle mit")
+    print("  90 % und zwei Alarmen im Monat ist keine Einstellung, sondern")
+    print("  Stillstand.")
+
+
 def ausgeben(
     ergebnis,
     *,
@@ -167,6 +196,7 @@ def ausgeben(
     unlesbar: int,
     welt: str | None = None,
     mischung: str = "",
+    proben: list[Sample] | None = None,
 ) -> None:
     if welt:
         print(f"\n{BALKEN}")
@@ -212,6 +242,8 @@ def ausgeben(
         print("     Der Grad sortiert nichts - die Schwellen gehören überprüft.")
     else:
         print(f"\n  ⏳ Noch keine Aussage (nötig sind je {MIN_PER_GROUP} ausgewertete Alarme).")
+
+    _kurve_ausgeben(proben or [])
 
     duell = ergebnis.head_to_head
     print(f"\n2) Hilft die Schrumpfung?\n{BALKEN}")
@@ -304,6 +336,7 @@ async def main() -> int:
             unlesbar=unlesbar if index == 0 else 0,
             welt=name if len(welten) > 1 or args.phase else None,
             mischung=_mischungshinweis(teil) if not name else "",
+            proben=teil,
         )
     return 0
 

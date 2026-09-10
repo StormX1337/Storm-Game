@@ -1272,6 +1272,42 @@ Zwei Fragen:
     gemeldetem Value      : Median-CLV  +88.0 %   selbst korrigiert  0 %
 ```
 
+### „Kann man das nicht auf 85 % Trefferquote bringen?"
+
+Nein — und zwar nicht, weil es zu aufwendig wäre, sondern weil die Frage
+selbst in die Irre führt. Zwei Gründe:
+
+**Die Trefferquote kommt aus dem Markt, nicht aus dem Code.** Kein Programm
+macht eine Prognose richtiger. Code kann nur *strenger auswählen* — und das
+kostet Gelegenheiten.
+
+**Eine Trefferquote ohne die Quote daneben ist keine Zahl.** Wer nur auf
+Favoriten zu 1.15 setzt, trifft 87 % und verliert trotzdem Geld: bei dieser
+Quote wären 87 % nötig, nur um bei null zu landen. Umgekehrt sind 40 % bei
+Quote 3.00 ein solider Vorteil, denn nötig wären dort 33 %.
+
+Deshalb beantwortet die Modellprüfung die Frage mit einer Kurve statt einer
+Zusage — Abschnitt 3 des Berichts:
+
+```
+3) Wie streng lohnt sich?
+   ab Vorteil  Alarme  davon  schlägt Markt  korrigiert  Ø Quote   nötig
+          0 %     130    117           97 %        18 %     3.17    31 %
+          1 %      24     19           95 %        58 %     2.84    35 %
+          2 %      14     12           92 %        75 %     2.75    36 %
+          3 %       5      4           75 %        50 %     2.55    39 %
+```
+
+Links steht, wie streng gefiltert wird, rechts was es bringt — und in der
+Mitte, wie viel davon übrig bleibt. **Eine Schwelle mit 90 % und zwei
+Alarmen im Monat ist keine Einstellung, sondern Stillstand.** Die Spalte
+`nötig` ist der eigentliche Maßstab: nur der Abstand zwischen *erreicht* und
+*nötig* ist ein Vorteil.
+
+Und auch das hier ist CLV, nicht Gewinn. **Was wirklich Geld gebracht hat,
+steht ausschließlich im Wett-Tagebuch** (Schritt 13) — und erst ab 20
+abgerechneten Wetten ist das mehr als Zufall.
+
 ### Warum hier Median statt Mittelwert steht
 
 Der erste Lauf gegen echte Daten meldete für die **verworfenen** Alarme einen

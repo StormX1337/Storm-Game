@@ -13,7 +13,13 @@ from pathlib import Path
 
 import pytest
 
-from backend.core.backtest import HEAD_TO_HEAD, Sample, analyse, sample_from
+from backend.core.backtest import (
+    HEAD_TO_HEAD,
+    Sample,
+    analyse,
+    sample_from,
+    threshold_curve,
+)
 from backend.core.recommendation import Grade, evaluate
 from backend.tests.test_recommendation import make_alert
 
@@ -298,3 +304,72 @@ class TestKaputteReferenzen:
         assert duell.corrected_difference > 0
         assert "befangener Vergleich" in duell.verdict
         assert "unabhängigen Maß liegt die Schrumpfung vorn" in duell.verdict
+
+
+class TestGenauigkeitskurve:
+    """„Mach die Prognosen zu 85 % richtig" hat keine Antwort im Code.
+
+    Es hat eine in den Daten: bei welcher Strenge wie oft richtig, und wie
+    viele Gelegenheiten davon übrig bleiben. Beides gehört nebeneinander -
+    und dazu die Quote, ohne die eine Trefferquote nichts bedeutet.
+    """
+
+    def test_mehr_strenge_laesst_weniger_uebrig(self):
+        proben = [
+            Sample(grade="strong", credible_edge=float(i), raw_edge=11.0, clv_percent=1.0)
+            for i in range(10)
+        ]
+        kurve = {p.min_edge: p.kept for p in threshold_curve(proben, [0.0, 3.0, 8.0])}
+        assert kurve[0.0] == 10
+        assert kurve[3.0] == 7
+        assert kurve[8.0] == 2
+
+    def test_hohe_trefferquote_bei_niedriger_quote_ist_kein_vorteil(self):
+        """Der Kern der Sache: 85 % klingt gut und ist bei Quote 1.15 ein
+        Verlustgeschäft - dort wären 87 % nötig, nur um bei null zu landen."""
+        proben = [
+            Sample(
+                grade="strong",
+                credible_edge=5.0,
+                raw_edge=5.0,
+                clv_percent=1.0 if i < 85 else -1.0,
+                odds=1.15,
+            )
+            for i in range(100)
+        ]
+        punkt = threshold_curve(proben, [0.0])[0]
+        assert punkt.beat_share == pytest.approx(85.0)
+        assert punkt.needed_share == pytest.approx(86.96, abs=0.1)
+        # Erreicht liegt UNTER nötig - trotz 85 %.
+        assert punkt.beat_share < punkt.needed_share
+
+    def test_niedrigere_trefferquote_bei_hoher_quote_ist_einer(self):
+        proben = [
+            Sample(
+                grade="strong",
+                credible_edge=5.0,
+                raw_edge=5.0,
+                clv_percent=1.0 if i < 40 else -1.0,
+                odds=3.00,
+            )
+            for i in range(100)
+        ]
+        punkt = threshold_curve(proben, [0.0])[0]
+        assert punkt.beat_share == pytest.approx(40.0)
+        assert punkt.needed_share == pytest.approx(33.33, abs=0.1)
+        assert punkt.beat_share > punkt.needed_share
+
+    def test_ohne_quote_keine_erfundene_schwelle(self):
+        proben = [s("strong", clv=2.0) for _ in range(30)]
+        punkt = threshold_curve(proben, [0.0])[0]
+        assert punkt.avg_odds is None
+        assert punkt.needed_share is None
+
+    def test_duenne_stufe_wird_als_solche_ausgewiesen(self):
+        proben = [
+            Sample(grade="strong", credible_edge=9.0, raw_edge=9.0, clv_percent=1.0, odds=2.0)
+            for _ in range(3)
+        ]
+        punkt = threshold_curve(proben, [8.0])[0]
+        assert punkt.kept == 3
+        assert punkt.reliable is False

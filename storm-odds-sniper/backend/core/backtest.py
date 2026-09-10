@@ -298,6 +298,9 @@ class Sample:
     clv_percent: float | None
     #: Urteil aus ``verdict.py`` - der vom CLV unabhängige Beleg.
     verdict: str | None = None
+    #: Die gemeldete Quote. Ohne sie ist eine Trefferquote nicht deutbar:
+    #: 85 % bei Quote 1.15 sind ein Verlust, 40 % bei Quote 3.00 ein Gewinn.
+    odds: float | None = None
     #: "live" oder "prematch". Zwei verschiedene Märkte mit verschiedenen
     #: Schwellen - sie in einen Mittelwert zu werfen, mittelt zwei Welten zu
     #: einer Zahl, die für keine von beiden gilt.
@@ -313,6 +316,7 @@ def sample_from(
     clv_percent: float | None,
     verdict: str | None = None,
     phase: str = "unknown",
+    odds: float | None = None,
 ) -> Sample:
     return Sample(
         grade=recommendation.grade.value,
@@ -321,6 +325,7 @@ def sample_from(
         clv_percent=clv_percent,
         verdict=verdict,
         phase=phase,
+        odds=odds,
     )
 
 
@@ -331,6 +336,99 @@ def _seite(rows: list[Sample]) -> tuple[float | None, float | None, int]:
     median = _median([r.clv_percent for r in rows if r.clv_percent is not None])
     anteil = sum(1 for r in rows if r.confirmed) / len(rows) * 100.0
     return median, anteil, sum(1 for r in rows if is_extreme(r.clv_percent))
+
+
+#: Schwellen für die Genauigkeitskurve, in Prozent glaubwürdigem Vorteil.
+CURVE_STEPS: tuple[float, ...] = (0.0, 1.0, 2.0, 3.0, 5.0, 8.0, 12.0)
+
+
+@dataclass(slots=True)
+class CurvePoint:
+    """Eine Strenge-Stufe und was sie gekostet bzw. gebracht hat."""
+
+    min_edge: float
+    kept: int = 0
+    scored: int = 0
+    beat_close: int = 0
+    corrected: int = 0
+    median_clv: float | None = None
+    #: Durchschnittliche Quote der verbliebenen Alarme. Ohne sie ist die
+    #: Trefferquote sinnlos - siehe ``needed_share``.
+    avg_odds: float | None = None
+
+    @property
+    def beat_share(self) -> float | None:
+        if self.scored <= 0:
+            return None
+        return self.beat_close / self.scored * 100.0
+
+    @property
+    def corrected_share(self) -> float | None:
+        if self.scored <= 0:
+            return None
+        return self.corrected / self.scored * 100.0
+
+    @property
+    def needed_share(self) -> float | None:
+        """Trefferquote, die diese Quote zum Nullsummenspiel braucht.
+
+        Der eigentliche Maßstab. Eine Trefferquote von 85 % klingt gut und
+        ist bei Quote 1.15 ein Verlustgeschäft: dort müssten 87 % kommen,
+        nur um bei null zu landen. Erst der Abstand zwischen "erreicht" und
+        "nötig" ist ein Vorteil.
+        """
+        if not self.avg_odds or self.avg_odds <= 1.0:
+            return None
+        return 100.0 / self.avg_odds
+
+    @property
+    def reliable(self) -> bool:
+        return self.scored >= MIN_PER_GROUP
+
+    def to_json(self) -> dict[str, Any]:
+        return {
+            "min_edge": self.min_edge,
+            "kept": self.kept,
+            "scored": self.scored,
+            "beat_close": self.beat_close,
+            "beat_share": _round(self.beat_share),
+            "corrected_share": _round(self.corrected_share),
+            "median_clv": _round(self.median_clv),
+            "avg_odds": _round(self.avg_odds),
+            "needed_share": _round(self.needed_share),
+            "reliable": self.reliable,
+        }
+
+
+def threshold_curve(
+    samples: Iterable[Sample], steps: Iterable[float] = CURVE_STEPS
+) -> list[CurvePoint]:
+    """Wie oft lag es richtig - und was kostet mehr Strenge an Anzahl?
+
+    Die Frage „wie bekomme ich 85 %?" hat keine Antwort im Code. Sie hat
+    eine in den eigenen Daten: bei welcher Schwelle wie oft, und wie viele
+    Gelegenheiten davon übrig bleiben. Beides gehört nebeneinander - eine
+    Schwelle, die 90 % erreicht und zwei Alarme im Monat übrig lässt, ist
+    keine Einstellung, sondern ein Stillstand.
+    """
+    rows = list(samples)
+    punkte: list[CurvePoint] = []
+    for schwelle in steps:
+        behalten = [r for r in rows if r.credible_edge >= schwelle]
+        mit_clv = [r for r in behalten if r.clv_percent is not None]
+        quoten = [r.odds for r in behalten if r.odds is not None]
+        punkte.append(
+            CurvePoint(
+                min_edge=schwelle,
+                kept=len(behalten),
+                scored=len(mit_clv),
+                beat_close=sum(1 for r in mit_clv if r.clv_percent > 0),
+                corrected=sum(1 for r in mit_clv if r.confirmed),
+                median_clv=_median([r.clv_percent for r in mit_clv]),
+                avg_odds=_mean(quoten),
+            )
+        )
+    return punkte
 
 
 def analyse(samples: Iterable[Sample]) -> Backtest:
