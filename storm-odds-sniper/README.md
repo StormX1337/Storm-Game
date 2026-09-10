@@ -592,15 +592,41 @@ Dem Bot `/start` schreiben.
 | `/wetten` | Gespielte Wetten, abrechnen per Knopf |
 | `/kasse` | Was dabei herausgekommen ist |
 | `/arb` | Sichere Wetten: Widersprüche zwischen Büchern |
+| `/bericht` | Tagesbericht: Wetten, Alarme, Trefferbilanz in einer Nachricht |
 | `/bilanz` | Trefferbilanz: was aus den Alarmen wurde |
 | `/pause` | Benachrichtigungen pausieren |
 | `/resume` | Benachrichtigungen fortsetzen |
 
 Inline-Menü: ⚽ Fußball · 🎾 Tennis · 🔴 Live · 🟢 Pre-Match · 💎 Value ·
-🎯 Fixed Error · 📒 Bilanz · 📊 Status · ⚙️ Einstellungen
+🎯 Fixed Error · 📒 Bilanz · 💰 Kasse · 🔒 Sicher · 📅 Bericht · ⚙️ Einstellungen
+
+### Der wirksamste Filter: „Nur ab Grad"
+
+Ein laufender Scanner meldet viel. Im Betrieb kommen leicht **über tausend
+Alarme am Tag** zusammen — und die meisten davon sind zwar echt auffällig,
+aber nichts, was man spielen würde (siehe
+[Abschnitt 15, Schritt 10](#15-wie-die-erkennung-funktioniert)). In dieser
+Menge geht der eine gute Fund unter.
+
+In `/settings` steht deshalb ein Knopf, der genau das abstellt:
+
+| Einstellung | Was durchkommt | Anteil (Beispiellauf) |
+|---|---|---:|
+| 📢 Alle Alarme | alles — Standard, wie bisher | 100 % |
+| ⚪ Ab beobachten | alles mit irgendeinem Rest-Vorteil | 35 % |
+| 🟡 Ab kleiner Einsatz | nur mit Einsatzvorschlag | 24 % |
+| 🟢 Nur spielen | nur die klaren Fälle | 12 % |
+
+Der Standard bleibt **„Alle Alarme"**: nach einem Update soll niemand
+plötzlich weniger bekommen, ohne es umgestellt zu haben. Ein Alarm **ohne**
+Bewertung kommt immer durch — fehlende Information ist kein schlechtes
+Urteil.
+
+Wer es ruhiger mag, kombiniert das mit `/bericht`: eine Nachricht mit
+Kasse, Alarmzahlen und Trefferbilanz statt hunderter Einzelmeldungen.
 
 Jeder Nutzer hat **eigene** Schwellen (Value, Quote, Buchmacheranzahl,
-Confidence, Cooldown, Sportarten, Märkte, Live/Pre-Match). Sie wirken zusätzlich
+Confidence, Cooldown, Sportarten, Märkte, Live/Pre-Match, Mindestgrad). Sie wirken zusätzlich
 zu den globalen Schwellen des Scanners: der Scanner filtert grob vor, jeder
 Nutzer verfeinert für sich.
 

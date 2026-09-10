@@ -77,6 +77,42 @@ GRADE_LABELS: dict[str, str] = {
 #: Grade, für die ein Einsatz vorgeschlagen wird.
 PLAYABLE_GRADES: frozenset[Grade] = frozenset({Grade.STRONG, Grade.MODERATE})
 
+#: Rangfolge, damit sich ein Mindestgrad vergleichen lässt ("ab kleiner
+#: Einsatz aufwärts"). ``any`` ist kein Grad, sondern dessen Abwesenheit.
+GRADE_RANK: dict[str, int] = {
+    "any": -1,
+    Grade.SKIP: 0,
+    Grade.WEAK: 1,
+    Grade.MODERATE: 2,
+    Grade.STRONG: 3,
+}
+
+GRADE_FILTER_LABELS: dict[str, str] = {
+    "any": "alle Alarme",
+    Grade.WEAK: "ab beobachten",
+    Grade.MODERATE: "ab kleiner Einsatz",
+    Grade.STRONG: "nur spielen",
+}
+
+
+def passes_grade(recommendation: dict | None, minimum: str | None) -> bool:
+    """Reicht die Empfehlung eines Alarms für diesen Mindestgrad?
+
+    Ein Alarm **ohne** Bewertung kommt immer durch. Fehlende Information ist
+    kein schlechtes Urteil - alte Alarme und ein abgeschaltetes
+    Empfehlungsmodul dürfen nicht stillschweigend verstummen.
+    """
+    schwelle = GRADE_RANK.get(minimum or "any", -1)
+    if schwelle < 0:
+        return True
+    if not recommendation:
+        return True
+    grade = str(recommendation.get("grade", ""))
+    if grade not in GRADE_RANK:
+        return True
+    return GRADE_RANK[grade] >= schwelle
+
+
 #: Stabile Codes für „warum nicht spielen" - wie bei den Unterdrückungs-
 #: gründen des Scanners: maschinenlesbar zählbar, nicht nur schöner Text.
 REASON_LABELS: dict[str, str] = {

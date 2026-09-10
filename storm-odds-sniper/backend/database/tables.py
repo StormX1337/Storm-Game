@@ -309,6 +309,11 @@ class UserSettings(Base):
     live_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     prematch_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     paused: Mapped[bool] = mapped_column(Boolean, default=False)
+    #: Mindestgrad der Empfehlung: any | weak | moderate | strong.
+    #: Standard "any" - dieselbe Flut wie bisher, damit niemand plötzlich
+    #: weniger bekommt als gestern. Wer will, stellt in zwei Tippern auf
+    #: "nur spielbar" um.
+    min_grade: Mapped[str] = mapped_column(String(8), default="any")
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow
     )

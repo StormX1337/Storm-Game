@@ -760,3 +760,129 @@ class TestWettTagebuchImBot:
         assert alert.recommendation["stake_percent"] > 0
         markup = bet_button(alert.fingerprint)
         assert markup.inline_keyboard[0][0].callback_data == "bet:new:abc"
+
+
+class TestMindestgrad:
+    """Der wirksamste Filter von allen: die meisten Alarme sind echt
+    auffällig, aber nichts, was man spielen würde."""
+
+    @staticmethod
+    def _settings(min_grade="any", **overrides):
+        basis = {
+            "paused": False,
+            "sports": ["football", "tennis"],
+            "markets": None,
+            "live_enabled": True,
+            "prematch_enabled": True,
+            "min_odds": 1.01,
+            "max_odds": 1000.0,
+            "min_bookmakers": 1,
+            "min_confidence": 0,
+            "min_value_percent": 0.0,
+            "min_outlier_percent": 0.0,
+            "min_grade": min_grade,
+            # Nur für die Textausgabe nötig, nicht für den Filter.
+            "cooldown_seconds": 60,
+        }
+        basis.update(overrides)
+        return SimpleNamespace(**basis)
+
+    @staticmethod
+    def _alert(value, **overrides):
+        from backend.core.recommendation import evaluate
+
+        alert = football_alert(kind=AlertKind.VALUE, odds=2.10, value_percent=value, **overrides)
+        alert.recommendation = evaluate(alert).to_json()
+        return alert
+
+    def test_standard_laesst_alles_durch(self, dispatcher):
+        """Niemand soll nach einem Update weniger bekommen als am Tag davor."""
+        for value in (11.0, 19.0, 250.0):
+            assert dispatcher.matches(self._alert(value), self._settings("any")) is True
+
+    def test_nur_spielbares_filtert_den_rest_weg(self, dispatcher):
+        spielbar = self._alert(11.0)
+        beobachten = self._alert(19.0)
+        unbrauchbar = self._alert(250.0)
+        assert spielbar.recommendation["grade"] in ("strong", "moderate")
+        assert beobachten.recommendation["grade"] == "weak"
+        assert unbrauchbar.recommendation["grade"] == "skip"
+
+        einstellung = self._settings("moderate")
+        assert dispatcher.matches(spielbar, einstellung) is True
+        assert dispatcher.matches(beobachten, einstellung) is False
+        assert dispatcher.matches(unbrauchbar, einstellung) is False
+
+    def test_ab_beobachten_laesst_mehr_durch(self, dispatcher):
+        einstellung = self._settings("weak")
+        assert dispatcher.matches(self._alert(19.0), einstellung) is True
+        assert dispatcher.matches(self._alert(250.0), einstellung) is False
+
+    def test_alarm_ohne_bewertung_verstummt_nicht(self, dispatcher):
+        """Fehlende Information ist kein schlechtes Urteil - alte Alarme und
+        ein abgeschaltetes Empfehlungsmodul dürfen nicht stumm bleiben."""
+        ohne = football_alert(kind=AlertKind.VALUE, odds=2.10, value_percent=11.0)
+        assert ohne.recommendation == {}
+        assert dispatcher.matches(ohne, self._settings("strong")) is True
+
+    def test_unbekannter_grad_blockiert_nicht(self, dispatcher):
+        from backend.core.recommendation import passes_grade
+
+        assert passes_grade({"grade": "irgendwas"}, "strong") is True
+        assert passes_grade(None, "strong") is True
+        assert passes_grade({"grade": "skip"}, "any") is True
+
+    def test_einstellungen_nennen_den_grad(self):
+        text = fmt.format_settings(self._settings("moderate"))
+        assert "Nur ab Grad" in text
+        assert "kleiner Einsatz" in text
+
+
+class TestTagesbericht:
+    """Ein Bericht statt tausend Meldungen."""
+
+    def _ledger(self, **overrides):
+        from backend.core.betlog import summarise
+
+        rows = overrides.pop("rows", [])
+        return summarise(rows, **overrides)
+
+    def test_bericht_nennt_kasse_alarme_und_bilanz(self):
+        from types import SimpleNamespace as NS
+
+        rows = [
+            NS(status="won", stake=10.0, odds=2.5, profit=15.0, expected_edge_percent=4.0),
+            NS(status="lost", stake=10.0, odds=2.5, profit=-10.0, expected_edge_percent=4.0),
+        ]
+        text = fmt.format_digest(
+            stats={"alerts_window": 1231},
+            scorecard={"scored": 40, "avg_clv_percent": 3.2, "resolved": 40, "pending": 5},
+            ledger=self._ledger(rows=rows),
+            grades={"skip": 1180, "weak": 40, "moderate": 9, "strong": 2},
+        )
+        assert "Deine Wetten" in text
+        assert "+5.00" in text
+        assert "1231" in text
+        assert "davon spielbar: <b>11</b>" in text
+        assert "+3.2" in text
+        assert "kein Gewinn" in text
+
+    def test_ohne_wetten_bleibt_es_verstaendlich(self):
+        text = fmt.format_digest(
+            stats={"alerts_window": 0}, scorecard={}, ledger=self._ledger(), grades={}
+        )
+        assert "Nichts eingetragen" in text
+        assert "0 in diesem Zeitraum" in text
+
+    def test_zu_kleine_stichprobe_zeigt_keinen_durchschnitt(self):
+        text = fmt.format_digest(
+            stats={"alerts_window": 5},
+            scorecard={"scored": 2, "avg_clv_percent": 88.0, "resolved": 2, "pending": 1},
+            ledger=self._ledger(),
+            grades={},
+        )
+        assert "88" not in text
+        assert "braucht" in text
+
+    def test_hilfe_nennt_den_bericht(self):
+        assert "/bericht" in fmt.HELP_TEXT

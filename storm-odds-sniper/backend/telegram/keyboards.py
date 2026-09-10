@@ -21,9 +21,10 @@ MAIN_MENU = [
         InlineKeyboardButton("📒 Bilanz", callback_data="view:scorecard"),
         InlineKeyboardButton("💰 Kasse", callback_data="view:ledger"),
         InlineKeyboardButton("🔒 Sicher", callback_data="view:arbitrage"),
-        InlineKeyboardButton("📊 Status", callback_data="view:status"),
+        InlineKeyboardButton("📅 Bericht", callback_data="view:digest"),
     ],
     [
+        InlineKeyboardButton("📊 Status", callback_data="view:status"),
         InlineKeyboardButton("⚙️ Einstellungen", callback_data="view:settings"),
     ],
 ]
@@ -60,6 +61,14 @@ def bet_settle_buttons(bet_id: int) -> InlineKeyboardMarkup:
     )
 
 
+GRADE_BUTTON_LABELS = {
+    "any": "📢 Alle Alarme",
+    "weak": "⚪ Ab beobachten",
+    "moderate": "🟡 Ab kleiner Einsatz",
+    "strong": "🟢 Nur spielen",
+}
+
+
 def settings_menu(settings_row) -> InlineKeyboardMarkup:
     live = "🔴 Live: an" if settings_row.live_enabled else "⚪ Live: aus"
     prematch = "🟢 Pre: an" if settings_row.prematch_enabled else "⚪ Pre: aus"
@@ -92,6 +101,16 @@ def settings_menu(settings_row) -> InlineKeyboardMarkup:
                 InlineKeyboardButton("➖ Cooldown", callback_data="set:cooldown_seconds:-30"),
                 InlineKeyboardButton(f"⏱ {settings_row.cooldown_seconds}s", callback_data="noop"),
                 InlineKeyboardButton("➕ Cooldown", callback_data="set:cooldown_seconds:30"),
+            ],
+            [
+                # Der wirksamste Filter von allen - deshalb eine eigene Zeile
+                # und nicht versteckt zwischen den Zahlenreglern.
+                InlineKeyboardButton(
+                    GRADE_BUTTON_LABELS.get(
+                        getattr(settings_row, "min_grade", "any") or "any", "📢 Alle Alarme"
+                    ),
+                    callback_data="cycle:min_grade",
+                ),
             ],
             [
                 InlineKeyboardButton(live, callback_data="toggle:live_enabled"),

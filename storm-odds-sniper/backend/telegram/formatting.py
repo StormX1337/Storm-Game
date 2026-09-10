@@ -9,7 +9,7 @@ from __future__ import annotations
 from html import escape
 
 from backend.core.betlog import STATUS_ICONS, STATUS_LABELS
-from backend.core.recommendation import GRADE_LABELS
+from backend.core.recommendation import GRADE_FILTER_LABELS, GRADE_LABELS
 from backend.core.recommendation import REASON_LABELS as RECOMMENDATION_REASONS
 from backend.core.verdict import VERDICT_LABELS
 from backend.models.domain import Alert, EventSnapshot, now_ts
@@ -510,6 +510,81 @@ def format_arbitrage(item: dict, *, bankroll: float = 0.0) -> str:
     return "\n".join(lines)
 
 
+def format_digest(
+    *,
+    stats: dict,
+    scorecard: dict,
+    ledger,
+    grades: dict[str, int],
+    hours: int = 24,
+    bankroll: float = 0.0,
+) -> str:
+    """Ein Bericht statt tausend Meldungen.
+
+    Die Reihenfolge ist Absicht: erst was du gespielt hast, dann was das
+    System gemeldet hat, zuletzt wie gut die Meldungen waren. Die eigene
+    Kasse steht oben, weil sie die Frage beantwortet, wegen der man das
+    Ganze betreibt.
+    """
+    lines = [f"📅 <b>Bericht der letzten {hours} Stunden</b>", ""]
+
+    # 1) Die eigene Kasse.
+    daten = ledger.to_json()
+    if daten["total"]:
+        lines.append("💰 <b>Deine Wetten</b>")
+        if daten["settled"]:
+            lines.append(
+                f"   {daten['wins']}× gewonnen, {daten['losses']}× verloren"
+                + (f", {daten['voids']}× annulliert" if daten["voids"] else "")
+            )
+            lines.append(
+                f"   Ergebnis <b>{daten['profit']:+.2f}</b> auf {daten['staked']:.2f} Einsatz"
+            )
+            if daten["reliable"] and daten["roi_percent"] is not None:
+                lines.append(f"   Rendite <b>{daten['roi_percent']:+.1f} %</b>")
+        if daten["open_count"]:
+            lines.append(f"   ⏳ {daten['open_count']} offen ({daten['open_stake']:.2f} im Spiel)")
+        lines.append("")
+    else:
+        lines += ["💰 <b>Deine Wetten</b>", "   Nichts eingetragen.", ""]
+
+    # 2) Was das System gemeldet hat.
+    spielbar = sum(count for grade, count in grades.items() if grade in {"strong", "moderate"})
+    lines.append("🚨 <b>Alarme</b>")
+    lines.append(f"   {stats.get('alerts_window', 0)} in diesem Zeitraum")
+    if grades:
+        lines.append(f"   davon spielbar: <b>{spielbar}</b>")
+        for grade in ("strong", "moderate", "weak", "skip"):
+            if grades.get(grade):
+                lines.append(
+                    f"   {GRADE_ICONS.get(grade, '•')} {esc(GRADE_LABELS.get(grade, grade))}: "
+                    f"{grades[grade]}"
+                )
+    lines.append("")
+
+    # 3) Wie gut die Meldungen waren.
+    if scorecard.get("scored", 0) >= MIN_SCORED and scorecard.get("avg_clv_percent") is not None:
+        lines += [
+            "📒 <b>Trefferbilanz</b>",
+            f"   Ø gegenüber dem späteren Markt: <b>{scorecard['avg_clv_percent']:+.1f} %</b>",
+            f"   <i>({scorecard['scored']} ausgewertete Alarme - kein Gewinn, nur der",
+            "   Abstand zum Marktkonsens danach.)</i>",
+            "",
+        ]
+    elif scorecard.get("resolved"):
+        lines += [
+            "📒 <b>Trefferbilanz</b>",
+            f"   {scorecard['resolved']} nachkontrolliert, {scorecard.get('pending', 0)} offen.",
+            f"   <i>Ein Durchschnitt braucht {MIN_SCORED} ausgewertete Alarme.</i>",
+            "",
+        ]
+
+    if not bankroll:
+        lines.append("<i>Einsätze in Prozentpunkten der Bankroll (BANKROLL nicht gesetzt).</i>")
+    lines.append("<i>Nur Analyse - es wird nichts automatisch gesetzt.</i>")
+    return "\n".join(lines)
+
+
 def format_event_line(event: EventSnapshot) -> str:
     """Eine Zeile je Event für /live."""
     icon = SPORT_ICON.get(event.sport, "🏟")
@@ -521,6 +596,10 @@ def format_event_line(event: EventSnapshot) -> str:
     if detail:
         parts.append(f"   {esc(detail) if '<' not in detail else detail}")
     return "\n".join(parts)
+
+
+#: Klartext des Mindestgrads - dieselben Worte wie am Knopf.
+GRADE_FILTER_TEXT: dict[str, str] = dict(GRADE_FILTER_LABELS)
 
 
 def format_settings(settings_row) -> str:
@@ -538,6 +617,7 @@ def format_settings(settings_row) -> str:
             f"🏦 Min. Buchmacher: <b>{settings_row.min_bookmakers}</b>",
             f"🧠 Min. Confidence: <b>{settings_row.min_confidence}</b>",
             f"⏱ Cooldown: <b>{settings_row.cooldown_seconds}s</b>",
+            f"🎯 Nur ab Grad: <b>{esc(GRADE_FILTER_TEXT.get(getattr(settings_row, 'min_grade', 'any') or 'any', 'alle Alarme'))}</b>",
             f"🏟 Sportarten: <b>{sports}</b>",
             f"📋 Märkte: <b>{markets}</b>",
             f"🔴 Live: <b>{'an' if settings_row.live_enabled else 'aus'}</b>",
@@ -668,6 +748,7 @@ Ich überwache Fußball- und Tennisquoten mehrerer Anbieter und melde:
 /wetten — gespielte Wetten, abrechnen per Knopf
 /kasse — was dabei herausgekommen ist
 /arb — sichere Wetten (Widersprüche zwischen Büchern)
+/bericht — Tagesbericht: Wetten, Alarme, Trefferbilanz
 /bilanz — Trefferbilanz: was aus den Alarmen wurde
 /pause — Benachrichtigungen pausieren
 /resume — Benachrichtigungen fortsetzen

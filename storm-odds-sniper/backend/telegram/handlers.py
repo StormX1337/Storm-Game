@@ -51,6 +51,9 @@ BOUNDS = {
     "cooldown_seconds": (10, 3600),
 }
 
+#: Reihenfolge, in der der Knopf den Mindestgrad durchschaltet.
+GRADE_CYCLE = ["any", "weak", "moderate", "strong"]
+
 
 def _repo(context: ContextTypes.DEFAULT_TYPE) -> Repository | None:
     return context.application.bot_data.get("repository")
@@ -456,6 +459,47 @@ async def cmd_arbitrage(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await _reply_new(update, fmt.format_arbitrage(item, bankroll=settings.bankroll))
 
 
+async def cmd_digest(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Ein Bericht statt tausend Meldungen."""
+    repo = _repo(context)
+    state = _state(context)
+    user = update.effective_user
+    if repo is None or user is None:
+        await _reply(update, "⚠️ Datenbank nicht verfügbar.")
+        return
+    settings = context.application.bot_data.get("settings") or get_settings()
+    stunden = 24
+    seit = datetime.now(UTC) - timedelta(hours=stunden)
+
+    stats: dict = {}
+    scorecard: dict = {}
+    grades: dict[str, int] = {}
+    try:
+        stats = await repo.stats(window_hours=stunden)
+        scorecard = await repo.scorecard(window_hours=stunden)
+        ledger = await repo.bet_ledger(user_id=user.id, since=seit, unit=_bet_unit(settings))
+    except Exception as exc:  # noqa: BLE001 - ein Bericht darf den Bot nie stoppen
+        log.warning("bericht nicht erstellbar", error=str(exc))
+        await _reply(update, "⚠️ Bericht gerade nicht erstellbar.")
+        return
+    if state is not None:
+        with contextlib.suppress(Exception):
+            grades = await state.get_grades()
+
+    await _reply(
+        update,
+        fmt.format_digest(
+            stats=stats,
+            scorecard=scorecard,
+            ledger=ledger,
+            grades=grades,
+            hours=stunden,
+            bankroll=settings.bankroll,
+        ),
+        back_to_menu(),
+    )
+
+
 async def cmd_pause(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     repo = _repo(context)
     user = update.effective_user
@@ -505,6 +549,7 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             "scorecard": cmd_scorecard,
             "ledger": cmd_ledger,
             "arbitrage": cmd_arbitrage,
+            "digest": cmd_digest,
         }
         if target == "prematch":
             await _prematch_view(update, context)
@@ -544,6 +589,14 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     _, settings_row = await _user_settings(update, context)
     if settings_row is None:
         await query.answer("Datenbank nicht verfügbar", show_alert=True)
+        return
+
+    if data == "cycle:min_grade":
+        aktuell = getattr(settings_row, "min_grade", "any") or "any"
+        naechster = GRADE_CYCLE[(GRADE_CYCLE.index(aktuell) + 1) % len(GRADE_CYCLE)]
+        settings_row = await repo.update_user_settings(user.id, min_grade=naechster)
+        await query.answer(fmt.GRADE_FILTER_TEXT.get(naechster, naechster))
+        await _reply(update, fmt.format_settings(settings_row), settings_menu(settings_row))
         return
 
     if data.startswith("set:"):
@@ -640,6 +693,8 @@ def register(application: Application) -> None:
     application.add_handler(CommandHandler("bets", cmd_bets))
     application.add_handler(CommandHandler("kasse", cmd_ledger))
     application.add_handler(CommandHandler("arb", cmd_arbitrage))
+    application.add_handler(CommandHandler("bericht", cmd_digest))
+    application.add_handler(CommandHandler("tag", cmd_digest))
     application.add_handler(CommandHandler("sicher", cmd_arbitrage))
     application.add_handler(CommandHandler("bilanz", cmd_scorecard))
     application.add_handler(CommandHandler("scorecard", cmd_scorecard))

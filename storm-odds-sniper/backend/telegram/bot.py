@@ -22,6 +22,7 @@ from telegram.ext import Application, ApplicationBuilder
 
 from backend.core.config import Settings, get_settings
 from backend.core.logging import get_logger
+from backend.core.recommendation import passes_grade
 from backend.database.repository import Repository
 from backend.models.domain import Alert
 from backend.models.enums import AlertKind
@@ -69,6 +70,12 @@ class AlertDispatcher:
         if not is_live and not user_settings.prematch_enabled:
             return False
         if alert.odds < user_settings.min_odds or alert.odds > user_settings.max_odds:
+            return False
+
+        # Der wirksamste Filter von allen: die meisten Alarme sind zwar echt
+        # auffällig, aber nichts, was man spielen würde. Wer den Mindestgrad
+        # hochsetzt, macht aus einem Feuerwehrschlauch ein Signal.
+        if not passes_grade(alert.recommendation, getattr(user_settings, "min_grade", "any")):
             return False
 
         if alert.kind is AlertKind.ODDS_MOVE:
