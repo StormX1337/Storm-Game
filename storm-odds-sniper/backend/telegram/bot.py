@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+from collections import Counter
 
 from telegram import Bot
 from telegram.constants import ParseMode
@@ -50,10 +51,22 @@ class AlertDispatcher:
         self.repository = repository
         self.sent = 0
         self.skipped = 0
+        #: Warum nicht verschickt wurde - der Zähler allein sagt es nicht.
+        self.skip_reasons: Counter[str] = Counter()
 
     # ------------------------------------------------------------- Filter
     def matches(self, alert: Alert, user_settings) -> bool:
         """Persönliche Filter des Empfängers anwenden."""
+        return self.reason_not_to_send(alert, user_settings) is None
+
+    def reason_not_to_send(self, alert: Alert, user_settings) -> str | None:
+        """Warum dieser Alarm NICHT verschickt wird - oder ``None``.
+
+        Ein nackter Zähler für Übersprungenes beantwortet die eine Frage
+        nicht, die man wirklich hat: "warum bekomme ich nichts?". Ohne Grund
+        sucht man beim Bot, beim Token, beim Handy - und die Antwort ist
+        meist eine Einstellung, die man selbst gesetzt hat.
+        """
         if user_settings is None:
             # Der Standard-Chat aus TELEGRAM_CHAT_ID hat keine persönlichen
             # Einstellungen. "Also alles" war die falsche Schlussfolgerung:
@@ -61,39 +74,45 @@ class AlertDispatcher:
             # einstuft, ist keine Push-Nachricht wert. Alarme ohne Empfehlung
             # (etwa Bewegungsmeldungen) kommen weiterhin durch - siehe
             # passes_grade.
-            return passes_grade(alert.recommendation, self.settings.telegram_min_grade)
+            if not passes_grade(alert.recommendation, self.settings.telegram_min_grade):
+                return "min_grade_global"
+            return None
         if user_settings.paused:
-            return False
+            return "pausiert"
         sports = user_settings.sports or []
         if sports and alert.event.sport.value not in sports:
-            return False
+            return "sportart"
         markets = user_settings.markets or []
         if markets and alert.market.type.value not in markets:
-            return False
+            return "markt"
         is_live = alert.event.status.value == "LIVE"
         if is_live and not user_settings.live_enabled:
-            return False
+            return "live_aus"
         if not is_live and not user_settings.prematch_enabled:
-            return False
+            return "prematch_aus"
         if alert.odds < user_settings.min_odds or alert.odds > user_settings.max_odds:
-            return False
+            return "quotenband"
 
         # Der wirksamste Filter von allen: die meisten Alarme sind zwar echt
         # auffällig, aber nichts, was man spielen würde. Wer den Mindestgrad
         # hochsetzt, macht aus einem Feuerwehrschlauch ein Signal.
         if not passes_grade(alert.recommendation, getattr(user_settings, "min_grade", "any")):
-            return False
+            return "min_grade"
 
         if alert.kind is AlertKind.ODDS_MOVE:
             # Bewegungsmeldungen sind fürs Dashboard gedacht; Telegram nur auf Wunsch.
-            return self.settings.telegram_send_moves
+            return None if self.settings.telegram_send_moves else "bewegungsalarm"
         if alert.bookmaker_count < user_settings.min_bookmakers:
-            return False
+            return "zu_wenige_buchmacher"
         if alert.confidence < user_settings.min_confidence:
-            return False
+            return "confidence"
         if alert.kind is AlertKind.FIXED_ERROR:
-            return alert.deviation_percent >= user_settings.min_outlier_percent
-        return alert.value_percent >= user_settings.min_value_percent
+            if alert.deviation_percent < user_settings.min_outlier_percent:
+                return "abweichung_zu_klein"
+            return None
+        if alert.value_percent < user_settings.min_value_percent:
+            return "value_zu_klein"
+        return None
 
     async def recipients(self) -> list[tuple[int, object]]:
         """(chat_id, settings) aller Empfänger."""
@@ -133,9 +152,20 @@ class AlertDispatcher:
         ):
             markup = bet_button(alert.fingerprint)
         sent = 0
-        for chat_id, user_settings in await self.recipients():
-            if not self.matches(alert, user_settings):
+        empfaenger = await self.recipients()
+        if not empfaenger:
+            # Kein Empfänger ist der leiseste aller Fehler: der Scanner
+            # arbeitet, Alarme entstehen, das Dashboard füllt sich - und
+            # niemand bekommt eine Nachricht. Ohne Zähler sieht das von
+            # außen genauso aus wie ein ruhiger Markt.
+            self.skipped += 1
+            self.skip_reasons["kein_empfaenger"] += 1
+            return 0
+        for chat_id, user_settings in empfaenger:
+            grund = self.reason_not_to_send(alert, user_settings)
+            if grund is not None:
                 self.skipped += 1
+                self.skip_reasons[grund] += 1
                 continue
             if await self._send(chat_id, text, markup=markup):
                 sent += 1

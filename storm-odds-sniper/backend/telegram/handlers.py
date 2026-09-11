@@ -127,6 +127,23 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await _reply(update, fmt.HELP_TEXT, main_menu())
 
 
+def _versandzahlen(context) -> dict | None:
+    """Zahlen des Verteilers, falls er erreichbar ist.
+
+    "Ich bekomme nichts" ist die häufigste Rückmeldung überhaupt, und ohne
+    diese Zahlen ist sie nicht zu beantworten - man sucht dann beim Token,
+    beim Handy, an der Netzverbindung, und die Ursache ist eine Einstellung.
+    """
+    dispatcher = context.application.bot_data.get("dispatcher")
+    if dispatcher is None:
+        return None
+    return {
+        "sent": getattr(dispatcher, "sent", 0),
+        "skipped": getattr(dispatcher, "skipped", 0),
+        "reasons": dict(getattr(dispatcher, "skip_reasons", {})),
+    }
+
+
 async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     state = _state(context)
     repo = _repo(context)
@@ -149,7 +166,57 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     paused = bool(settings_row.paused) if settings_row is not None else False
     await _reply(
         update,
-        fmt.format_status(providers=providers, counters=counters, stats=stats, paused=paused),
+        fmt.format_status(
+            providers=providers,
+            counters=counters,
+            stats=stats,
+            paused=paused,
+            # Der Verteiler weiß als Einziger, warum nichts ankam.
+            versand=_versandzahlen(context),
+        ),
+        back_to_menu(),
+    )
+
+
+async def cmd_warum(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Warum kommt nichts an?
+
+    Zwischen Datenquelle und Handy liegen vier Stellen, an denen es
+    stillstehen kann - und drei davon sehen von außen gleich aus: es kommt
+    nichts. Ohne diese Antwort sucht man beim Token, beim Handy, am Netz,
+    und die Ursache ist ein Regler.
+    """
+    state = _state(context)
+    repo = _repo(context)
+    providers: list[dict] = []
+    stats: dict = {}
+    stunden = 24
+    if state is not None:
+        with contextlib.suppress(Exception):
+            providers = await state.get_provider_health()
+    if repo is not None:
+        with contextlib.suppress(Exception):
+            stats = await repo.stats(window_hours=stunden)
+
+    _, settings_row = await _user_settings(update, context)
+    paused = bool(settings_row.paused) if settings_row is not None else False
+
+    empfaenger: int | None = None
+    dispatcher = context.application.bot_data.get("dispatcher")
+    if dispatcher is not None:
+        with contextlib.suppress(Exception):
+            empfaenger = len(await dispatcher.recipients())
+
+    await _reply(
+        update,
+        fmt.format_warum(
+            providers=providers,
+            alerts_window=int(stats.get("alerts_window", 0) or 0),
+            window_hours=stunden,
+            versand=_versandzahlen(context),
+            paused=paused,
+            empfaenger=empfaenger,
+        ),
         back_to_menu(),
     )
 
@@ -566,6 +633,7 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             "menu": cmd_start,
             "settings": cmd_settings,
             "status": cmd_status,
+            "warum": cmd_warum,
             "live": cmd_live,
             "value": cmd_value,
             "sports": cmd_sports,
@@ -708,6 +776,7 @@ def register(application: Application) -> None:
     application.add_handler(CommandHandler("start", cmd_start))
     application.add_handler(CommandHandler("help", cmd_help))
     application.add_handler(CommandHandler("status", cmd_status))
+    application.add_handler(CommandHandler("warum", cmd_warum))
     application.add_handler(CommandHandler("settings", cmd_settings))
     application.add_handler(CommandHandler("sports", cmd_sports))
     application.add_handler(CommandHandler("live", cmd_live))

@@ -27,6 +27,7 @@ MAIN_MENU = [
     ],
     [
         InlineKeyboardButton("📊 Status", callback_data="view:status"),
+        InlineKeyboardButton("🤔 Warum?", callback_data="view:warum"),
         InlineKeyboardButton("⚙️ Einstellungen", callback_data="view:settings"),
     ],
 ]

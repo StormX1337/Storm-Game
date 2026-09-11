@@ -583,6 +583,7 @@ Dem Bot `/start` schreiben.
 | `/start` | Bot starten, Menü öffnen |
 | `/help` | Hilfe |
 | `/status` | Systemstatus und Datenquellen |
+| `/warum` | Warum kommt gerade nichts an? — Kette Daten → Alarme → Versand → Du |
 | `/settings` | Filter anzeigen und ändern |
 | `/sports` | Sportarten wählen |
 | `/live` | laufende Events |
@@ -1607,6 +1608,53 @@ Widerspruch. `TELEGRAM_MIN_GRADE` (Standard `weak`) wirft diese raus:
 Alarme **ohne** Bewertung kommen weiterhin durch — fehlende Information ist
 kein schlechtes Urteil. Bewegungsmeldungen hängen unverändert an
 `TELEGRAM_SEND_MOVES`.
+
+### „Ich bekomme keine Benachrichtigungen" — `/warum`
+
+Zwischen Datenquelle und Handy liegen vier Stellen, an denen es stillstehen
+kann, und **drei davon sehen von außen identisch aus**: es kommt nichts.
+Deshalb sucht man beim Token, beim Handy, am Netz — und die Ursache ist ein
+Regler.
+
+`/warum` prüft die Kette und nennt die **erste** kaputte Stelle. Alles
+danach ist Folge, nicht Ursache:
+
+```
+🤔 Warum kommt nichts an?
+
+🟢 Daten   — sportsgameodds liefert
+🟢 Alarme  — 166 in 24 h
+🔴 Versand — 0 verschickt, 166 gefiltert
+      • unter TELEGRAM_MIN_GRADE (nicht spielbar): 120
+      • Confidence zu niedrig: 46
+🟢 Du      — aktiv, 1 Empfänger
+
+➡️ Es hakt bei: Versand
+```
+
+Die vier Stufen und was sie prüfen:
+
+| Stufe | Grün, wenn … | Typische Ursache, wenn rot |
+|---|---|---|
+| **Daten** | eine Quelle verbunden ist **und** in den letzten 5 Minuten geliefert hat | Scanner steht, API-Key abgelaufen, Kontingent leer |
+| **Alarme** | im Zeitfenster überhaupt Alarme entstanden sind | `MIN_VALUE_PERCENT` / `MIN_OUTLIER_PERCENT` zu streng |
+| **Versand** | mindestens einer die Empfängerfilter passiert hat | `TELEGRAM_MIN_GRADE`, eigener Mindestgrad, Quotenband |
+| **Du** | du nicht pausiert hast **und** ein Empfänger eingetragen ist | `/pause` vergessen, oder nie `/start` gemacht |
+
+„Verbunden" heißt dabei ausdrücklich **nicht** „liefert". Eine Quelle, die
+antwortet, aber seit einer Stunde keine Quote geschickt hat, ist rot — von
+außen sähe das sonst aus wie ein ruhiger Markt.
+
+Zwei Fälle, die im nackten Zähler gleich aussehen und völlig verschiedene
+Antworten haben:
+
+* **0 verschickt, 166 gefiltert** → deine Schwellen. Einstellbar.
+* **0 Empfänger** → niemand hört zu. Weder `/start` gemacht noch
+  `TELEGRAM_CHAT_ID` gesetzt. Der Scanner arbeitet, das Dashboard füllt
+  sich, und die Nachrichten gehen ins Leere.
+
+Die Zahlen stehen auch unter `/status`. Sie gelten **seit dem letzten
+Neustart des Bots** — ein Neustart setzt sie zurück.
 
 ### Wenn nie etwas spielbar ist: das Band zwischen den Stufen
 

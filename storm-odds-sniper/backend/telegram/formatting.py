@@ -717,6 +717,7 @@ def format_status(
     counters: dict,
     stats: dict,
     paused: bool,
+    versand: dict | None = None,
 ) -> str:
     lines = [
         "📊 <b>Systemstatus</b>",
@@ -743,6 +744,12 @@ def format_status(
             line += f" · Kontingent {provider['rate_limit_remaining']}"
         lines.append(line)
     lines += ["", f"🔔 Benachrichtigungen: <b>{'pausiert' if paused else 'aktiv'}</b>"]
+    if versand:
+        lines += format_versand(
+            versand.get("sent", 0),
+            versand.get("skipped", 0),
+            versand.get("reasons") or {},
+        )
     return "\n".join(lines)
 
 
@@ -823,6 +830,7 @@ Ich überwache Fußball- und Tennisquoten mehrerer Anbieter und melde:
 /start — Bot starten und Menü öffnen
 /help — diese Hilfe
 /status — Systemstatus und Datenquellen
+/warum — warum kommt gerade nichts an?
 /settings — Filter anzeigen und ändern
 /sports — Sportarten wählen
 /live — laufende Events
@@ -854,6 +862,48 @@ welcher Confidence und für welche Sportarten du benachrichtigt wirst.
 
 def now_time() -> str:
     return format_time(now_ts())
+
+
+#: Warum ein Alarm nicht verschickt wurde - in Klartext.
+VERSAND_GRUENDE: dict[str, str] = {
+    "kein_empfaenger": "niemand eingetragen (/start fehlt)",
+    "min_grade_global": "unter TELEGRAM_MIN_GRADE (nicht spielbar)",
+    "min_grade": "unter deinem Mindestgrad",
+    "pausiert": "du hast pausiert",
+    "sportart": "andere Sportart",
+    "markt": "anderer Markt",
+    "live_aus": "Live abgeschaltet",
+    "prematch_aus": "Vor dem Anpfiff abgeschaltet",
+    "quotenband": "Quote außerhalb deines Bands",
+    "bewegungsalarm": "Bewegungsmeldung (TELEGRAM_SEND_MOVES)",
+    "zu_wenige_buchmacher": "zu wenige Buchmacher",
+    "confidence": "Confidence zu niedrig",
+    "abweichung_zu_klein": "Abweichung unter deiner Schwelle",
+    "value_zu_klein": "Value unter deiner Schwelle",
+}
+
+
+def format_versand(sent: int, skipped: int, gruende: dict[str, int]) -> list[str]:
+    """Warum kommt nichts an?
+
+    Ein Zähler für Übersprungenes beantwortet die Frage nicht, die man
+    wirklich hat. Ohne Grund sucht man beim Bot, beim Token, beim Handy -
+    und die Antwort ist meist eine Einstellung, die man selbst gesetzt hat.
+    """
+    zeilen = [f"\n📨 <b>Versand</b>: {sent} verschickt, {skipped} gefiltert"]
+    if not skipped:
+        return zeilen
+    oben = sorted(gruende.items(), key=lambda kv: -kv[1])[:4]
+    for code, anzahl in oben:
+        zeilen.append(f"   • {esc(VERSAND_GRUENDE.get(code, code))}: <b>{anzahl}</b>")
+    if sent == 0 and oben and oben[0][0] == "min_grade_global":
+        zeilen.append(
+            "\n<i>Alles, was ankam, war laut Empfehlung nicht spielbar. "
+            "Das ist entweder ein ruhiger Markt - oder deine Schwellen "
+            "lassen nur Unspielbares durch. Nachsehen: die Tipp-Karte im "
+            "Dashboard nennt den Regler.</i>"
+        )
+    return zeilen
 
 
 # ------------------------------------------------------------ Systemmeldung
@@ -889,3 +939,123 @@ def format_system_notice(payload: dict) -> str:
         "<code>./scripts/diagnose.sh</code>\n\n"
         "<i>Solange das gilt, kann kein Alarm entstehen - auch kein guter.</i>"
     )
+
+
+# ----------------------------------------------------------------- /warum
+
+#: Ab wann eine Quelle als "liefert nicht mehr" gilt.
+STILLE_SEKUNDEN = 300.0
+
+#: Was man tun kann, je nachdem, wo die Kette reißt.
+WARUM_RAT: dict[str, str] = {
+    "daten": (
+        "Ohne Daten kann kein Alarm entstehen - auch kein guter. "
+        "Nachsehen: <code>./scripts/diagnose.sh</code>"
+    ),
+    "alarme": (
+        "Daten kommen an, aber nichts fällt auf. Entweder ist der Markt "
+        "wirklich ruhig, oder die Scanner-Schwellen (MIN_VALUE_PERCENT, "
+        "MIN_OUTLIER_PERCENT) lassen nichts durch."
+    ),
+    "versand": (
+        "Alarme entstehen, aber keiner kommt durch die Filter. Der "
+        "häufigste Grund steht oben - <b>er ist einstellbar</b>."
+    ),
+    "empfaenger": (
+        "Es gibt keinen Empfänger. Schick dem Bot einmal /start, oder trag "
+        "deine Chat-ID in <code>TELEGRAM_CHAT_ID</code> ein."
+    ),
+    "pausiert": "Du hast pausiert. Mit /resume geht es weiter.",
+}
+
+
+def _warum_daten(providers: list[dict]) -> tuple[bool, str]:
+    if not providers:
+        return False, "keine Statusmeldung - läuft der Scanner?"
+    frisch = [
+        p
+        for p in providers
+        if p.get("healthy") and (p.get("seconds_since_message") or 1e9) <= STILLE_SEKUNDEN
+    ]
+    if not frisch:
+        # "Verbunden" heißt nicht "liefert". Genau diese Lücke sieht von
+        # außen aus wie ein ruhiger Markt.
+        namen = ", ".join(esc(str(p.get("name", "?"))) for p in providers[:3])
+        return False, f"{namen} meldet sich, liefert aber nichts"
+    namen = ", ".join(esc(str(p.get("name", "?"))) for p in frisch[:3])
+    return True, f"{namen} liefert"
+
+
+def format_warum(
+    *,
+    providers: list[dict],
+    alerts_window: int,
+    window_hours: int,
+    versand: dict | None,
+    paused: bool,
+    empfaenger: int | None = None,
+) -> str:
+    """Die Frage "warum bekomme ich nichts?" als Kette beantworten.
+
+    Zwischen Datenquelle und Handy liegen vier Stellen, an denen es
+    stillstehen kann, und drei davon sehen von außen identisch aus: es
+    kommt nichts. Deshalb wird jede Stelle einzeln geprüft und die *erste*
+    kaputte benannt - alles danach ist Folge, nicht Ursache.
+    """
+    gruende = (versand or {}).get("reasons") or {}
+    verschickt = int((versand or {}).get("sent", 0))
+    gefiltert = int((versand or {}).get("skipped", 0))
+
+    schritte: list[tuple[str, bool, str]] = []
+
+    daten_ok, daten_text = _warum_daten(providers)
+    schritte.append(("Daten", daten_ok, daten_text))
+
+    alarme_ok = alerts_window > 0
+    schritte.append(("Alarme", alarme_ok, f"{alerts_window} in {window_hours} h"))
+
+    if versand is None:
+        # Der Verteiler läuft im selben Prozess wie dieser Befehl. Fehlt er,
+        # ist das kein "0 verschickt", sondern "keine Angabe".
+        versand_ok, versand_text = True, "keine Angabe (Verteiler nicht erreichbar)"
+    elif verschickt or not gefiltert:
+        versand_ok = True
+        versand_text = f"{verschickt} verschickt, {gefiltert} gefiltert"
+    else:
+        versand_ok = False
+        versand_text = f"0 verschickt, {gefiltert} gefiltert"
+    schritte.append(("Versand", versand_ok, versand_text))
+
+    if empfaenger is None:
+        du_ok, du_text = not paused, "pausiert" if paused else "aktiv"
+    else:
+        du_ok = not paused and empfaenger > 0
+        du_text = ("pausiert" if paused else "aktiv") + f", {empfaenger} Empfänger"
+    schritte.append(("Du", du_ok, du_text))
+
+    zeilen = ["🤔 <b>Warum kommt nichts an?</b>", ""]
+    for name, ok, text in schritte:
+        zeilen.append(f"{'🟢' if ok else '🔴'} <b>{name}</b> — {esc(text)}")
+        # Die Gründe gehören unter ihren Schritt, nicht ans Ende - sonst
+        # liest man sie als Erklärung der Zeile darunter.
+        if name == "Versand" and not ok and gruende:
+            for code, anzahl in sorted(gruende.items(), key=lambda kv: -kv[1])[:3]:
+                zeilen.append(f"      • {esc(VERSAND_GRUENDE.get(code, code))}: <b>{anzahl}</b>")
+
+    zeilen.append("")
+    kaputt = next((name for name, ok, _ in schritte if not ok), None)
+    if kaputt is None:
+        zeilen.append(
+            "<i>Alles grün. Dann kam wirklich nichts Meldenswertes - "
+            "das ist der Normalfall, kein Fehler.</i>"
+        )
+        return "\n".join(zeilen)
+
+    schluessel = kaputt.lower()
+    if schluessel == "versand" and gruende and max(gruende, key=gruende.get) == "kein_empfaenger":
+        schluessel = "empfaenger"
+    elif schluessel == "du":
+        schluessel = "pausiert" if paused else "empfaenger"
+    zeilen.append(f"➡️ <b>Es hakt bei: {esc(kaputt)}</b>")
+    zeilen.append(WARUM_RAT.get(schluessel, ""))
+    return "\n".join(zeilen).strip()

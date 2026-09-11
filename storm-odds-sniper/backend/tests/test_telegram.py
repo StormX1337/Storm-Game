@@ -960,3 +960,341 @@ class TestTagesbericht:
 
     def test_hilfe_nennt_den_bericht(self):
         assert "/bericht" in fmt.HELP_TEXT
+
+
+class TestVersandgrund:
+    """ "Ich bekomme nichts" muss beantwortbar sein.
+
+    Ein nackter Zähler für Übersprungenes sagt nur *dass* gefiltert wurde.
+    Gesucht wird aber immer am falschen Ende - beim Token, beim Handy, am
+    Netz - während die Ursache eine Einstellung ist.
+    """
+
+    def test_durchgelassener_alarm_hat_keinen_grund(self, dispatcher):
+        assert dispatcher.reason_not_to_send(football_alert(), user_settings()) is None
+
+    @pytest.mark.parametrize(
+        ("code", "einstellungen", "alarm"),
+        [
+            ("pausiert", {"paused": True}, {}),
+            ("sportart", {"sports": ["tennis"]}, {}),
+            ("markt", {"markets": ["1x2"]}, {}),
+            ("live_aus", {"live_enabled": False}, {}),
+            ("quotenband", {}, {"odds": 1.2}),
+            ("zu_wenige_buchmacher", {}, {"bookmaker_count": 1}),
+            ("confidence", {}, {"confidence": 20}),
+            ("abweichung_zu_klein", {}, {"deviation_percent": 5.0}),
+        ],
+    )
+    def test_jeder_filter_nennt_sich_selbst(self, dispatcher, code, einstellungen, alarm):
+        assert (
+            dispatcher.reason_not_to_send(football_alert(**alarm), user_settings(**einstellungen))
+            == code
+        )
+
+    def test_prematch_aus_hat_einen_eigenen_grund(self, dispatcher):
+        alert = football_alert(event=make_event(status=EventStatus.PRE_MATCH))
+        grund = dispatcher.reason_not_to_send(alert, user_settings(prematch_enabled=False))
+        assert grund == "prematch_aus"
+
+    def test_value_unter_schwelle(self, dispatcher):
+        alert = football_alert(kind=AlertKind.VALUE, value_percent=4.0)
+        assert dispatcher.reason_not_to_send(alert, user_settings()) == "value_zu_klein"
+
+    def test_globaler_mindestgrad_ist_als_solcher_erkennbar(self, dispatcher):
+        """Der häufigste Fall auf einem echten Server - und der einzige, den
+        man nicht in den eigenen Einstellungen findet, weil er in der .env
+        steht."""
+        alert = football_alert()
+        alert.recommendation = {"grade": "skip"}
+        assert dispatcher.reason_not_to_send(alert, None) == "min_grade_global"
+
+    def test_eigener_mindestgrad_wird_nicht_mit_dem_globalen_verwechselt(self, dispatcher):
+        alert = football_alert()
+        alert.recommendation = {"grade": "weak"}
+        assert (
+            dispatcher.reason_not_to_send(alert, user_settings(min_grade="strong")) == "min_grade"
+        )
+
+    def test_matches_bleibt_die_gleiche_entscheidung(self, dispatcher):
+        """Zwei Wege zur selben Antwort dürfen nicht auseinanderlaufen."""
+        faelle = [
+            (football_alert(), user_settings()),
+            (football_alert(odds=1.2), user_settings()),
+            (football_alert(confidence=20), user_settings()),
+            (football_alert(kind=AlertKind.ODDS_MOVE), user_settings()),
+        ]
+        for alert, einstellungen in faelle:
+            erwartet = dispatcher.reason_not_to_send(alert, einstellungen) is None
+            assert dispatcher.matches(alert, einstellungen) is erwartet
+
+    def test_jeder_grund_hat_einen_deutschen_text(self, dispatcher):
+        """Ein Code wie "min_grade_global" im Status wäre keine Antwort."""
+        import inspect
+
+        quelle = inspect.getsource(dispatcher.reason_not_to_send)
+        codes = set(re.findall(r'return "(\w+)"', quelle))
+        assert codes, "keine Gründe gefunden - Test läuft ins Leere"
+        assert codes <= set(fmt.VERSAND_GRUENDE)
+
+    async def test_dispatch_zaehlt_die_gruende_mit(self, redis_state):
+        """Nicht nur die Funktion kann es - der Versand zählt es auch."""
+        settings = Settings(_env_file=None, telegram_bot_token="x", telegram_chat_id="1")
+        dispatcher = AlertDispatcher(None, redis_state, settings, None)
+        alert = football_alert()
+        alert.recommendation = {"grade": "skip"}
+        assert await dispatcher.dispatch(alert) == 0
+        assert dispatcher.skipped == 1
+        assert dispatcher.skip_reasons["min_grade_global"] == 1
+
+
+class TestVersandImStatus:
+    """Die Zahlen müssen dort ankommen, wo man sie sucht: in /status."""
+
+    def test_gruende_stehen_im_text(self):
+        zeilen = fmt.format_versand(0, 166, {"min_grade_global": 120, "confidence": 46})
+        text = "\n".join(zeilen)
+        assert "166" in text
+        assert fmt.VERSAND_GRUENDE["min_grade_global"] in text
+        assert fmt.VERSAND_GRUENDE["confidence"] in text
+
+    def test_ohne_gefilterte_keine_liste(self):
+        zeilen = fmt.format_versand(12, 0, {})
+        assert len(zeilen) == 1
+        assert "12" in zeilen[0]
+
+    def test_null_verschickt_nennt_den_regler(self):
+        text = "\n".join(fmt.format_versand(0, 80, {"min_grade_global": 80}))
+        assert "nicht spielbar" in text
+
+    def test_status_ohne_verteiler_bleibt_lesbar(self):
+        text = fmt.format_status(providers=[], counters={}, stats={}, paused=False)
+        assert "Versand" not in text
+
+    async def test_status_findet_den_verteiler_wirklich(self, redis_state):
+        """Der Verteiler liegt in ``bot_data`` - wer woanders nachsieht,
+        bekommt stumm ``None`` und zeigt gar nichts an.
+
+        Genau das war hier einmal der Fall: ``/status`` hätte behauptet, es
+        gebe nichts zu berichten, während der Bot 166 Alarme weggefiltert
+        hatte."""
+        from backend.telegram.bot import AlertDispatcher
+        from backend.telegram.handlers import cmd_status
+
+        settings = Settings(_env_file=None, telegram_bot_token="x")
+        dispatcher = AlertDispatcher(None, redis_state, settings, None)
+        dispatcher.sent = 3
+        dispatcher.skipped = 166
+        dispatcher.skip_reasons["min_grade_global"] = 166
+
+        gesendet: list[str] = []
+
+        async def reply_text(text, **kwargs):
+            gesendet.append(text)
+
+        update = SimpleNamespace(
+            callback_query=None,
+            effective_message=SimpleNamespace(reply_text=reply_text),
+            effective_user=SimpleNamespace(id=1, username="u", first_name="U"),
+        )
+        context = SimpleNamespace(
+            application=SimpleNamespace(
+                bot_data={
+                    "state": redis_state,
+                    "repository": None,
+                    "settings": settings,
+                    "admin_ids": set(),
+                    "dispatcher": dispatcher,
+                }
+            )
+        )
+        await cmd_status(update, context)
+        assert len(gesendet) == 1
+        assert "166" in gesendet[0]
+        assert fmt.VERSAND_GRUENDE["min_grade_global"] in gesendet[0]
+
+
+class TestWarum:
+    """Die Kette Daten → Alarme → Versand → Du.
+
+    Drei von vier Bruchstellen sehen von außen identisch aus: es kommt
+    nichts. Der Befehl muss die *erste* kaputte benennen, nicht irgendeine.
+    """
+
+    QUELLE_OK = [{"name": "sportsgameodds", "healthy": True, "seconds_since_message": 4}]
+
+    def test_ohne_quelle_ist_die_quelle_schuld(self):
+        text = fmt.format_warum(
+            providers=[], alerts_window=0, window_hours=24, versand=None, paused=False
+        )
+        assert "Es hakt bei: Daten" in text
+        assert "diagnose.sh" in text
+
+    def test_verbunden_aber_stumm_zaehlt_als_kaputt(self):
+        """ "Verbunden" heißt nicht "liefert" - diese Lücke sieht aus wie ein
+        ruhiger Markt."""
+        stumm = [{"name": "sportsgameodds", "healthy": True, "seconds_since_message": 3600}]
+        text = fmt.format_warum(
+            providers=stumm, alerts_window=0, window_hours=24, versand=None, paused=False
+        )
+        assert "Es hakt bei: Daten" in text
+
+    def test_daten_aber_keine_alarme(self):
+        text = fmt.format_warum(
+            providers=self.QUELLE_OK,
+            alerts_window=0,
+            window_hours=24,
+            versand={"sent": 0, "skipped": 0, "reasons": {}},
+            paused=False,
+        )
+        assert "Es hakt bei: Alarme" in text
+        assert "MIN_VALUE_PERCENT" in text
+
+    def test_alarme_aber_alles_weggefiltert(self):
+        text = fmt.format_warum(
+            providers=self.QUELLE_OK,
+            alerts_window=166,
+            window_hours=24,
+            versand={"sent": 0, "skipped": 166, "reasons": {"min_grade_global": 166}},
+            paused=False,
+            empfaenger=1,
+        )
+        assert "Es hakt bei: Versand" in text
+        assert fmt.VERSAND_GRUENDE["min_grade_global"] in text
+
+    def test_fehlender_empfaenger_wird_als_solcher_benannt(self):
+        """0 Empfänger und 0 durchgelassene Alarme sehen im Zähler gleich
+        aus - der Rat dazu ist aber ein völlig anderer."""
+        text = fmt.format_warum(
+            providers=self.QUELLE_OK,
+            alerts_window=166,
+            window_hours=24,
+            versand={"sent": 0, "skipped": 166, "reasons": {"kein_empfaenger": 166}},
+            paused=False,
+            empfaenger=0,
+        )
+        assert "/start" in text
+
+    def test_pausiert_wird_nicht_als_systemfehler_verkauft(self):
+        text = fmt.format_warum(
+            providers=self.QUELLE_OK,
+            alerts_window=12,
+            window_hours=24,
+            versand={"sent": 5, "skipped": 1, "reasons": {"pausiert": 1}},
+            paused=True,
+            empfaenger=1,
+        )
+        assert "Es hakt bei: Du" in text
+        assert "/resume" in text
+
+    def test_alles_gruen_nennt_den_ruhigen_markt(self):
+        text = fmt.format_warum(
+            providers=self.QUELLE_OK,
+            alerts_window=12,
+            window_hours=24,
+            versand={"sent": 5, "skipped": 7, "reasons": {"confidence": 7}},
+            paused=False,
+            empfaenger=1,
+        )
+        assert "Alles grün" in text
+        assert "Es hakt bei" not in text
+
+    def test_fehlender_verteiler_ist_keine_null(self):
+        """Läuft der Befehl ohne Verteiler, ist das "keine Angabe" - nicht
+        "0 verschickt". Sonst zeigt der Befehl auf eine heile Stelle."""
+        text = fmt.format_warum(
+            providers=self.QUELLE_OK,
+            alerts_window=12,
+            window_hours=24,
+            versand=None,
+            paused=False,
+        )
+        assert "keine Angabe" in text
+        assert "Es hakt bei: Versand" not in text
+
+    def test_jeder_rat_wird_auch_erreicht(self):
+        """Ein Ratschlag, den keine Lage auslöst, ist toter Text."""
+        import inspect
+
+        quelle = inspect.getsource(fmt.format_warum) + inspect.getsource(fmt._warum_daten)
+        for schluessel in fmt.WARUM_RAT:
+            assert schluessel in quelle, schluessel
+
+    async def test_befehl_laeuft_gegen_echte_datenbank(self, repository, redis_state):
+        """Der Befehl liest vier Quellen - jede kann ihn zum Absturz bringen."""
+        from backend.telegram.bot import AlertDispatcher
+        from backend.telegram.handlers import cmd_warum
+
+        settings = Settings(_env_file=None, telegram_bot_token="x", telegram_chat_id="42")
+        dispatcher = AlertDispatcher(None, redis_state, settings, repository)
+        dispatcher.skipped = 9
+        dispatcher.skip_reasons["min_grade_global"] = 9
+
+        gesendet: list[str] = []
+
+        async def reply_text(text, **kwargs):
+            gesendet.append(text)
+
+        update = SimpleNamespace(
+            callback_query=None,
+            effective_message=SimpleNamespace(reply_text=reply_text),
+            effective_user=SimpleNamespace(id=42, username="u", first_name="U"),
+        )
+        context = SimpleNamespace(
+            application=SimpleNamespace(
+                bot_data={
+                    "state": redis_state,
+                    "repository": repository,
+                    "settings": settings,
+                    "admin_ids": set(),
+                    "dispatcher": dispatcher,
+                }
+            )
+        )
+        await cmd_warum(update, context)
+        assert len(gesendet) == 1
+        assert "Warum kommt nichts an?" in gesendet[0]
+        # Ohne Scanner-Daten muss die erste Stufe die Schuldige sein.
+        assert "Es hakt bei: Daten" in gesendet[0]
+
+    async def test_befehl_ueberlebt_fehlende_dienste(self, redis_state):
+        from backend.telegram.handlers import cmd_warum
+
+        gesendet: list[str] = []
+
+        async def reply_text(text, **kwargs):
+            gesendet.append(text)
+
+        update = SimpleNamespace(
+            callback_query=None,
+            effective_message=SimpleNamespace(reply_text=reply_text),
+            effective_user=SimpleNamespace(id=1, username="u", first_name="U"),
+        )
+        context = SimpleNamespace(
+            application=SimpleNamespace(
+                bot_data={"state": None, "repository": None, "admin_ids": set()}
+            )
+        )
+        await cmd_warum(update, context)
+        assert gesendet and "Warum kommt nichts an?" in gesendet[0]
+
+
+class TestKeinEmpfaenger:
+    """Der leiseste aller Fehler: alles läuft, niemand hört zu."""
+
+    async def test_ohne_empfaenger_wird_mitgezaehlt(self, redis_state):
+        settings = Settings(_env_file=None, telegram_bot_token="x", telegram_chat_id="")
+        dispatcher = AlertDispatcher(None, redis_state, settings, None)
+        assert await dispatcher.dispatch(football_alert()) == 0
+        assert dispatcher.skip_reasons["kein_empfaenger"] == 1
+
+    async def test_mit_empfaenger_taucht_der_grund_nicht_auf(self, redis_state, monkeypatch):
+        settings = Settings(_env_file=None, telegram_bot_token="x", telegram_chat_id="7")
+        dispatcher = AlertDispatcher(None, redis_state, settings, None)
+
+        async def fake_send(chat_id, text, **kwargs):
+            return True
+
+        monkeypatch.setattr(dispatcher, "_send", fake_send)
+        assert await dispatcher.dispatch(football_alert()) == 1
+        assert "kein_empfaenger" not in dispatcher.skip_reasons
