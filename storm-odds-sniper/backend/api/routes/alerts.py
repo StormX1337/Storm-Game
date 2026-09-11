@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import statistics
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Query, Request
@@ -276,6 +277,13 @@ async def recommendations(
         # nachgerechnet, statt sie stillschweigend wegzulassen.
         suggestion = Recommendation.from_json(stored) if stored else recommend(alert, config)
         pairs.append((alert, suggestion))
+
+    # Wie alt waren die Quoten? Das beantwortet die Frage, die "Quote zu alt"
+    # offen lässt: liegt es an der Schwelle oder am Abruf.
+    alter = sorted(a.odds_age for a, _ in pairs if a.odds_age is not None)
+    if alter:
+        response.odds_age_median = round(statistics.median(alter), 1)
+        response.odds_age_p90 = round(alter[min(len(alter) - 1, int(len(alter) * 0.9))], 1)
 
     slip = build_slip(pairs, config=config, limit=limit or settings.recommend_limit)
     if unreadable:

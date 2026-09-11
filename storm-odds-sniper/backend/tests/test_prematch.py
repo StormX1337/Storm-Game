@@ -471,3 +471,45 @@ class TestSchwellenbaender:
         assert len(bands) == 3
         for band in bands:
             assert band.count("_") >= 2, f"nennt nicht beide Variablen: {band}"
+
+
+class TestQuotenalterJeWelt:
+    """Eine Altersgrenze für beide Welten ist zwangsläufig für eine falsch.
+
+    Live ist eine 60 Sekunden alte Quote fraglich - dort ändern sich Preise
+    im Sekundentakt. Vor dem Anpfiff ist sie völlig normal: der Abruf läuft
+    dort ohnehin nur jede Minute, jede Prematch-Quote ist also älter als die
+    Live-Grenze von 15 Sekunden. Mit einer gemeinsamen Grenze käme vor dem
+    Anpfiff nie etwas durch.
+    """
+
+    def _alarm(self, status, odds_age):
+        return Alert(
+            kind=AlertKind.VALUE,
+            event=make_event(status=status),
+            market=OVER_UNDER_25,
+            selection=OVER,
+            bookmaker="b1",
+            odds=2.30,
+            fair_odds=2.10,
+            value_percent=9.4,
+            deviation_percent=9.4,
+            confidence=80,
+            error_score=80,
+            bookmaker_count=6,
+            odds_age=odds_age,
+        )
+
+    def test_live_verwirft_eine_alte_quote(self):
+        rec = evaluate(self._alarm(EventStatus.LIVE, 60.0), RecommendationConfig())
+        assert rec.reason_code == "quote_zu_alt"
+
+    def test_prematch_nimmt_dieselbe_quote_an(self):
+        rec = evaluate(self._alarm(EventStatus.PRE_MATCH, 60.0), RecommendationConfig())
+        assert rec.reason_code != "quote_zu_alt"
+
+    def test_auch_prematch_hat_eine_grenze(self):
+        """Irgendwann ist auch vor dem Anpfiff Schluss - sonst wäre die
+        Prüfung keine."""
+        rec = evaluate(self._alarm(EventStatus.PRE_MATCH, 9999.0), RecommendationConfig())
+        assert rec.reason_code == "quote_zu_alt"

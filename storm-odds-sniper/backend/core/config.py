@@ -205,6 +205,11 @@ class Settings(BaseSettings):
     #: Tagen wird dann eben nach 23 Stunden geprüft - später als der Anpfiff
     #: wäre, aber unendlich viel aussagekräftiger als nach fünf Minuten.
     prematch_followup_max_seconds: float = 82800.0
+    #: Quotenalter für Empfehlungen vor dem Anpfiff. Live ist eine Quote nach
+    #: 15 Sekunden fraglich; vor dem Anpfiff steht derselbe Preis Stunden, und
+    #: die Live-Grenze wirft dort alles weg, was der langsamere Prematch-Takt
+    #: (60 s) ohnehin nie unterschreiten kann.
+    prematch_recommend_max_odds_age: float = 300.0
 
     # ----------------------------------------------------- Bewegungsalarme
     move_alerts_enabled: bool = True

@@ -879,11 +879,21 @@
       // Der häufigste Grund - und der Regler dazu, falls es einen gibt.
       const oben = verworfen[0];
       const regler = oben && KNOPF[oben.code];
+      // Bei "Quote zu alt" reicht der Reglername nicht: die eigentliche
+      // Frage ist, ob die Schwelle zu streng oder der Abruf zu langsam ist.
+      // Das gemessene Quotenalter beantwortet genau das.
+      let messung = "";
+      if (oben && oben.code === "quote_zu_alt" && data && data.odds_age_median != null) {
+        messung = ` Gemessen sind deine Quoten im Median
+          <b>${data.odds_age_median.toFixed(0)} s</b> alt (9 von 10 unter
+          ${Number(data.odds_age_p90 || 0).toFixed(0)} s) — liegt das weit über der
+          Grenze, ist nicht die Schwelle das Problem, sondern der Abruf.`;
+      }
       const tipp =
         regler && oben.count >= 5
           ? `<p class="hero__knob">Der häufigste Grund lässt sich einstellen:
              <code>${esc(regler)}</code> in der <code>.env</code>.
-             Lockerer heißt mehr Vorschläge und schwächere.</p>`
+             Lockerer heißt mehr Vorschläge und schwächere.${messung}</p>`
           : "";
       box.hidden = false;
       box.classList.add("hero--empty");

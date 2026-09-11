@@ -309,6 +309,12 @@ class RecommendationsResponse(BaseModel):
     #: Hinterlegte Bankroll; ``null`` = keine, dann nur Prozentwerte.
     bankroll: float | None = None
     dropped: list[SuppressionReason] = Field(default_factory=list)
+    #: Wie alt die Quoten der geprüften Alarme waren (Sekunden, Median und
+    #: 90. Perzentil). Ohne diese Zahl ist "Quote zu alt" eine Sackgasse:
+    #: man weiß, dass die Schwelle greift, aber nicht, ob sie zu streng ist
+    #: oder der Abruf zu langsam. Mit ihr ist die Frage beantwortet.
+    odds_age_median: float | None = None
+    odds_age_p90: float | None = None
     #: Steht bewusst in jeder Antwort - siehe README.
     disclaimer: str = (
         "Schätzung aus öffentlich abrufbaren Quoten. Keine Wettberatung, "

@@ -186,6 +186,10 @@ class RecommendationConfig:
     max_alert_age: float = 180.0
     #: Dasselbe für Spiele vor dem Anpfiff - dort steht ein Preis Stunden.
     prematch_max_alert_age: float = 3600.0
+    #: Und dasselbe für das Alter der Quote selbst. Mit der Live-Grenze von
+    #: 15 s käme vor dem Anpfiff gar nichts durch: der Prematch-Abruf läuft
+    #: im Minutentakt, jede Quote ist also älter als 15 Sekunden.
+    prematch_max_odds_age: float = 300.0
 
 
 def config_from_settings(settings: Settings) -> RecommendationConfig:
@@ -204,6 +208,7 @@ def config_from_settings(settings: Settings) -> RecommendationConfig:
         max_picks_per_event=settings.recommend_max_picks_per_event,
         max_alert_age=settings.event_stale_seconds,
         prematch_max_alert_age=settings.prematch_max_alert_age,
+        prematch_max_odds_age=settings.prematch_recommend_max_odds_age,
     )
 
 
@@ -504,7 +509,13 @@ def evaluate(alert: Alert, config: RecommendationConfig | None = None) -> Recomm
         return _skip("zu_wenige_buchmacher", raw=raw)
     if alert.confidence < cfg.min_confidence:
         return _skip("confidence_zu_niedrig", raw=raw)
-    if alert.odds_age > cfg.max_odds_age:
+    # Die Grenze hängt an der Welt: live ist eine 20 Sekunden alte Quote
+    # fraglich, vor dem Anpfiff ist sie völlig normal - dort wird ohnehin nur
+    # im Minutentakt abgerufen.
+    alters_grenze = (
+        cfg.prematch_max_odds_age if alert.phase == "prematch" else cfg.max_odds_age
+    )
+    if alert.odds_age > alters_grenze:
         return _skip("quote_zu_alt", raw=raw)
 
     reliability, notes = reliability_weight(

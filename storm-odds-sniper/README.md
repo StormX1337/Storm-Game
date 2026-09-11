@@ -1372,6 +1372,22 @@ WARUM NICHTS ÜBRIG BLIEB
 Die Liste urteilt nicht, sie beziffert. Ob ein Band zu breit ist,
 beantworten die Verwerfungsgründe — die zählen, was tatsächlich hängenbleibt.
 
+**Und bei „Quote zu alt" reicht der Reglername nicht.** Die eigentliche Frage
+ist dann: ist die *Schwelle* zu streng, oder der *Abruf* zu langsam? Deshalb
+misst die Antwort das Quotenalter gleich mit (`odds_age_median`,
+`odds_age_p90`) und die Karte schreibt es hin:
+
+> Gemessen sind deine Quoten im Median **35 s** alt (9 von 10 unter 35 s) —
+> liegt das weit über der Grenze, ist nicht die Schwelle das Problem, sondern
+> der Abruf.
+
+Eine Schwelle hochzudrehen, weil der Abruf hinterherhinkt, verschiebt nur das
+Symptom: du bekommst Vorschläge zu Preisen, die es nicht mehr gibt.
+
+**Vor dem Anpfiff gilt eine eigene Grenze** (`PREMATCH_RECOMMEND_MAX_ODDS_AGE`,
+Standard 300 s). Mit der Live-Grenze von 15 Sekunden käme dort nie etwas
+durch — der Prematch-Abruf läuft im Minutentakt, jede Quote ist also älter.
+
 ### Die Tipp-Karte — und was an den Vorbildern nicht stimmt
 
 Ganz oben im Empfehlungsbereich steht der beste Fund als große Karte: Liga,
