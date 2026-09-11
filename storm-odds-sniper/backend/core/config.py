@@ -157,6 +157,34 @@ class Settings(BaseSettings):
     #: raus, sichtbar gezählt.
     excluded_bookmakers: str = "unknown"
 
+    #: Welche Quellen Wettbörsen sind - dort wird Kommission fällig.
+    #:
+    #: Nur der Betfair-Adapter kennzeichnet seine Quoten selbst. Über
+    #: SportsGameOdds kommen Börsen als ganz normale Buchmacher herein, und
+    #: das hat drei Folgen: ihre kommissionsfreie Quote wird in der fairen
+    #: Quote zu schwach gewichtet, das Liquiditätssignal fehlt - und, teuer,
+    #: die Arbitrage rechnet ohne Kommission.
+    #:
+    #: Nachgerechnet: Buchmacher 2.00 gegen Börse 2.03 meldet +0.74 % und ist
+    #: damit über der Meldeschwelle. Mit 5 % Kommission auf den Gewinn des
+    #: Börsen-Beins sind es in Wahrheit -0.54 %. Als "sichere Wette" gemeldet,
+    #: tatsächlich ein Verlust.
+    #:
+    #: Die Vorgabe enthält nur Namen, bei denen es keine zwei Meinungen gibt.
+    #: Prognosemärkte (polymarket, kalshi) stehen bewusst NICHT darin - sie
+    #: rechnen anders ab, und eine Kommission zu unterstellen, die es so nicht
+    #: gibt, wäre derselbe Fehler mit umgekehrtem Vorzeichen. Prüfe die Liste
+    #: gegen deine eigenen Quellen; ./scripts/bookmakers.sh zeigt, welche du
+    #: überhaupt bekommst.
+    exchange_bookmakers: str = (
+        "betfairexchange,betfair_ex_eu,betfair_ex_uk,betfair_ex_au,matchbook,"
+        "smarkets,prophetexchange"
+    )
+
+    @property
+    def exchange_bookmaker_set(self) -> frozenset[str]:
+        return frozenset(b.lower() for b in _split_csv(self.exchange_bookmakers))
+
     @property
     def excluded_bookmaker_set(self) -> frozenset[str]:
         return frozenset(b.lower() for b in _split_csv(self.excluded_bookmakers))

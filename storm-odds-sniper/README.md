@@ -1401,6 +1401,43 @@ Unterdrückungsgrund gezählt und ist im Dashboard sichtbar.
 > Auf etwas zu bauen, das man nicht benennen kann, ist hier die falsche
 > Richtung. Wer es doch will: `EXCLUDED_BOOKMAKERS=` leer lassen.
 
+### Börsen erkennen — sonst meldet die Arbitrage Verluste als Gewinne
+
+Eine Wettbörse zieht **Kommission vom Gewinn** ab. Eine Quote von 2.03 zahlt
+dort effektiv 1.98. Nur der Betfair-Adapter kennzeichnet das selbst; über
+SportsGameOdds kommen Börsen als ganz normale Buchmacher herein.
+
+Was das kostet, nachgerechnet:
+
+```
+Buchmacher 2.00  gegen  Börse 2.03
+
+  Börse NICHT erkannt:  Gewinn +0.74 %   ← über der Meldeschwelle (0.5 %)
+  Börse erkannt:        Gewinn −0.54 %   ← tatsächlich ein Verlust
+```
+
+Als „sichere Wette" gemeldet, in Wahrheit ein Minusgeschäft. Dazu zwei
+leisere Folgen: die kommissionsfreie Börsenquote wird in der fairen Quote zu
+schwach gewichtet (Börsen sind die schärferen Preise), und das
+Liquiditätssignal im Fehlpreis-Score fehlt.
+
+`EXCHANGE_BOOKMAKERS` behebt das. Die Vorgabe enthält nur Namen, bei denen es
+keine zwei Meinungen gibt:
+
+```
+betfairexchange, betfair_ex_eu, betfair_ex_uk, betfair_ex_au,
+matchbook, smarkets, prophetexchange
+```
+
+**Prognosemärkte wie `polymarket` und `kalshi` stehen bewusst nicht darin.**
+Sie rechnen anders ab; ihnen eine Betfair-Kommission zu unterstellen wäre
+derselbe Fehler mit umgekehrtem Vorzeichen. Ob sie überhaupt in deinen
+fairen Konsens gehören, ist eine eigene Frage — `prizepicks` etwa ist
+Daily Fantasy, keine Quote im üblichen Sinn.
+
+> Diese Liste ist ein Vorschlag, keine Behauptung über deinen Tarif. Prüf sie
+> gegen das, was du wirklich bekommst: `./scripts/bookmakers.sh`
+
 ### Welche Buchmacher liefert meine Quelle überhaupt?
 
 Das beantwortet keine Liste, sondern nur ein Blick in die eigenen Daten:

@@ -282,3 +282,56 @@ class TestBoersenkommission:
             config=ArbitrageConfig(min_liquidity=50.0),
         )
         assert arb.thin_liquidity is False
+
+
+class TestBoersenErkennung:
+    """Eine nicht erkannte Börse macht aus einem Verlust eine sichere Wette.
+
+    Nur der Betfair-Adapter kennzeichnet seine Quoten selbst. Über
+    SportsGameOdds kommen Börsen als ganz normale Buchmacher herein - dann
+    rechnet die Arbitrage ohne Kommission.
+
+    Nachgerechnet: Buchmacher 2.00 gegen Börse 2.03 ergibt gemeldet +0.74 %
+    und liegt damit über der Meldeschwelle von 0.5 %. Mit 5 % Kommission auf
+    den Gewinn des Börsen-Beins sind es in Wahrheit -0.54 %.
+    """
+
+    @staticmethod
+    def _gewinn(boersen_bein_erkannt: bool) -> float:
+        from backend.core.arbitrage import effective_odds
+
+        wirksam = effective_odds(2.03, is_exchange=boersen_bein_erkannt, commission=0.05)
+        summe = 1 / 2.00 + 1 / wirksam
+        return (1 / summe - 1) * 100.0
+
+    def test_ohne_erkennung_sieht_es_nach_gewinn_aus(self):
+        assert self._gewinn(False) == pytest.approx(0.74, abs=0.05)
+
+    def test_mit_erkennung_ist_es_ein_verlust(self):
+        assert self._gewinn(True) == pytest.approx(-0.54, abs=0.05)
+
+    def test_der_unterschied_ueberspringt_die_meldeschwelle(self):
+        """Genau das ist der Schaden: gemeldet wird, was Verlust bringt."""
+        from backend.core.arbitrage import ArbitrageConfig
+
+        schwelle = ArbitrageConfig().min_profit_percent
+        assert self._gewinn(False) > schwelle
+        assert self._gewinn(True) < 0
+
+
+class TestBoersenlisteAusDenEinstellungen:
+    def test_sgo_kennzeichnet_die_bekannten_boersen(self):
+        from backend.core.config import Settings
+        from backend.providers.registry import build_providers
+
+        provider = build_providers(
+            Settings(_env_file=None, providers="sportsgameodds", sgo_api_key="k" * 32)
+        )[0]
+        assert "matchbook" in provider.exchanges
+        assert "betfairexchange" in provider.exchanges
+        # Prognosemärkte rechnen anders ab - eine Kommission zu unterstellen,
+        # die es so nicht gibt, wäre derselbe Fehler mit anderem Vorzeichen.
+        assert "polymarket" not in provider.exchanges
+        assert "kalshi" not in provider.exchanges
+        # Und ein normaler Buchmacher ist keine Börse.
+        assert "bet365" not in provider.exchanges

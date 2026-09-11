@@ -124,6 +124,7 @@ def _make_sportsgameodds(settings: Settings) -> OddsProvider:
         max_pages=settings.sgo_max_pages,
         page_limit=settings.sgo_page_limit,
         bookmakers=settings.sgo_bookmakers,
+        exchanges=settings.exchange_bookmaker_set,
         rate_limit_per_minute=settings.sgo_rate_limit_per_minute,
     )
 
@@ -146,6 +147,7 @@ def _make_sportsgameodds_prematch(settings: Settings) -> OddsProvider:
         live_only=False,
         exclude_live=True,
         horizon_hours=settings.prematch_horizon_hours,
+        exchanges=settings.exchange_bookmaker_set,
         name="sportsgameodds_prematch",
         poll_interval=settings.prematch_poll_interval,
         max_pages=settings.prematch_max_pages,

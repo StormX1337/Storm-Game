@@ -237,6 +237,8 @@ class SportsGameOddsProvider(OddsProvider):
         exclude_live: bool = False,
         #: Nur Spiele, die innerhalb dieser Stundenzahl beginnen. 0 = alle.
         horizon_hours: float = 0.0,
+        #: Namen, die Wettbörsen sind - deren Quoten kosten Kommission.
+        exchanges: frozenset[str] | None = None,
         #: Zwei Instanzen derselben Quelle brauchen zwei Namen, sonst
         #: überschreiben sie einander in der Anbieter-Gesundheit.
         name: str | None = None,
@@ -257,6 +259,7 @@ class SportsGameOddsProvider(OddsProvider):
         self.live_only = live_only
         self.exclude_live = exclude_live
         self.horizon_hours = max(0.0, horizon_hours)
+        self.exchanges = exchanges or frozenset()
         if name:
             self.name = name
         self.poll_interval = poll_interval
@@ -629,6 +632,10 @@ class SportsGameOddsProvider(OddsProvider):
                         ),
                         selection=selection,
                         bookmaker=str(bookmaker_id),
+                        # Ohne diese Kennzeichnung rechnet die Arbitrage die
+                        # Kommission nicht ein und meldet Verluste als
+                        # sichere Wetten.
+                        is_exchange=str(bookmaker_id).lower() in self.exchanges,
                         price=price,
                         provider=self.name,
                         ts=stamp,
