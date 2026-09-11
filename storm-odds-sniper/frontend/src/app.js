@@ -867,6 +867,9 @@
     // und dann sucht man am Dashboard herum, obwohl alles stimmt. Also
     // bleibt die Karte stehen und sagt, warum sie leer ist.
     if (!pick) {
+      // Nie verstecken. "Unsichtbar" ist der einzige Zustand, aus dem man
+      // nichts ablesen kann - und genau der kostete hier mehrere Runden
+      // Fehlersuche an der falschen Stelle.
       const geprueft = (data && data.considered) || 0;
       const verworfen = data && data.dropped ? data.dropped : [];
       const gruende = verworfen
@@ -1535,6 +1538,24 @@
     if (failed.includes("recommendations")) {
       const count = $("picks-count");
       if (count && count.textContent === "–") $("picks-caption").textContent = "nicht abrufbar";
+      // Ohne das hier blieb die Tipp-Karte einfach unsichtbar: sie wird nur
+      // aus renderRecommendations heraus gefüllt, und die läuft bei einem
+      // gescheiterten Abruf gar nicht erst. Das Ergebnis war der schlimmste
+      // aller Zustände - gar nichts, ununterscheidbar von "Update nicht
+      // angekommen".
+      const box = $("hero-pick");
+      if (box) {
+        box.hidden = false;
+        box.classList.add("hero--empty");
+        box.innerHTML = `
+          <div class="hero__league">Tipp nicht abrufbar</div>
+          <div class="hero__teams">Die API antwortet nicht</div>
+          <p class="hero__when">
+            Das Dashboard läuft, aber <code>/api/alerts/recommendations</code>
+            liefert nichts. Zustand einsammeln mit
+            <code>./scripts/diagnose.sh</code>.
+          </p>`;
+      }
     }
   }
 
