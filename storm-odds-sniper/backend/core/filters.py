@@ -101,6 +101,7 @@ SUPPRESSION_LABELS: dict[str, str] = {
     "stale": "Quote älter als MAX_ODDS_AGE_SECONDS",
     "too_few_bookmakers": "weniger Buchmacher als MIN_BOOKMAKERS",
     "bookmaker_not_mine": "Buchmacher steht nicht in ALERT_BOOKMAKERS",
+    "bookmaker_excluded": "Quelle ohne benennbaren Buchmacher (EXCLUDED_BOOKMAKERS)",
     "value_below_min": "Value unter MIN_VALUE_PERCENT",
     "deviation_below_min": "Abweichung unter MIN_OUTLIER_PERCENT",
     "confidence_below_min": "Confidence unter MIN_CONFIDENCE",

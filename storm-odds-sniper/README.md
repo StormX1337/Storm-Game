@@ -1376,6 +1376,31 @@ möglichst viele Bücher zu vergleichen. Wer die Referenz schrumpft, findet
 **weniger** Fehlpreise statt mehr — und die gefundenen sind schlechter belegt.
 Hier bleibt die Referenz vollständig; gefiltert wird erst die Meldung.
 
+### Quellen ohne Namen: `unknown`
+
+In der Buchmacherliste steht ein Eintrag namens **`unknown`** — auf einem
+echten Server 213.761 Preise und **394 Alarme**. Dieser Name kommt nicht aus
+diesem Projekt; die Datenquelle liefert ihn so. Was dahintersteckt, steht
+nirgends: ein Buchmacher, dessen Kennung nicht aufgelöst wurde, oder ein
+zusammengefasster Wert.
+
+Beides taugt nicht:
+
+* **Als Alarm ist er unspielbar.** Man kann bei „unknown" kein Konto haben.
+  394 Meldungen, auf die niemand reagieren konnte.
+* **Als Vergleichsquote wäre er gefährlich.** Wäre es ein Durchschnitt, zöge
+  er den Median zur Mitte und verdeckte genau die Ausreißer, die gesucht
+  werden. Außerdem zählte er als „Vergleichsquote" mit und ließ die Referenz
+  breiter aussehen, als sie ist.
+
+`EXCLUDED_BOOKMAKERS=unknown` (Standard) sortiert solche Quoten **ganz vorn**
+aus — vor dem Buch, vor der fairen Quote, vor der Zählung. Später zu filtern
+hieße, sie an allen früheren Stellen doch zu verwenden. Was wegfällt, wird als
+Unterdrückungsgrund gezählt und ist im Dashboard sichtbar.
+
+> Auf etwas zu bauen, das man nicht benennen kann, ist hier die falsche
+> Richtung. Wer es doch will: `EXCLUDED_BOOKMAKERS=` leer lassen.
+
 ### Welche Buchmacher liefert meine Quelle überhaupt?
 
 Das beantwortet keine Liste, sondern nur ein Blick in die eigenen Daten:

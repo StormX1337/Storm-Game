@@ -141,6 +141,26 @@ class Settings(BaseSettings):
     scan_live: bool = True
     scan_prematch: bool = True
     sports_enabled: str = "football,tennis"
+    #: Quellen, die gar nicht erst in die Auswertung kommen.
+    #:
+    #: Die Datenquelle liefert einen Eintrag namens "unknown" - auf einem
+    #: echten Server 213.761 Preise und 394 Alarme. Unser Code vergibt diesen
+    #: Namen nie; er kommt so von der Quelle. Was genau dahintersteckt, steht
+    #: nirgends: ein Buchmacher, dessen Kennung nicht aufgelöst wurde, oder
+    #: ein zusammengefasster Wert.
+    #:
+    #: Beides taugt nicht. Ein Alarm auf "unknown" ist unspielbar - man kann
+    #: dort kein Konto haben. Und als Vergleichsquote ist er gefährlich: wäre
+    #: es ein Durchschnitt, zöge er den Median zur Mitte und verdeckte genau
+    #: die Ausreißer, die gesucht werden. Auf etwas zu bauen, das man nicht
+    #: benennen kann, ist hier die falsche Richtung - also fliegt es vorher
+    #: raus, sichtbar gezählt.
+    excluded_bookmakers: str = "unknown"
+
+    @property
+    def excluded_bookmaker_set(self) -> frozenset[str]:
+        return frozenset(b.lower() for b in _split_csv(self.excluded_bookmakers))
+
     #: Nur bei diesen Buchmachern wird gemeldet. Leer = bei allen.
     #:
     #: Wichtig ist, wo dieser Filter greift: **am Alarm**, nicht am Abruf.

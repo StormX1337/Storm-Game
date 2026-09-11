@@ -144,6 +144,7 @@ class ScannerEngine:
         self.providers = providers or []
 
         self.thresholds = thresholds_from_settings(self.settings)
+        self._ausgeschlossen = self.settings.excluded_bookmaker_set
         # Vor dem Anpfiff gelten andere Maßstäbe - siehe
         # prematch_thresholds_from_settings.
         self.prematch_thresholds = prematch_thresholds_from_settings(self.settings, self.thresholds)
@@ -356,6 +357,14 @@ class ScannerEngine:
         touched: dict[tuple[str, str], list[OddsChange]] = {}
         for raw_quote in message.quotes:
             self.stats["quotes"] += 1
+            # Ganz vorn aussortieren, damit so eine Quote nirgends ankommt:
+            # nicht im Buch, nicht in der fairen Quote, nicht in der Zahl der
+            # Vergleichsquoten und erst recht nicht als Alarm. Später zu
+            # filtern hieße, sie an allen früheren Stellen doch zu verwenden.
+            if raw_quote.bookmaker.lower() in self._ausgeschlossen:
+                QUOTES_DROPPED.labels("bookmaker_excluded").inc()
+                self._suppress("bookmaker_excluded")
+                continue
             quote = self._normalize_quote(raw_quote, message.provider)
             if quote is None:
                 QUOTES_DROPPED.labels("unknown_event").inc()

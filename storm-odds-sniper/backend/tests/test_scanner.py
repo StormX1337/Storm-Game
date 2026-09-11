@@ -601,3 +601,62 @@ class TestConfigurationWarnings:
             providers=[StubStreamProvider(events=2)],
         )
         assert "kein Alarm" not in self._capture(engine)
+
+
+class TestQuellenOhneNamen:
+    """Die Datenquelle liefert einen Eintrag namens "unknown".
+
+    Auf einem echten Server waren das 213.761 Preise und 394 Alarme. Unser
+    Code vergibt diesen Namen nie - er kommt so von der Quelle, und was
+    dahintersteckt, steht nirgends: ein nicht aufgelöster Buchmacher oder
+    ein zusammengefasster Wert.
+
+    Beides taugt nicht. Ein Alarm darauf ist unspielbar - man kann bei
+    "unknown" kein Konto haben. Und als Vergleichsquote ist er gefährlich:
+    wäre es ein Durchschnitt, zöge er den Median zur Mitte und verdeckte
+    genau die Ausreißer, die gesucht werden.
+    """
+
+    PREISE = {"b1": 2.02, "b2": 2.00, "b3": 2.00, "b4": 1.99}
+    WEICH = {"min_value_percent": 4.0, "min_outlier_percent": 6.0}
+
+    async def _lauf(self, redis_state, preise, **overrides):
+        engine = ScannerEngine(
+            scanner_settings(**{**self.WEICH, **overrides}),
+            state=redis_state,
+            repository=None,
+            providers=[],
+        )
+        event = make_event(status=EventStatus.LIVE, provider_event_id="p-1")
+        alarme = await engine.handle_message(market_message(preise, event=event))
+        return engine, [a for a in alarme if a.kind is not AlertKind.ODDS_MOVE]
+
+    async def test_kein_alarm_auf_eine_quelle_ohne_namen(self, redis_state):
+        _, alarme = await self._lauf(redis_state, dict(self.PREISE, unknown=2.60))
+        assert alarme == []
+
+    async def test_gegenprobe_ohne_ausschluss_kommt_er_zurueck(self, redis_state):
+        """Sonst belegt der Test oben nur, dass irgendetwas anderes den Alarm
+        verschluckt."""
+        _, alarme = await self._lauf(
+            redis_state, dict(self.PREISE, unknown=2.60), excluded_bookmakers=""
+        )
+        assert [a.bookmaker for a in alarme] == ["unknown"]
+
+    async def test_echter_ausreisser_daneben_wird_weiter_gefunden(self, redis_state):
+        _, alarme = await self._lauf(redis_state, dict(self.PREISE, unknown=2.00, bwin=2.60))
+        assert [a.bookmaker for a in alarme] == ["bwin"]
+
+    async def test_zaehlt_nicht_als_vergleichsquote(self, redis_state):
+        """Sonst behauptet der Alarm eine Referenzbreite, die er nicht hat."""
+        _, mit = await self._lauf(redis_state, dict(self.PREISE, unknown=2.00, bwin=2.60))
+        assert mit[0].bookmaker_count == 4
+
+    async def test_die_begruendung_stimmt(self, redis_state):
+        """Beim ersten Versuch wurde dieselbe Quote zusätzlich als
+        "unbekanntes Event" gezählt - eine unwahre Begründung ist hier
+        schlimmer als gar keine."""
+        engine, _ = await self._lauf(redis_state, dict(self.PREISE, unknown=2.60))
+        gruende = dict(engine._suppressed)
+        assert gruende.get("bookmaker_excluded") == 2
+        assert "unknown_event" not in gruende
