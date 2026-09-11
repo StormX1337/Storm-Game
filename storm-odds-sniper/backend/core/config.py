@@ -141,6 +141,23 @@ class Settings(BaseSettings):
     scan_live: bool = True
     scan_prematch: bool = True
     sports_enabled: str = "football,tennis"
+    #: Nur bei diesen Buchmachern wird gemeldet. Leer = bei allen.
+    #:
+    #: Wichtig ist, wo dieser Filter greift: **am Alarm**, nicht am Abruf.
+    #: Die faire Quote lebt davon, möglichst viele Bücher zu vergleichen -
+    #: wer die Quelle selbst einschränkt (SGO_BOOKMAKERS), macht seine
+    #: Referenz schlechter und findet dann weniger Fehlpreise statt mehr.
+    #: Gemeldet werden soll aber nur, was man auch spielen kann. Beides
+    #: zugleich geht nur, wenn die Referenz vollständig bleibt und erst die
+    #: Meldung gefiltert wird.
+    #:
+    #: Die Namen stehen so drin, wie die Quelle sie liefert - welche das
+    #: sind, zeigt ./scripts/bookmakers.sh. Geraten wird hier nichts.
+    alert_bookmakers: str = ""
+
+    @property
+    def alert_bookmaker_set(self) -> frozenset[str]:
+        return frozenset(b.lower() for b in _split_csv(self.alert_bookmakers))
 
     # ------------------------------------------------------- Vor dem Anpfiff
     #

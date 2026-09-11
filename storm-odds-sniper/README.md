@@ -1336,6 +1336,52 @@ Und auch das hier ist CLV, nicht Gewinn. **Was wirklich Geld gebracht hat,
 steht ausschließlich im Wett-Tagebuch** (Schritt 13) — und erst ab 20
 abgerechneten Wetten ist das mehr als Zufall.
 
+### Nur bei den eigenen Buchmachern melden
+
+Ein Fehlpreis bei einem Buchmacher, bei dem man kein Konto hat, ist keine
+Gelegenheit — er ist Zeitverschwendung. `ALERT_BOOKMAKERS` beschränkt die
+Meldungen auf die eigenen Bücher:
+
+```bash
+ALERT_BOOKMAKERS=efbet,winbet,palmsbet
+```
+
+**Der Filter greift am Alarm, nicht am Abruf** — und das ist der ganze Punkt.
+Der naheliegende Weg wäre `SGO_BOOKMAKERS`, also die Quelle selbst
+einzuschränken. Das ist der falsche Hebel: die faire Quote lebt davon,
+möglichst viele Bücher zu vergleichen. Wer die Referenz schrumpft, findet
+**weniger** Fehlpreise statt mehr — und die gefundenen sind schlechter belegt.
+Hier bleibt die Referenz vollständig; gefiltert wird erst die Meldung.
+
+### Welche Buchmacher liefert meine Quelle überhaupt?
+
+Das beantwortet keine Liste, sondern nur ein Blick in die eigenen Daten:
+
+```bash
+./scripts/bookmakers.sh --days 30
+./scripts/bookmakers.sh --grep bet
+```
+
+```
+Buchmacher in deinen Daten (30 Tage)
+  Name (für ALERT_BOOKMAKERS)     Preise   Anteil   Alarme
+  pinnacle                          4210   22.1 %       12
+  bet365                            4188   22.0 %        9
+  ...
+  ALERT_BOOKMAKERS ist gesetzt: efbet, winbet
+  NICHT in den Daten gefunden: efbet
+```
+
+Die letzte Zeile ist die wichtigste: steht ein Name in der `.env`, den die
+Quelle nicht führt (Schreibfehler oder schlicht nicht im Angebot), kommt von
+dort **nie** ein Alarm — und ohne diesen Hinweis wartet man ewig darauf.
+
+> **Was nicht geht.** Buchmacher, die die Datenquelle nicht führt, lassen sich
+> nicht ergänzen. Ihre Webseiten abzugreifen ist in diesem Projekt
+> ausgeschlossen — siehe *Recht und Grenzen*. Eine Liste von Anbietern
+> aufzuschreiben, die es in den Daten gar nicht gibt, wäre genau die Sorte
+> erfundener Information, die dieses System überall sonst vermeidet.
+
 ### Telegram: was der Standard-Chat bekommt
 
 Zwei Arten von Empfängern, und sie werden verschieden behandelt:

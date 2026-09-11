@@ -270,3 +270,56 @@ class TestThresholdOverrides:
     def test_none_values_are_ignored(self, thresholds):
         updated = thresholds.with_overrides(min_value_percent=None)
         assert updated.min_value_percent == thresholds.min_value_percent
+
+
+class TestEigeneBuchmacher:
+    """Nur melden, wo man auch spielen kann - ohne die Referenz zu ruinieren.
+
+    Der naheliegende Weg wäre, die Quelle selbst einzuschränken
+    (SGO_BOOKMAKERS). Das ist der falsche Hebel: die faire Quote lebt davon,
+    möglichst viele Bücher zu vergleichen. Wer die Referenz schrumpft, findet
+    WENIGER Fehlpreise statt mehr - und die, die er findet, sind schlechter
+    belegt. Also bleibt der Abruf vollständig, und erst die Meldung wird
+    gefiltert.
+    """
+
+    @staticmethod
+    def _schwellen(**kwargs):
+        from backend.core.config import Settings
+        from backend.scanner.engine import thresholds_from_settings
+
+        return thresholds_from_settings(Settings(_env_file=None, **kwargs))
+
+    def test_ohne_liste_wird_bei_allen_gemeldet(self):
+        schwellen = self._schwellen()
+        for bookmaker in ("efbet", "pinnacle", "irgendwer"):
+            quote = make_quote(bookmaker=bookmaker, price=2.30)
+            assert check_quote(quote, make_event(), schwellen).passed
+
+    def test_mit_liste_nur_bei_den_eigenen(self):
+        schwellen = self._schwellen(alert_bookmakers="efbet,winbet")
+        assert check_quote(
+            make_quote(bookmaker="efbet", price=2.30), make_event(), schwellen
+        ).passed
+        entscheidung = check_quote(
+            make_quote(bookmaker="pinnacle", price=2.30), make_event(), schwellen
+        )
+        assert not entscheidung.passed
+        assert entscheidung.code == "bookmaker_not_mine"
+
+    def test_schreibweise_ist_egal(self):
+        """Quellen schreiben Namen mal groß, mal klein - daran soll niemand
+        scheitern."""
+        schwellen = self._schwellen(alert_bookmakers="EfBet")
+        assert check_quote(
+            make_quote(bookmaker="efbet", price=2.30), make_event(), schwellen
+        ).passed
+        assert check_quote(
+            make_quote(bookmaker="EFBET", price=2.30), make_event(), schwellen
+        ).passed
+
+    def test_leerzeichen_werden_geschluckt(self):
+        schwellen = self._schwellen(alert_bookmakers=" efbet , winbet ")
+        assert check_quote(
+            make_quote(bookmaker="winbet", price=2.30), make_event(), schwellen
+        ).passed

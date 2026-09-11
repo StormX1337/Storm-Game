@@ -36,6 +36,9 @@ class FilterThresholds:
     min_error_score: int = 60
     scan_live: bool = True
     scan_prematch: bool = True
+    #: Leer = bei allen melden. Sonst nur, wenn die auffällige Quote bei
+    #: einem dieser Bücher steht - die Referenz bleibt davon unberührt.
+    bookmakers: frozenset[str] = field(default_factory=frozenset)
     sports: frozenset[Sport] = field(default_factory=lambda: frozenset(Sport))
     markets: frozenset[MarketType] | None = None
     #: Preisänderung in Prozent, ab der ein Duplikat erneut gemeldet werden darf.
@@ -54,6 +57,7 @@ class FilterThresholds:
             "min_error_score": self.min_error_score,
             "scan_live": self.scan_live,
             "scan_prematch": self.scan_prematch,
+            "bookmakers": self.bookmakers,
             "sports": self.sports,
             "markets": self.markets,
             "duplicate_price_tolerance": self.duplicate_price_tolerance,
@@ -96,6 +100,7 @@ SUPPRESSION_LABELS: dict[str, str] = {
     "odds_above_max": "Quote über MAX_ODDS",
     "stale": "Quote älter als MAX_ODDS_AGE_SECONDS",
     "too_few_bookmakers": "weniger Buchmacher als MIN_BOOKMAKERS",
+    "bookmaker_not_mine": "Buchmacher steht nicht in ALERT_BOOKMAKERS",
     "value_below_min": "Value unter MIN_VALUE_PERCENT",
     "deviation_below_min": "Abweichung unter MIN_OUTLIER_PERCENT",
     "confidence_below_min": "Confidence unter MIN_CONFIDENCE",
@@ -146,6 +151,10 @@ def check_quote(
         return _fail("prematch_disabled")
     if thresholds.markets is not None and quote.market.type not in thresholds.markets:
         return _fail("market_disabled")
+    # Erst hier, nicht beim Abruf: die Quote dieses Buchmachers zählt weiter
+    # als Referenz für alle anderen - gemeldet wird sie nur nicht.
+    if thresholds.bookmakers and quote.bookmaker.lower() not in thresholds.bookmakers:
+        return _fail("bookmaker_not_mine")
     if quote.price < thresholds.min_odds - EPS:
         return _fail("odds_below_min")
     if quote.price > thresholds.max_odds + EPS:

@@ -103,6 +103,7 @@ def thresholds_from_settings(settings: Settings) -> FilterThresholds:
         min_error_score=settings.min_error_score,
         scan_live=settings.scan_live,
         scan_prematch=settings.scan_prematch,
+        bookmakers=settings.alert_bookmaker_set,
         sports=sports or frozenset(Sport),
     )
 
