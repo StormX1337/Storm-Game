@@ -840,14 +840,46 @@
    * zum Nullsummenspiel braucht. Nur der Abstand dazwischen ist ein
    * Vorteil - ohne die zweite Zahl ist die erste Dekoration.
    */
-  function renderHeroPick(pick) {
+  function renderHeroPick(pick, data) {
     const box = $("hero-pick");
     if (!box) return;
+
+    // Nichts Spielbares ist ein Zustand, kein Nichts. Die Karte zu
+    // verstecken hiesse: "kein Tipp" und "Funktion fehlt" sehen gleich aus -
+    // und dann sucht man am Dashboard herum, obwohl alles stimmt. Also
+    // bleibt die Karte stehen und sagt, warum sie leer ist.
     if (!pick) {
-      box.hidden = true;
-      box.innerHTML = "";
+      const geprueft = (data && data.considered) || 0;
+      const gruende = (data && data.dropped ? data.dropped : [])
+        .slice(0, 4)
+        .map(
+          (r) =>
+            `<li><span class="dim">${esc(r.label)}</span> <b>${r.count}</b></li>`
+        )
+        .join("");
+      box.hidden = false;
+      box.classList.add("hero--empty");
+      box.innerHTML = `
+        <div class="hero__league">Kein Tipp gerade</div>
+        <div class="hero__teams">Nichts Spielbares</div>
+        <p class="hero__when">
+          ${geprueft} ${geprueft === 1 ? "Alarm" : "Alarme"} geprüft, ${
+        geprueft === 1 ? "der" : "keiner"
+      } hat die Schwellen
+          ${geprueft === 1 ? "nicht überstanden" : "überstanden"}. Das ist der
+          Normalfall — Fehlpreise sind selten.
+        </p>
+        ${
+          gruende
+            ? `<div class="hero__why">
+                 <div class="hero__why-title">Warum nichts übrig blieb</div>
+                 <ul class="hero__reasons">${gruende}</ul>
+               </div>`
+            : ""
+        }`;
       return;
     }
+    box.classList.remove("hero--empty");
     const a = pick.alert;
     const r = pick.recommendation;
     const m = r.math || {};
@@ -990,16 +1022,11 @@
         } Alarme geprüft`
       : `von ${data.considered || 0} geprüften Alarmen`;
 
-    renderHeroPick(picks[0]);
+    renderHeroPick(picks[0], data);
 
     if (!picks.length) {
-      const reasons = (data.dropped || [])
-        .slice(0, 5)
-        .map((r) => `<li><span class="dim">${esc(r.label)}</span> <b>${r.count}</b></li>`)
-        .join("");
-      list.innerHTML =
-        `<li class="empty">Nichts Spielbares unter ${data.considered || 0} geprüften Alarmen.</li>` +
-        (reasons ? `<li class="dim" style="padding-bottom:2px">Warum:</li>${reasons}` : "");
+      // Die Begründung steht in der Kopfkarte - hier wäre sie doppelt.
+      list.innerHTML = "";
       return;
     }
 
