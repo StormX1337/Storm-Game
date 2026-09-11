@@ -514,8 +514,55 @@ class TestDispatcherFilters:
         dispatcher = AlertDispatcher(None, redis_state, settings, None)
         assert dispatcher.matches(football_alert(kind=AlertKind.ODDS_MOVE), user_settings())
 
-    def test_default_chat_receives_everything(self, dispatcher):
+    def test_default_chat_receives_alerts_without_a_grade(self, dispatcher):
+        """Ohne Bewertung kommt ein Alarm durch - fehlende Information ist
+        kein schlechtes Urteil."""
         assert dispatcher.matches(football_alert(confidence=1), None)
+
+    def test_default_chat_skips_what_the_system_calls_unplayable(self, dispatcher):
+        """Eine Push-Nachricht für etwas zu schicken, das man gleichzeitig
+        "nicht spielen" nennt, ist ein Widerspruch.
+
+        Der Standard-Chat hatte gar keinen Filter. Auf einem echten Server
+        waren das 166 Alarme in 30 Minuten, von denen das System selbst
+        keinen einzigen als spielbar einstufte."""
+        alert = football_alert()
+        alert.recommendation = {"grade": "skip"}
+        assert not dispatcher.matches(alert, None)
+
+    def test_default_chat_still_gets_playable_ones(self, dispatcher):
+        for grade in ("weak", "moderate", "strong"):
+            alert = football_alert()
+            alert.recommendation = {"grade": grade}
+            assert dispatcher.matches(alert, None), grade
+
+    def test_any_restores_the_firehose(self, redis_state):
+        """Wer das alte Verhalten will, bekommt es - aber bewusst."""
+        settings = Settings(_env_file=None, telegram_bot_token="x", telegram_min_grade="any")
+        dispatcher = AlertDispatcher(None, redis_state, settings, None)
+        alert = football_alert()
+        alert.recommendation = {"grade": "skip"}
+        assert dispatcher.matches(alert, None)
+
+    def test_strenger_geht_auch(self, redis_state):
+        settings = Settings(_env_file=None, telegram_bot_token="x", telegram_min_grade="strong")
+        dispatcher = AlertDispatcher(None, redis_state, settings, None)
+        schwach = football_alert()
+        schwach.recommendation = {"grade": "moderate"}
+        stark = football_alert()
+        stark.recommendation = {"grade": "strong"}
+        assert not dispatcher.matches(schwach, None)
+        assert dispatcher.matches(stark, None)
+
+    def test_eigene_einstellungen_bleiben_unberuehrt(self, redis_state):
+        """Wer /start gemacht hat, hat eigene Filter - der Standardwert für
+        den Standard-Chat darf ihm nicht dazwischenfunken."""
+        settings = Settings(_env_file=None, telegram_bot_token="x", telegram_min_grade="strong")
+        dispatcher = AlertDispatcher(None, redis_state, settings, None)
+        alert = football_alert()
+        alert.recommendation = {"grade": "skip"}
+        # Persönliche Einstellung sagt "alle" - also alle.
+        assert dispatcher.matches(alert, user_settings(min_grade="any"))
 
     async def test_default_chat_is_a_recipient(self, redis_state):
         settings = Settings(_env_file=None, telegram_bot_token="x", telegram_chat_id="123, 456")

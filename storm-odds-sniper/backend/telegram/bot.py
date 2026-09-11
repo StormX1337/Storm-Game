@@ -55,7 +55,13 @@ class AlertDispatcher:
     def matches(self, alert: Alert, user_settings) -> bool:
         """Persönliche Filter des Empfängers anwenden."""
         if user_settings is None:
-            return True
+            # Der Standard-Chat aus TELEGRAM_CHAT_ID hat keine persönlichen
+            # Einstellungen. "Also alles" war die falsche Schlussfolgerung:
+            # ein Alarm, den die Empfehlung selbst als "nicht spielen"
+            # einstuft, ist keine Push-Nachricht wert. Alarme ohne Empfehlung
+            # (etwa Bewegungsmeldungen) kommen weiterhin durch - siehe
+            # passes_grade.
+            return passes_grade(alert.recommendation, self.settings.telegram_min_grade)
         if user_settings.paused:
             return False
         sports = user_settings.sports or []

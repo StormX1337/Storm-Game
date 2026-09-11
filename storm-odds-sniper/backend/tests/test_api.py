@@ -452,10 +452,15 @@ class TestInfrastructure:
         app.state.repository = repository
         app.state.hub = None
         app.state.started_at = now_ts()
-        transport = httpx.ASGITransport(app=app)
+        # Eigener Client-Name: das Rate-Limit zählt je Absender-IP in Redis,
+        # und diese Redis-Instanz teilen sich alle Tests. Unter dem
+        # Standardnamen "testclient" hat jeder vorher gelaufene API-Test den
+        # Zähler schon angefasst - dann hängt das Ergebnis hier davon ab, in
+        # welcher Reihenfolge und wie schnell die Suite lief.
+        transport = httpx.ASGITransport(app=app, client=("rate-limit-test", 4711))
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as http:
             codes = [(await http.get("/stats")).status_code for _ in range(6)]
-        assert 429 in codes
+        assert 429 in codes, f"kein 429 bei Limit 3 und 6 Anfragen: {codes}"
         # Health bleibt erreichbar, damit Monitoring nie ausgesperrt wird.
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as http:
             assert (await http.get("/health")).status_code == 200

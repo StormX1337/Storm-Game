@@ -220,6 +220,18 @@ class Settings(BaseSettings):
     #: Bewegungsalarme sind fürs Dashboard gedacht. Telegram bleibt so
     #: signalstark - einschaltbar über TELEGRAM_SEND_MOVES=true.
     telegram_send_moves: bool = False
+    #: Mindestgrad für den in TELEGRAM_CHAT_ID eingetragenen Standard-Chat.
+    #:
+    #: Wer den Bot mit /start eingerichtet hat, hat eigene Einstellungen und
+    #: ist davon nicht betroffen. Der Standard-Chat hatte dagegen gar keinen
+    #: Filter - er bekam jeden Alarm, den der Scanner durchließ. Auf einem
+    #: echten Server waren das 166 Alarme in 30 Minuten, von denen das System
+    #: selbst keinen einzigen als spielbar einstufte. Eine Push-Nachricht für
+    #: etwas zu schicken, das man gleichzeitig "nicht spielen" nennt, ist ein
+    #: Widerspruch - deshalb fliegt "skip" hier standardmäßig raus.
+    #:
+    #: "any" stellt das alte Verhalten wieder her.
+    telegram_min_grade: str = "weak"
     #: Kleinere Bewegungen landen nicht im Dashboard-Stream (Flut vermeiden).
     publish_odds_min_percent: float = 1.0
     #: Ähnlichkeitsschwelle des Event-Matchings über Provider hinweg.

@@ -1336,6 +1336,31 @@ Und auch das hier ist CLV, nicht Gewinn. **Was wirklich Geld gebracht hat,
 steht ausschließlich im Wett-Tagebuch** (Schritt 13) — und erst ab 20
 abgerechneten Wetten ist das mehr als Zufall.
 
+### Telegram: was der Standard-Chat bekommt
+
+Zwei Arten von Empfängern, und sie werden verschieden behandelt:
+
+* **Wer den Bot mit `/start` eingerichtet hat** hat eigene Filter (Sportart,
+  Markt, Quotenband, Mindestgrad) und wird hiervon nicht berührt.
+* **Der Chat aus `TELEGRAM_CHAT_ID`** hat keine — er bekam bisher *jeden*
+  Alarm, den der Scanner durchließ.
+
+Auf einem echten Server waren das **166 Alarme in 30 Minuten, von denen das
+System selbst keinen einzigen als spielbar einstufte**. Eine Push-Nachricht
+für etwas zu schicken, das man gleichzeitig „nicht spielen" nennt, ist ein
+Widerspruch. `TELEGRAM_MIN_GRADE` (Standard `weak`) wirft diese raus:
+
+| Einstellung | aus 166 Alarmen je 30 Min |
+|---|---|
+| `any` (altes Verhalten) | 166 |
+| `weak` (Standard) | 10 |
+| `moderate` | 4 |
+| `strong` | 1 |
+
+Alarme **ohne** Bewertung kommen weiterhin durch — fehlende Information ist
+kein schlechtes Urteil. Bewegungsmeldungen hängen unverändert an
+`TELEGRAM_SEND_MOVES`.
+
 ### Wenn nie etwas spielbar ist: das Band zwischen den Stufen
 
 Es gibt **zwei** Schwellensätze, und sie tun Verschiedenes:
