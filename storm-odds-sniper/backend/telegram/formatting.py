@@ -854,3 +854,38 @@ welcher Confidence und für welche Sportarten du benachrichtigt wirst.
 
 def now_time() -> str:
     return format_time(now_ts())
+
+
+# ------------------------------------------------------------ Systemmeldung
+
+
+def format_system_notice(payload: dict) -> str:
+    """Eine Systemmeldung - kein Alarm, sondern eine Nachricht über den Bot.
+
+    Getrennt von den Alarmformaten gehalten: hier steht ausdrücklich, dass
+    es nichts zu spielen gibt. Wer eine Meldung mit Quote und Einsatz
+    erwartet und stattdessen eine Störung liest, soll das am ersten Wort
+    erkennen.
+    """
+    provider = esc(str(payload.get("provider", "?")))
+    sekunden = int(payload.get("seconds") or 0)
+    minuten = sekunden // 60
+
+    if payload.get("kind") == "silence_over":
+        return (
+            "✅ <b>Quelle liefert wieder</b>\n"
+            f"<b>{provider}</b> ist zurück.\n\n"
+            "<i>Die Lücke bleibt eine Lücke - was in der Zwischenzeit an "
+            "Fehlpreisen da war, wurde nicht gesehen.</i>"
+        )
+
+    dauer = f"{minuten} Minuten" if minuten >= 2 else f"{sekunden} Sekunden"
+    return (
+        "🔇 <b>QUELLE VERSTUMMT</b>\n"
+        f"<b>{provider}</b> liefert seit <b>{dauer}</b> nichts mehr.\n\n"
+        "Der Scanner läuft, das Dashboard läuft - es kommen nur keine Daten. "
+        "Von außen sieht das aus wie ein ruhiger Markt.\n\n"
+        "<b>Nachsehen:</b>\n"
+        "<code>./scripts/diagnose.sh</code>\n\n"
+        "<i>Solange das gilt, kann kein Alarm entstehen - auch kein guter.</i>"
+    )

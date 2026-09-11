@@ -145,6 +145,11 @@ class ScannerEngine:
 
         self.thresholds = thresholds_from_settings(self.settings)
         self._ausgeschlossen = self.settings.excluded_bookmaker_set
+        #: Quellen, die gerade als verstummt gemeldet sind. Verhindert, dass
+        #: derselbe Ausfall im Health-Takt (alle paar Sekunden) erneut
+        #: verschickt wird - eine Meldung je Ausfall, eine je Entwarnung.
+        self._stille: set[str] = set()
+        self._gestartet_um = now_ts()
         # Vor dem Anpfiff gelten andere Maßstäbe - siehe
         # prematch_thresholds_from_settings.
         self.prematch_thresholds = prematch_thresholds_from_settings(self.settings, self.thresholds)
@@ -1107,6 +1112,57 @@ class ScannerEngine:
         }
 
     # ----------------------------------------------------------- Health/Pflege
+    async def _pruefe_stille(self) -> None:
+        """Meldet, wenn eine Quelle aufhört zu liefern - und wenn sie zurück ist.
+
+        Gemessen wird der letzte **erfolgreiche Abruf**, nicht die Zahl der
+        Events. Das ist der ganze Unterschied zwischen "die Quelle antwortet
+        nicht" und "es läuft gerade kein Spiel": nachts um vier liefert ein
+        gesunder Abruf null Events, und daraus einen Ausfall zu machen wäre
+        ein Fehlalarm. Fehlalarme sind hier das Schlimmste - nach dem dritten
+        schaltet man stumm, und dann hilft auch der echte nicht mehr.
+
+        Die Grenze liegt nie unter dem Dreifachen des Poll-Takts. Wer sie
+        knapper stellt als die Quelle liefern kann, bekäme sonst eine
+        Dauermeldung über einen Ausfall, den es nicht gibt.
+        """
+        if not self.settings.silence_alert_enabled or not self.providers:
+            return
+        jetzt = now_ts()
+        for provider in self.providers:
+            grenze = max(
+                self.settings.silence_alert_seconds,
+                provider.next_poll_delay() * 3.0,
+            )
+            seit = provider.health.seconds_since_message
+            if seit is None:
+                # Noch nie etwas geliefert: dann zählt die Zeit seit dem
+                # Start, nicht seit 1970.
+                seit = jetzt - self._gestartet_um
+            still = seit > grenze
+            war_still = provider.name in self._stille
+            if still == war_still:
+                continue
+            if still:
+                self._stille.add(provider.name)
+                log.warning(
+                    "QUELLE VERSTUMMT", provider=provider.name, seit_sekunden=round(seit)
+                )
+            else:
+                self._stille.discard(provider.name)
+                log.info("quelle liefert wieder", provider=provider.name)
+            with contextlib.suppress(Exception):
+                await self.state.publish(
+                    self.settings.channel_system,
+                    {
+                        "kind": "silence" if still else "silence_over",
+                        "provider": provider.name,
+                        "seconds": round(seit),
+                        "limit": round(grenze),
+                        "ts": jetzt,
+                    },
+                )
+
     async def _health_loop(self) -> None:
         while not self._stopped.is_set():
             try:
@@ -1140,6 +1196,7 @@ class ScannerEngine:
                         anzahl=len(stale),
                         nach_sekunden=self.settings.event_stale_seconds,
                     )
+                await self._pruefe_stille()
                 counters = await self.state.counters()
                 LIVE_EVENTS.set(counters["live_events"])
                 TRACKED_EVENTS.set(counters["tracked_events"])

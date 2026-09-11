@@ -195,15 +195,53 @@ class AlertDispatcher:
         self.sent += sent
         return sent
 
+    async def dispatch_system(self, payload: dict) -> int:
+        """Eine Systemmeldung zustellen.
+
+        Anders als ein Alarm geht sie an die Admins und den Standard-Chat,
+        ohne persönliche Filter: wer Sportart oder Mindestgrad eingestellt
+        hat, meint damit Wetten - nicht die Frage, ob das System überhaupt
+        noch Daten bekommt. Diese Nachricht wegzufiltern hieße, die
+        Störungsmeldung ausgerechnet dem vorzuenthalten, der sie gebraucht
+        hätte.
+        """
+        text = fmt.format_system_notice(payload)
+        empfaenger: set[int] = set(self.settings.admin_ids)
+        for raw in str(self.settings.telegram_chat_id or "").split(","):
+            raw = raw.strip()
+            if raw:
+                try:
+                    empfaenger.add(int(raw))
+                except ValueError:
+                    continue
+        gesendet = 0
+        for chat_id in sorted(empfaenger):
+            try:
+                await self.bot.send_message(
+                    chat_id=chat_id, text=text, parse_mode=self.settings.telegram_parse_mode
+                )
+                gesendet += 1
+            except Exception as exc:  # noqa: BLE001 - ein Empfänger stoppt nichts
+                log.warning("systemmeldung nicht zustellbar", chat_id=chat_id, error=str(exc))
+        return gesendet
+
     async def run(self) -> None:
         """Dauerhaft auf Alarm- und Arbitrage-Kanal lauschen."""
         kanaele = [self.settings.channel_alerts]
         if self.settings.arbitrage_enabled and self.settings.arbitrage_telegram:
             kanaele.append(self.settings.channel_arbitrage)
+        if self.settings.silence_alert_enabled:
+            kanaele.append(self.settings.channel_system)
         while True:
             try:
                 async for channel, payload in self.state.subscribe(*kanaele):
                     if not payload:
+                        continue
+                    if channel == self.settings.channel_system:
+                        try:
+                            await self.dispatch_system(payload)
+                        except Exception as exc:  # noqa: BLE001 - stoppt nichts
+                            log.warning("systemmeldung nicht zustellbar", error=str(exc))
                         continue
                     if channel == self.settings.channel_arbitrage:
                         try:

@@ -1401,6 +1401,50 @@ Unterdrückungsgrund gezählt und ist im Dashboard sichtbar.
 > Auf etwas zu bauen, das man nicht benennen kann, ist hier die falsche
 > Richtung. Wer es doch will: `EXCLUDED_BOOKMAKERS=` leer lassen.
 
+### Stille-Alarm: wenn die Quelle aufhört zu liefern
+
+Der gefährlichste Zustand dieses Systems ist nicht der Absturz — es ist die
+**Stille**. Scanner läuft, Dashboard läuft, es kommen nur keine Daten mehr.
+Von außen sieht das aus wie ein ruhiger Markt, und man wartet stundenlang auf
+Alarme, die gar nicht kommen können. Genau so ist es hier bei einem
+DNS-Ausfall passiert; aufgefallen ist es nur, weil zufällig auch das
+Dashboard tot war.
+
+Seitdem meldet Telegram es:
+
+```
+🔇 QUELLE VERSTUMMT
+sportsgameodds liefert seit 7 Minuten nichts mehr.
+
+Der Scanner läuft, das Dashboard läuft - es kommen nur keine
+Daten. Von außen sieht das aus wie ein ruhiger Markt.
+
+Nachsehen: ./scripts/diagnose.sh
+```
+
+Und wenn sie zurück ist, kommt die Entwarnung — samt dem Satz, der dazugehört:
+*„Die Lücke bleibt eine Lücke — was in der Zwischenzeit an Fehlpreisen da war,
+wurde nicht gesehen."*
+
+**Das Schwierige daran ist das Nicht-Melden.** Nachts um vier liefert ein
+völlig gesunder Abruf null Events. Daraus einen Ausfall zu machen wäre ein
+Fehlalarm — und nach dem dritten Fehlalarm schaltet man stumm, womit auch der
+echte nichts mehr nützt. Deshalb:
+
+* Gemessen wird der **letzte erfolgreiche Abruf**, nicht die Zahl der Events.
+  Das ist der Unterschied zwischen „die Quelle antwortet nicht" und „es läuft
+  gerade kein Spiel".
+* Die Grenze liegt **nie unter dem Dreifachen des Poll-Takts** — wer sie
+  knapper stellt, als die Quelle liefern kann, bekäme sonst eine Dauermeldung.
+* **Eine Meldung je Ausfall, eine je Entwarnung.** Der Health-Takt läuft alle
+  paar Sekunden; ohne Gedächtnis käme die Meldung im Dauerfeuer.
+
+Die Meldung geht an die Admins und den Standard-Chat, **ohne** persönliche
+Filter: wer Sportart oder Mindestgrad eingestellt hat, meint damit Wetten —
+nicht die Frage, ob das System überhaupt noch Daten bekommt.
+
+Abschalten: `SILENCE_ALERT_ENABLED=false`.
+
 ### Börsen erkennen — sonst meldet die Arbitrage Verluste als Gewinne
 
 Eine Wettbörse zieht **Kommission vom Gewinn** ab. Eine Quote von 2.03 zahlt

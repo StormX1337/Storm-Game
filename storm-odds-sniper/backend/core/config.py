@@ -454,6 +454,20 @@ class Settings(BaseSettings):
     odds_state_ttl_seconds: int = 900
     snapshot_persist_every: int = 1
     provider_health_interval: float = 5.0
+    #: Meldet über Telegram, wenn eine Quelle verstummt.
+    #:
+    #: Der Fall, gegen den das gebaut ist: der Scanner läuft, das Dashboard
+    #: läuft, es kommen nur keine Daten mehr. Von außen sieht das aus wie ein
+    #: ruhiger Markt - man wartet stundenlang auf Alarme, die nicht kommen
+    #: können. Genau so ist es bei einem DNS-Ausfall schon passiert.
+    #:
+    #: Gemessen wird der letzte ERFOLGREICHE Abruf, nicht die Zahl der
+    #: Events. Das ist der Unterschied zwischen "die Quelle antwortet nicht"
+    #: und "es läuft gerade kein Spiel" - nachts um vier ist Letzteres normal
+    #: und wäre ein Fehlalarm. Fehlalarme sind hier das Schlimmste: nach dem
+    #: dritten schaltet man stumm, und dann hilft auch der echte nicht mehr.
+    silence_alert_enabled: bool = True
+    silence_alert_seconds: float = 300.0
     maintenance_interval_seconds: float = 21600.0  # 6 h
     retention_snapshot_days: int = 7
     retention_alert_days: int = 30
@@ -471,6 +485,8 @@ class Settings(BaseSettings):
     channel_odds: str = "storm:odds"
     channel_events: str = "storm:events"
     channel_arbitrage: str = "storm:arbitrage"
+    #: Systemmeldungen (keine Alarme) - etwa wenn die Quelle verstummt.
+    channel_system: str = "storm:system"
 
     @field_validator("log_level")
     @classmethod
