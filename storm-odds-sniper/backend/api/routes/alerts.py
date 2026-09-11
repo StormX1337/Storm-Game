@@ -33,6 +33,20 @@ router = APIRouter(prefix="/alerts", tags=["alerts"])
 LABELS: dict[str, str] = {**VERDICT_LABELS, "pending": "noch offen - Nachkontrolle steht aus"}
 
 
+def _als_zeitpunkt(wert) -> datetime | None:
+    """Anstoßzeit aus dem gespeicherten Payload lesen.
+
+    Eine kaputte oder fehlende Angabe wird zu ``None`` - sie zu raten wäre
+    schlimmer als sie wegzulassen.
+    """
+    if not wert:
+        return None
+    try:
+        return datetime.fromisoformat(str(wert))
+    except ValueError:
+        return None
+
+
 def _row_to_response(row) -> AlertResponse:
     payload = row.payload or {}
     event = payload.get("event", {}) or {}
@@ -50,6 +64,7 @@ def _row_to_response(row) -> AlertResponse:
         event_title=f"{event.get('home', '?')} vs {event.get('away', '?')}",
         league=event.get("league"),
         status=event.get("status", "UNKNOWN"),
+        start_time=_als_zeitpunkt(event.get("start_time")),
         score=score_text,
         market=row.market_key,
         market_label=row.market_label,
@@ -99,6 +114,7 @@ def _alert_to_response(alert: Alert) -> AlertResponse:
         event_title=alert.event.title,
         league=alert.event.league,
         status=alert.event.status.value,
+        start_time=alert.event.start_time,
         score=score.as_text() if score else None,
         market=alert.market.key,
         market_label=alert.market.label,

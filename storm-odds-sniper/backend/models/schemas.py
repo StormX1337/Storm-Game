@@ -206,6 +206,9 @@ class AlertResponse(BaseModel):
     event_title: str
     league: str | None = None
     status: str
+    #: Anstoßzeit - vor dem Anpfiff die wichtigste Zahl nach der Quote.
+    #: ``None``, wenn die Quelle keine liefert; geraten wird keine.
+    start_time: datetime | None = None
     score: str | None = None
     market: str
     market_label: str

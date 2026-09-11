@@ -829,6 +829,153 @@
   /* Die Bestenliste. Wenn nichts übrig bleibt, steht hier *warum* - eine
      leere Kachel ohne Begründung lässt Nutzer an der Anlage zweifeln statt
      am Markt. */
+  /**
+   * Der beste Fund als Kopfkarte.
+   *
+   * Die Vorlage sind die Tipp-Apps: ein Fund, gross, auf einen Blick. Das
+   * funktioniert auf dem Handy, und daran ist nichts unehrlich. Unehrlich
+   * ist dort nur der Balken - eine Prozentzahl ohne Bezugsgroesse, die nach
+   * Sicherheit aussieht. Hier stehen deshalb ZWEI Zahlen im Balken: die
+   * geschaetzte Trefferwahrscheinlichkeit und die, die genau diese Quote
+   * zum Nullsummenspiel braucht. Nur der Abstand dazwischen ist ein
+   * Vorteil - ohne die zweite Zahl ist die erste Dekoration.
+   */
+  function renderHeroPick(pick) {
+    const box = $("hero-pick");
+    if (!box) return;
+    if (!pick) {
+      box.hidden = true;
+      box.innerHTML = "";
+      return;
+    }
+    const a = pick.alert;
+    const r = pick.recommendation;
+    const m = r.math || {};
+    const g = GRADE[r.grade] || { icon: "•", short: r.grade, tag: "fin" };
+
+    // Beide Wahrscheinlichkeiten in Prozentpunkten.
+    const noetig = m.break_even_percent;
+    const geschaetzt =
+      m.credible_probability != null ? m.credible_probability * 100 : null;
+    let gauge = "";
+    if (noetig != null && geschaetzt != null) {
+      // Massstab zoomen, sonst liegen 43.5 % und 45.0 % auf demselben Pixel.
+      // Beide Enden stehen als Zahl darunter - ein Zoom ohne Beschriftung
+      // waere genau der Trick, den diese Karte nicht machen soll.
+      const lo = Math.max(0, Math.min(noetig, geschaetzt) - 6);
+      const hi = Math.min(100, Math.max(noetig, geschaetzt) + 6);
+      const pos = (v) => `${((v - lo) / (hi - lo)) * 100}%`;
+      const vorsprung = geschaetzt - noetig;
+      const gut = vorsprung > 0;
+      // Der Balken zeigt drei Dinge, nicht eins: was die Quote verlangt
+      // (grauer Sockel), was wir schätzen (Marke) - und dazwischen das
+      // eingefärbte Stück, das der ganze Vorteil ist. Genau dieses Stück
+      // fehlt bei einem "Confidence Rating", und ohne es sagt der Balken
+      // nichts: 67 % sind bei Quote 1.15 ein Verlust und bei 5.50 ein Traum.
+      const von = Math.min(noetig, geschaetzt);
+      const bis = Math.max(noetig, geschaetzt);
+      gauge = `
+        <div class="hero__gauge">
+          <div class="hero__gauge-head">
+            <span>Geschätzte Trefferquote</span>
+            <b class="${gut ? "pos" : "neg"}">${geschaetzt.toFixed(1)} %</b>
+          </div>
+          <div class="hero__track">
+            <div class="hero__base" style="width:${pos(noetig)}"></div>
+            <div class="hero__edge hero__edge--${gut ? "good" : "bad"}"
+                 style="left:${pos(von)};right:${100 - parseFloat(pos(bis))}%"></div>
+            <div class="hero__need" style="left:${pos(noetig)}"></div>
+          </div>
+          <div class="hero__scale"><span>${lo.toFixed(0)} %</span><span>${hi.toFixed(
+        0
+      )} %</span></div>
+          <div class="hero__verdict">
+            Nötig bei Quote ${fmtOdds(a.odds)}: <b>${noetig.toFixed(1)} %</b> —
+            ${
+              gut
+                ? `Vorsprung <b class="pos">+${vorsprung.toFixed(1)} Punkte</b>`
+                : `<b class="neg">${vorsprung.toFixed(1)} Punkte</b> zu wenig`
+            }
+          </div>
+        </div>`;
+    }
+
+    const reasons = (r.reasons || [])
+      .slice(0, 3)
+      .map((x) => `<li>${esc(x)}</li>`)
+      .join("");
+    const warnings = (r.warnings || [])
+      .slice(0, 2)
+      .map((w) => `<div class="hero__warn">⚠️ ${esc(w)}</div>`)
+      .join("");
+
+    // Wann - je nach Welt die Spielminute oder die Zeit bis zum Anpfiff.
+    let wann = "";
+    if (a.phase === "prematch") {
+      const anpfiff = anpfiffText(a.start_time || (a.event && a.event.start_time));
+      wann = anpfiff ? `⏱ Anpfiff ${anpfiff}` : "vor dem Anpfiff";
+    } else if (a.score) {
+      wann = `🔴 läuft · ${esc(a.score)}`;
+    }
+
+    const betrag = r.stake_amount ? ` (≈ ${r.stake_amount.toFixed(2)})` : "";
+    const teams = String(a.event_title || "").split(" vs ");
+
+    box.hidden = false;
+    box.innerHTML = `
+      <div class="hero__top">
+        <div>
+          <div class="hero__league">${esc(a.league || a.sport || "")}</div>
+          <div class="hero__teams">${esc(teams[0] || a.event_title || "")}</div>
+          <div class="hero__vs">gegen</div>
+          <div class="hero__teams">${esc(teams[1] || "")}</div>
+          ${wann ? `<div class="hero__when">${wann}</div>` : ""}
+        </div>
+        <div class="hero__odds">
+          <b>${fmtOdds(a.odds)}</b>
+          <span>Quote</span>
+        </div>
+      </div>
+
+      <div class="hero__pick">
+        <div class="hero__market">${esc(a.market_label)}</div>
+        <div class="hero__selection">${esc(a.selection_label)}</div>
+        <div class="hero__book">bei ${esc(a.bookmaker)}</div>
+      </div>
+
+      <div class="hero__stake">
+        <span><span class="tag tag--${g.tag}">${g.icon} ${esc(g.short)}</span> Einsatz</span>
+        <b>${r.stake_percent.toFixed(1)} %${betrag}</b>
+      </div>
+
+      ${gauge}
+
+      <div class="hero__why">
+        <div class="hero__why-title">Warum</div>
+        <ul>${reasons}</ul>
+        ${warnings}
+      </div>
+
+      <p class="hero__foot">
+        Geschätzt aus ${a.bookmaker_count} öffentlich abrufbaren Quoten — keine
+        Gewinnwahrscheinlichkeit und keine Zusage. Preis vor dem Setzen selbst prüfen.
+      </p>
+      ${
+        state.betlogWrites && a.fingerprint
+          ? `<button class="chip chip--action" data-bet="${esc(
+              a.fingerprint
+            )}">✅ Gespielt</button>`
+          : ""
+      }`;
+
+    box.querySelectorAll("button[data-bet]").forEach((button) => {
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        logBet(button);
+      });
+    });
+  }
+
   function renderRecommendations(data) {
     const list = $("picks-list");
     const badge = $("picks-stake");
@@ -843,6 +990,8 @@
         } Alarme geprüft`
       : `von ${data.considered || 0} geprüften Alarmen`;
 
+    renderHeroPick(picks[0]);
+
     if (!picks.length) {
       const reasons = (data.dropped || [])
         .slice(0, 5)
@@ -854,8 +1003,15 @@
       return;
     }
 
+    // Platz eins steht schon oben gross - hier folgt nur der Rest.
+    if (picks.length < 2) {
+      list.innerHTML = "";
+      return;
+    }
     list.innerHTML = picks
-      .map((pick, index) => {
+      .slice(1)
+      .map((pick, position) => {
+        const index = position + 1;
         const a = pick.alert;
         const r = pick.recommendation;
         const g = GRADE[r.grade] || { icon: "•", short: r.grade, tag: "fin" };

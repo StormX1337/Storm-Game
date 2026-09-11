@@ -1336,6 +1336,40 @@ Und auch das hier ist CLV, nicht Gewinn. **Was wirklich Geld gebracht hat,
 steht ausschließlich im Wett-Tagebuch** (Schritt 13) — und erst ab 20
 abgerechneten Wetten ist das mehr als Zufall.
 
+### Die Tipp-Karte — und was an den Vorbildern nicht stimmt
+
+Ganz oben im Empfehlungsbereich steht der beste Fund als große Karte: Liga,
+Teams, Quote, Auswahl, Buchmacher, Einsatz. Die Form ist von den
+Tipp-Apps geborgt, weil sie auf dem Handy schlicht funktioniert.
+
+Der Unterschied steckt im Balken. Solche Apps zeigen dort ein „Confidence
+Rating" — eine Prozentzahl ohne Bezugsgröße. Die sagt nichts: 67 % sind bei
+Quote 1.15 ein sicherer Verlust und bei Quote 5.50 der größte Vorteil der
+Wettgeschichte. Ohne die Quote daneben ist die Zahl Dekoration.
+
+Hier zeigt derselbe Balken **drei** Dinge:
+
+```
+Geschätzte Trefferquote                    45,0 %
+▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▌███
+37 %                                        51 %
+Nötig bei Quote 2.30: 43,5 % — Vorsprung +1,5 Punkte
+```
+
+* der **graue Sockel**: was diese Quote verlangt (43,5 %) — kein Verdienst,
+  sondern die Hürde
+* die **Marke**: genau dort liegt die Hürde
+* das **farbige Stück**: der Vorsprung — und das ist der ganze Vorteil
+
+Dass dieses Stück schmal aussieht, ist keine Schwäche der Darstellung. So
+schmal *ist* ein echter Vorteil. Ein Balken, der zu zwei Dritteln gefüllt
+ist, behauptet etwas, das es beim Wetten nicht gibt.
+
+Die Skala ist gezoomt (hier 37–51 %), sonst lägen beide Werte auf demselben
+Pixel — beide Enden stehen deshalb als Zahl darunter. Und die Begründung
+darunter ist **nicht verwischt**: glaubwürdiger Vorteil, gemeldeter Wert,
+Zahl der Vergleichsquoten, Confidence, dazu jede Warnung.
+
 ### Warum hier Median statt Mittelwert steht
 
 Der erste Lauf gegen echte Daten meldete für die **verworfenen** Alarme einen
