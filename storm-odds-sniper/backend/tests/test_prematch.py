@@ -513,3 +513,63 @@ class TestQuotenalterJeWelt:
         Prüfung keine."""
         rec = evaluate(self._alarm(EventStatus.PRE_MATCH, 9999.0), RecommendationConfig())
         assert rec.reason_code == "quote_zu_alt"
+
+
+class TestZeithorizont:
+    """„Guck nach den Spielen von heute" ist kein Komfortwunsch.
+
+    Der Prematch-Abruf fragt "alles, was nicht beendet ist" - das schließt
+    Spiele in zwei Wochen ein. Bei zwei Seiten à 100 Events können die
+    Spiele von heute dabei schlicht nie ankommen, und niemand merkt es: die
+    Liste ist ja voll. Ein Preis für übernächsten Samstag ist ohnehin
+    wertlos, weil er bis dahin zehnmal anders steht.
+    """
+
+    @staticmethod
+    def _provider(stunden: float):
+        from backend.providers.sportsgameodds import SportsGameOddsProvider
+
+        return SportsGameOddsProvider(api_key="k" * 32, horizon_hours=stunden)
+
+    @staticmethod
+    def _event(stunden: float | None, status=EventStatus.PRE_MATCH):
+        event = make_event(status=status)
+        event.start_time = (
+            datetime.now(UTC) + timedelta(hours=stunden) if stunden is not None else None
+        )
+        return event
+
+    @pytest.mark.parametrize("stunden", [0.5, 6, 18, 23.5])
+    def test_heute_wird_genommen(self, stunden):
+        assert not self._provider(24.0)._zu_weit_weg(self._event(stunden))
+
+    @pytest.mark.parametrize("stunden", [30, 72, 14 * 24])
+    def test_spaeter_faellt_raus(self, stunden):
+        assert self._provider(24.0)._zu_weit_weg(self._event(stunden))
+
+    def test_ohne_anstosszeit_wird_nichts_weggeworfen(self):
+        """Ein Event wegen einer fehlenden Angabe zu verwerfen wäre
+        schlimmer, als es mitzunehmen."""
+        assert not self._provider(24.0)._zu_weit_weg(self._event(None))
+
+    def test_laufende_spiele_sind_nie_zu_weit(self):
+        """Ihr Anpfiff liegt hinter ihnen - eine Zukunftsgrenze darf sie
+        nicht treffen."""
+        assert not self._provider(24.0)._zu_weit_weg(self._event(-1.0, status=EventStatus.LIVE))
+
+    def test_null_heisst_ohne_grenze(self):
+        assert not self._provider(0.0)._zu_weit_weg(self._event(14 * 24))
+
+    def test_der_prematch_strom_bekommt_den_horizont(self):
+        providers = build_providers(
+            Settings(
+                _env_file=None,
+                providers="sportsgameodds",
+                sgo_api_key="k" * 32,
+                prematch_enabled=True,
+                prematch_horizon_hours=12.0,
+            )
+        )
+        assert providers[1].horizon_hours == 12.0
+        # Der Live-Strom bleibt ohne Grenze - dort sind alle Spiele "jetzt".
+        assert providers[0].horizon_hours == 0.0

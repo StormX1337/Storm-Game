@@ -235,6 +235,8 @@ class SportsGameOddsProvider(OddsProvider):
         #: gedacht: die laufenden holt der schnelle Live-Abruf im
         #: Fünf-Sekunden-Takt, hier wären sie nur veraltete Dubletten.
         exclude_live: bool = False,
+        #: Nur Spiele, die innerhalb dieser Stundenzahl beginnen. 0 = alle.
+        horizon_hours: float = 0.0,
         #: Zwei Instanzen derselben Quelle brauchen zwei Namen, sonst
         #: überschreiben sie einander in der Anbieter-Gesundheit.
         name: str | None = None,
@@ -254,6 +256,7 @@ class SportsGameOddsProvider(OddsProvider):
         self.sport_ids = sport_ids
         self.live_only = live_only
         self.exclude_live = exclude_live
+        self.horizon_hours = max(0.0, horizon_hours)
         if name:
             self.name = name
         self.poll_interval = poll_interval
@@ -647,6 +650,23 @@ class SportsGameOddsProvider(OddsProvider):
             self._cache_ts = now_ts()
             return events, quotes
 
+    def _zu_weit_weg(self, snapshot: EventSnapshot) -> bool:
+        """Beginnt dieses Spiel zu weit in der Zukunft?
+
+        Ohne Anstoßzeit lautet die Antwort nein - ein Event wegen einer
+        fehlenden Angabe wegzuwerfen wäre schlimmer, als es mitzunehmen.
+        Laufende Spiele haben ihren Anpfiff hinter sich und sind nie zu weit.
+        """
+        if self.horizon_hours <= 0 or snapshot.start_time is None:
+            return False
+        if snapshot.status is EventStatus.LIVE:
+            return False
+        start = snapshot.start_time
+        if start.tzinfo is None:
+            start = start.replace(tzinfo=UTC)
+        stunden = (start - datetime.now(UTC)).total_seconds() / 3600.0
+        return stunden > self.horizon_hours
+
     async def _fetch_uncached(self) -> tuple[list[EventSnapshot], list[OddsQuote]]:
         params: dict[str, Any] = {
             "limit": self.page_limit,
@@ -691,6 +711,11 @@ class SportsGameOddsProvider(OddsProvider):
                     # Nicht verschweigen, sondern zählen: sonst sieht es
                     # aus, als lieferte die Quelle weniger als sie tut.
                     self.skipped["laufend - vom Live-Abruf abgedeckt"] += 1
+                    continue
+                if self._zu_weit_weg(snapshot):
+                    self.skipped[
+                        f"Anpfiff weiter als {self.horizon_hours:.0f}h entfernt"
+                    ] += 1
                     continue
                 events.append(snapshot)
                 quotes.extend(event_quotes)

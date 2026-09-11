@@ -145,6 +145,7 @@ def _make_sportsgameodds_prematch(settings: Settings) -> OddsProvider:
         sport_ids=settings.sgo_sport_ids,
         live_only=False,
         exclude_live=True,
+        horizon_hours=settings.prematch_horizon_hours,
         name="sportsgameodds_prematch",
         poll_interval=settings.prematch_poll_interval,
         max_pages=settings.prematch_max_pages,

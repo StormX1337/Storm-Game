@@ -720,6 +720,29 @@ der Live-Teil liefe leer, ohne dass irgendwo ein Fehler stünde.
 | `PREMATCH_ALERT_COOLDOWN` | `1800` | Sperre je Quotenzeile (live: `60`) |
 | `PREMATCH_MAX_ALERT_AGE` | `3600` | so lange bleibt ein Alarm eine Empfehlung (live: `180`) |
 | `PREMATCH_FOLLOWUP_AT_KICKOFF` | `true` | Nachkontrolle am Anpfiff statt nach 5 Minuten |
+| `PREMATCH_HORIZON_HOURS` | `24` | nur Spiele, die heute anfangen (`0` = ohne Grenze) |
+
+### „Guck nach den Spielen von heute"
+
+Das ist kein Komfortwunsch, sondern behebt einen stillen Fehler. Der
+Prematch-Abruf fragt bei der Quelle *alles ab, was nicht beendet ist* — das
+schließt Spiele in zwei Wochen ein. Bei einem Seitenbudget von zwei Seiten à
+100 Events können die Spiele von **heute** dabei schlicht nie ankommen, und
+man merkt es nicht: die Liste ist ja voll.
+
+`PREMATCH_HORIZON_HOURS=24` begrenzt das auf heute und heute Nacht. Ein Preis
+für übernächsten Samstag ist ohnehin wertlos — er steht bis dahin zehnmal
+anders.
+
+Zwei Dinge fallen dabei ausdrücklich **nicht** weg:
+
+* **Events ohne gelieferte Anstoßzeit.** Ein Spiel wegen einer fehlenden
+  Angabe zu verwerfen wäre schlimmer, als es mitzunehmen.
+* **Laufende Spiele.** Ihr Anpfiff liegt hinter ihnen; eine Zukunftsgrenze
+  darf sie nicht treffen.
+
+Was die Grenze aussortiert, wird gezählt und taucht in der Anbieter-Statistik
+auf (`Anpfiff weiter als 24h entfernt`) — verschwiegen wird nichts.
 
 ### Warum die Nachkontrolle vor dem Anpfiff am Anpfiff stattfindet
 

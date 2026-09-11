@@ -227,6 +227,15 @@ class Settings(BaseSettings):
     #: die Live-Grenze wirft dort alles weg, was der langsamere Prematch-Takt
     #: (60 s) ohnehin nie unterschreiten kann.
     prematch_recommend_max_odds_age: float = 300.0
+    #: Wie weit nach vorn geschaut wird, in Stunden. 24 = heute und heute
+    #: Nacht. 0 = ohne Grenze.
+    #:
+    #: Der Abruf fragt "alles, was nicht beendet ist" - das schließt Spiele in
+    #: zwei Wochen ein. Bei einem Seitenbudget von zwei Seiten à 100 Events
+    #: können die Spiele von heute dabei schlicht nie ankommen, und niemand
+    #: merkt es: die Liste ist ja voll. Ein Preis für übernächsten Samstag ist
+    #: ohnehin wertlos, weil er bis dahin zehnmal anders steht.
+    prematch_horizon_hours: float = 24.0
 
     # ----------------------------------------------------- Bewegungsalarme
     move_alerts_enabled: bool = True
