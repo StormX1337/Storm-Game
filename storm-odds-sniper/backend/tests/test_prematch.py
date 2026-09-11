@@ -428,3 +428,46 @@ class TestWarumFuenfMinutenNichtsMessen:
             gemeldet = (2.30 / 2.10 - 1) * 100.0
             assert r.clv_percent == pytest.approx(gemeldet, abs=0.01)
             assert r.verdict.value == "held"
+
+
+class TestSchwellenbaender:
+    """Zwischen "gemeldet" und "spielbar" liegt ein Band - und das war blind.
+
+    Auf dem Server gemessen: MAX_ODDS_AGE_SECONDS stand auf 60, die
+    Empfehlung blieb bei 15. Ergebnis waren 166 Alarme in 30 Minuten und
+    null Empfehlungen, 80 davon allein wegen "Quote zu alt" - ohne eine
+    einzige Fehlermeldung. Dass die zweite Stufe strenger ist, ist Absicht;
+    dass niemand die Breite sieht, war der Fehler.
+    """
+
+    def test_gelockerte_alarmseite_erzeugt_ein_band(self):
+        bands = Settings(_env_file=None, max_odds_age_seconds=60.0).threshold_bands()
+        assert any("Quotenalter 15-60s" in b for b in bands)
+
+    def test_gleiche_werte_ergeben_kein_band(self):
+        bands = Settings(
+            _env_file=None,
+            max_odds_age_seconds=15.0,
+            min_confidence=65,
+            min_bookmakers=4,
+        ).threshold_bands()
+        assert bands == []
+
+    def test_strengere_alarmseite_ist_kein_band(self):
+        """Alarmfilter strenger als die Empfehlung: dann bleibt nichts
+        hängen, das ist kein Befund."""
+        bands = Settings(
+            _env_file=None,
+            max_odds_age_seconds=5.0,
+            min_confidence=90,
+            min_bookmakers=8,
+        ).threshold_bands()
+        assert bands == []
+
+    def test_jedes_band_nennt_beide_stellschrauben(self):
+        bands = Settings(
+            _env_file=None, max_odds_age_seconds=60.0, min_confidence=50, min_bookmakers=2
+        ).threshold_bands()
+        assert len(bands) == 3
+        for band in bands:
+            assert band.count("_") >= 2, f"nennt nicht beide Variablen: {band}"

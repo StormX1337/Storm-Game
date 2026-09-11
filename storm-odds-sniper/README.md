@@ -1336,6 +1336,42 @@ Und auch das hier ist CLV, nicht Gewinn. **Was wirklich Geld gebracht hat,
 steht ausschließlich im Wett-Tagebuch** (Schritt 13) — und erst ab 20
 abgerechneten Wetten ist das mehr als Zufall.
 
+### Wenn nie etwas spielbar ist: das Band zwischen den Stufen
+
+Es gibt **zwei** Schwellensätze, und sie tun Verschiedenes:
+
+* der **Alarmfilter** (`MIN_*`) entscheidet, was überhaupt gemeldet wird —
+  „sieh dir das an"
+* die **Empfehlung** (`RECOMMEND_*`) entscheidet, was davon spielbar ist —
+  „das würde ich setzen"
+
+Dass die zweite Stufe strenger ist, ist Absicht. Gefährlich ist nicht das
+Band, sondern seine **Breite**. Ein echter Fall von diesem Server:
+
+```
+MAX_ODDS_AGE_SECONDS   = 60     (in der .env gelockert)
+RECOMMEND_MAX_ODDS_AGE = 15     (Standard, unverändert)
+```
+
+Ergebnis: **166 Alarme in 30 Minuten, null Empfehlungen** — 80 davon allein
+wegen „Quote zu alt". Alles zwischen 15 und 60 Sekunden wurde gemeldet und
+konnte nie gespielt werden. Ohne eine einzige Fehlermeldung.
+
+Seitdem beziffert `/health` diese Bänder (`threshold_bands`), und die
+Tipp-Karte nennt bei leerem Ergebnis den **Regler zum häufigsten Grund**:
+
+```
+WARUM NICHTS ÜBRIG BLIEB
+  Quote zu alt - Preis womöglich nicht mehr da        12
+
+  Der häufigste Grund lässt sich einstellen:
+  RECOMMEND_MAX_ODDS_AGE in der .env.
+  Lockerer heißt mehr Vorschläge und schwächere.
+```
+
+Die Liste urteilt nicht, sie beziffert. Ob ein Band zu breit ist,
+beantworten die Verwerfungsgründe — die zählen, was tatsächlich hängenbleibt.
+
 ### Die Tipp-Karte — und was an den Vorbildern nicht stimmt
 
 Ganz oben im Empfehlungsbereich steht der beste Fund als große Karte: Liga,

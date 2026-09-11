@@ -279,6 +279,46 @@ class Settings(BaseSettings):
     #: Wie viele Empfehlungen die Bestenliste höchstens enthält.
     recommend_limit: int = 10
 
+    def threshold_bands(self) -> list[str]:
+        """Wo Alarm und Empfehlung auseinanderliegen - und wie weit.
+
+        Es gibt zwei Stufen. Der **Alarmfilter** entscheidet, was gemeldet
+        wird ("sieh dir das an"), die **Empfehlung** entscheidet, was davon
+        spielbar ist ("das würde ich setzen"). Dass die zweite Stufe strenger
+        ist, ist Absicht - sonst wäre sie keine zweite Stufe.
+
+        Gefährlich ist nicht das Band, sondern seine Breite. Wird es groß,
+        entstehen Alarme, die zwangsläufig nie eine Empfehlung werden - und
+        niemand sagt es. Auf einem echten Server gemessen: MAX_ODDS_AGE_SECONDS
+        von 10 auf 60 gesetzt, während die Empfehlung bei 15s blieb. Ergebnis
+        waren 166 Alarme in 30 Minuten und null Empfehlungen, 80 davon allein
+        wegen "Quote zu alt" - ohne eine einzige Fehlermeldung.
+
+        Diese Liste urteilt deshalb nicht, sie beziffert. Ob ein Band zu breit
+        ist, beantworten die Verwerfungsgründe der Empfehlungsliste - die
+        zählen, was tatsächlich hängenbleibt.
+        """
+        baender: list[str] = []
+        if self.recommend_max_odds_age < self.max_odds_age_seconds:
+            baender.append(
+                f"Quotenalter {self.recommend_max_odds_age:.0f}-"
+                f"{self.max_odds_age_seconds:.0f}s: gemeldet, nie spielbar "
+                f"(RECOMMEND_MAX_ODDS_AGE gegen MAX_ODDS_AGE_SECONDS)"
+            )
+        if self.recommend_min_confidence > self.min_confidence:
+            baender.append(
+                f"Confidence {self.min_confidence}-{self.recommend_min_confidence - 1}: "
+                f"gemeldet, nie spielbar "
+                f"(MIN_CONFIDENCE gegen RECOMMEND_MIN_CONFIDENCE)"
+            )
+        if self.recommend_min_bookmakers > self.min_bookmakers:
+            baender.append(
+                f"Buchmacher {self.min_bookmakers}-{self.recommend_min_bookmakers - 1}: "
+                f"gemeldet, nie spielbar "
+                f"(MIN_BOOKMAKERS gegen RECOMMEND_MIN_BOOKMAKERS)"
+            )
+        return baender
+
     # --------------------------------------------------------- Sichere Wetten
     #: Widersprechen sich die Buchmacher untereinander, ist der Gewinn
     #: Arithmetik statt Schätzung. Kostet keinen zusätzlichen Abruf - es wird

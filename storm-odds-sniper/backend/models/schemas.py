@@ -27,6 +27,9 @@ class HealthResponse(BaseModel):
     #: "keine Daten", wo in Wahrheit gar nicht gesucht wird - der Unterschied
     #: zwischen "nichts gefunden" und "nicht eingeschaltet".
     prematch_enabled: bool = False
+    #: Bänder zwischen Alarm- und Empfehlungsschwelle. Alarme, die hier
+    #: hineinfallen, werden gemeldet und können nie gespielt werden.
+    threshold_bands: list[str] = []
     components: list[HealthComponent]
 
 

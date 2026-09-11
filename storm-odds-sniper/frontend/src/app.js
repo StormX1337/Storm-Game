@@ -840,6 +840,24 @@
    * zum Nullsummenspiel braucht. Nur der Abstand dazwischen ist ein
    * Vorteil - ohne die zweite Zahl ist die erste Dekoration.
    */
+  // Welche Einstellung hinter einem Verwerfungsgrund steckt. "Nichts
+  // spielbar" ist erst dann nützlich, wenn daneben steht, an welchem Regler
+  // es liegt - sonst sucht man in einer .env mit achtzig Zeilen.
+  const KNOPF = {
+    quote_zu_alt: "RECOMMEND_MAX_ODDS_AGE",
+    confidence_zu_niedrig: "RECOMMEND_MIN_CONFIDENCE",
+    zu_wenige_buchmacher: "RECOMMEND_MIN_BOOKMAKERS",
+    unplausibel: "ABSURD_EDGE_PERCENT",
+    rest_zu_klein: "PLAUSIBLE_EDGE_PERCENT",
+    einsatz_zu_klein: "MIN_STAKE_PERCENT",
+    alarm_veraltet: "EVENT_STALE_SECONDS bzw. PREMATCH_MAX_ALERT_AGE",
+    // Ohne Regler: das sind Eigenschaften des Marktes, keine Einstellungen.
+    kein_vorteil: null,
+    keine_referenz: null,
+    markt_gesperrt: null,
+    angepfiffen: null,
+  };
+
   function renderHeroPick(pick, data) {
     const box = $("hero-pick");
     if (!box) return;
@@ -850,13 +868,23 @@
     // bleibt die Karte stehen und sagt, warum sie leer ist.
     if (!pick) {
       const geprueft = (data && data.considered) || 0;
-      const gruende = (data && data.dropped ? data.dropped : [])
+      const verworfen = data && data.dropped ? data.dropped : [];
+      const gruende = verworfen
         .slice(0, 4)
         .map(
           (r) =>
             `<li><span class="dim">${esc(r.label)}</span> <b>${r.count}</b></li>`
         )
         .join("");
+      // Der häufigste Grund - und der Regler dazu, falls es einen gibt.
+      const oben = verworfen[0];
+      const regler = oben && KNOPF[oben.code];
+      const tipp =
+        regler && oben.count >= 5
+          ? `<p class="hero__knob">Der häufigste Grund lässt sich einstellen:
+             <code>${esc(regler)}</code> in der <code>.env</code>.
+             Lockerer heißt mehr Vorschläge und schwächere.</p>`
+          : "";
       box.hidden = false;
       box.classList.add("hero--empty");
       box.innerHTML = `
@@ -874,6 +902,7 @@
             ? `<div class="hero__why">
                  <div class="hero__why-title">Warum nichts übrig blieb</div>
                  <ul class="hero__reasons">${gruende}</ul>
+                 ${tipp}
                </div>`
             : ""
         }`;

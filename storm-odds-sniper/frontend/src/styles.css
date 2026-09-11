@@ -483,3 +483,10 @@ a:hover { text-decoration: underline; }
 .hero--empty .hero__teams { font-size: 17px; color: var(--text-dim); }
 .hero__reasons { list-style: none; margin: 0; padding: 0; font-size: 13px; }
 .hero__reasons li { display: flex; justify-content: space-between; gap: 10px; padding: 3px 0; }
+.hero__knob {
+  margin: 8px 0 0; font-size: 12px; color: var(--text-dim); line-height: 1.5;
+}
+.hero__knob code {
+  font-family: var(--mono); font-size: 11px; color: var(--accent);
+  background: var(--bg); padding: 1px 5px; border-radius: 4px;
+}

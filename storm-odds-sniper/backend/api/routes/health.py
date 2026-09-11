@@ -47,6 +47,7 @@ async def health(request: Request) -> HealthResponse:
         environment=settings.environment,
         uptime_seconds=round(now_ts() - started, 1),
         prematch_enabled=settings.prematch_enabled,
+        threshold_bands=settings.threshold_bands(),
         components=components,
     )
 
