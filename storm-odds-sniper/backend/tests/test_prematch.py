@@ -328,3 +328,103 @@ class TestEmpfehlungsfrist:
         slip = self._slip(alarm)
         assert not slip.picks
         assert slip.dropped["alarm_veraltet"] == 1
+
+
+class TestNachkontrolleVorDemAnpfiff:
+    """Fünf Minuten Wartezeit messen vor dem Anpfiff gar nichts.
+
+    Gemessen mit der echten ``resolve``: ein Prematch-Alarm (Quote 2.30
+    gegen faire 2.10, gemeldet +9.52 %) ergibt nach fünf Minuten den CLV
+    +9.52 % - exakt den gemeldeten Vorteil nochmal - und das Urteil
+    "held", egal ob sich nichts, der Markt oder der Buchmacher bewegt hat.
+    Das ist null Information, die im Backtest hinterher wie Beleg aussieht.
+
+    Richtig ist, wogegen "Closing Line Value" ohnehin gemessen gehört: die
+    Linie, bei der der Markt schließt - der Anpfiff.
+    """
+
+    def _alarm(self, status, anpfiff_in_min):
+        event = make_event(
+            status=status,
+            start_time=(
+                datetime.now(UTC) + timedelta(minutes=anpfiff_in_min)
+                if anpfiff_in_min is not None
+                else None
+            ),
+        )
+        if anpfiff_in_min is None:
+            event.start_time = None
+        return Alert(
+            kind=AlertKind.VALUE,
+            event=event,
+            market=OVER_UNDER_25,
+            selection=OVER,
+            bookmaker="b1",
+            odds=2.30,
+            fair_odds=2.10,
+            value_percent=9.4,
+            deviation_percent=9.4,
+            confidence=80,
+            error_score=80,
+            bookmaker_count=6,
+        )
+
+    async def _minuten_bis_nachkontrolle(self, redis_state, status, anpfiff_in_min, **kw):
+        engine = ScannerEngine(
+            scanner_settings(**kw), state=redis_state, repository=None, providers=[]
+        )
+        faellig = engine._followup_due_at(self._alarm(status, anpfiff_in_min))
+        return (faellig - now_ts()) / 60.0
+
+    async def test_live_bleibt_bei_fuenf_minuten(self, redis_state):
+        minuten = await self._minuten_bis_nachkontrolle(redis_state, EventStatus.LIVE, -30)
+        assert minuten == pytest.approx(5.0, abs=0.2)
+
+    async def test_prematch_wartet_bis_kurz_vor_anpfiff(self, redis_state):
+        minuten = await self._minuten_bis_nachkontrolle(redis_state, EventStatus.PRE_MATCH, 180)
+        # Zwei Minuten Vorlauf, damit die Vergleichsquoten noch in Redis stehen.
+        assert minuten == pytest.approx(178.0, abs=0.5)
+
+    async def test_kurz_vor_anpfiff_keine_nachkontrolle_in_der_vergangenheit(self, redis_state):
+        """Ein Alarm zwei Minuten vor Anpfiff bekäme sonst einen Termin, der
+        schon vorbei ist."""
+        minuten = await self._minuten_bis_nachkontrolle(redis_state, EventStatus.PRE_MATCH, 2)
+        assert minuten == pytest.approx(5.0, abs=0.2)
+
+    async def test_weit_entferntes_spiel_wird_gedeckelt(self, redis_state):
+        """Die Vormerkung in Redis lebt 24 Stunden - danach wäre der Termin
+        eine Vormerkung auf nichts."""
+        minuten = await self._minuten_bis_nachkontrolle(
+            redis_state, EventStatus.PRE_MATCH, 5 * 24 * 60
+        )
+        assert minuten == pytest.approx(23 * 60, abs=1.0)
+
+    async def test_ohne_anstosszeit_fester_laengerer_abstand(self, redis_state):
+        minuten = await self._minuten_bis_nachkontrolle(redis_state, EventStatus.PRE_MATCH, None)
+        assert minuten == pytest.approx(60.0, abs=0.2)
+
+    async def test_abschaltbar(self, redis_state):
+        """Wer die alte Wartezeit will, bekommt sie - aber bewusst."""
+        minuten = await self._minuten_bis_nachkontrolle(
+            redis_state, EventStatus.PRE_MATCH, 180, prematch_followup_at_kickoff=False
+        )
+        assert minuten == pytest.approx(5.0, abs=0.2)
+
+
+class TestWarumFuenfMinutenNichtsMessen:
+    """Der Beleg für die Umstellung oben - gegen die echte Urteilslogik."""
+
+    def test_clv_nach_fuenf_minuten_ist_der_gemeldete_vorteil_nochmal(self):
+        from backend.core.verdict import resolve
+
+        for final_price, final_fair in ((2.30, 2.10), (2.29, 2.10)):
+            r = resolve(
+                kind="value",
+                alert_odds=2.30,
+                alert_fair=2.10,
+                final_price=final_price,
+                final_fair=final_fair,
+            )
+            gemeldet = (2.30 / 2.10 - 1) * 100.0
+            assert r.clv_percent == pytest.approx(gemeldet, abs=0.01)
+            assert r.verdict.value == "held"

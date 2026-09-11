@@ -719,6 +719,34 @@ der Live-Teil liefe leer, ohne dass irgendwo ein Fehler stünde.
 | `PREMATCH_MIN_BOOKMAKERS` | `5` | vor dem Anpfiff sind mehr Bücher da |
 | `PREMATCH_ALERT_COOLDOWN` | `1800` | Sperre je Quotenzeile (live: `60`) |
 | `PREMATCH_MAX_ALERT_AGE` | `3600` | so lange bleibt ein Alarm eine Empfehlung (live: `180`) |
+| `PREMATCH_FOLLOWUP_AT_KICKOFF` | `true` | Nachkontrolle am Anpfiff statt nach 5 Minuten |
+
+### Warum die Nachkontrolle vor dem Anpfiff am Anpfiff stattfindet
+
+Live sind fünf Minuten Wartezeit richtig: in der Zeit bewegt sich der Markt,
+und der Vergleich sagt etwas. Vor dem Anpfiff bewegt sich in fünf Minuten
+praktisch nichts — und das ist nicht nur wenig, es ist **null Information**.
+Gegen die echte Urteilslogik gemessen:
+
+```
+Alarm: Quote 2.30 gegen faire Quote 2.10   (gemeldet +9.52 %)
+
+  gar nichts bewegt        -> held    CLV +9.52 %
+  Markt 0.5 % gewandert    -> held    CLV +9.00 %
+  Buchmacher 1 Cent runter -> held    CLV +9.52 %
+```
+
+Der CLV ist **der gemeldete Vorteil nochmal**, und das Urteil ist immer
+`held`. Im Backtest sähe das hinterher aus wie ein Beleg — es ist ein
+Zirkelschluss, und die Spalte `korrigiert`, die genau davor schützen soll,
+stünde für Prematch konstant auf 0 %.
+
+Deshalb wird vor dem Anpfiff gegen die Linie **kurz vor Anpfiff** gemessen.
+Das ist ohnehin, was „Closing Line Value" bedeutet: die Linie, bei der der
+Markt schließt. Ein Alarm zwei Minuten vor Anpfiff bekommt trotzdem die
+normale Wartezeit (sonst läge der Termin in der Vergangenheit), und ein Spiel
+in fünf Tagen wird nach 23 Stunden geprüft — die Vormerkung in Redis lebt
+24 Stunden.
 
 Und die **Empfehlungskarte** vor dem Anpfiff: dort galt bis eben die
 Live-Frist von drei Minuten. Eine Live-Quote steht keine drei Minuten — vor

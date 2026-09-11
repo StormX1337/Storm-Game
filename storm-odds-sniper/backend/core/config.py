@@ -185,6 +185,27 @@ class Settings(BaseSettings):
     #: leer.
     prematch_max_alert_age: float = 3600.0
 
+    # Nachkontrolle vor dem Anpfiff.
+    #
+    # Live sind fünf Minuten die richtige Wartezeit: in der Zeit hat sich der
+    # Markt bewegt, und der Vergleich sagt etwas. Vor dem Anpfiff bewegt sich
+    # in fünf Minuten praktisch nichts - gemessen kam dabei heraus, dass der
+    # CLV exakt der gemeldete Vorteil ist (+9.52 % gegen +9.52 %) und das
+    # Urteil immer "held". Also null Information, die im Backtest dann wie
+    # Beleg aussieht.
+    #
+    # Richtig ist, wogegen "Closing Line Value" ohnehin gemessen gehört: die
+    # Linie, bei der der Markt schließt - der Anpfiff.
+    prematch_followup_at_kickoff: bool = True
+    #: Etwas vorher, damit die Vergleichsquoten noch in Redis stehen.
+    prematch_followup_lead_seconds: float = 120.0
+    #: Ohne gelieferte Anstoßzeit bleibt nur ein fester, längerer Abstand.
+    prematch_followup_after_seconds: float = 3600.0
+    #: Obergrenze: die Vormerkung in Redis lebt 24 Stunden. Ein Spiel in drei
+    #: Tagen wird dann eben nach 23 Stunden geprüft - später als der Anpfiff
+    #: wäre, aber unendlich viel aussagekräftiger als nach fünf Minuten.
+    prematch_followup_max_seconds: float = 82800.0
+
     # ----------------------------------------------------- Bewegungsalarme
     move_alerts_enabled: bool = True
     #: Ab dieser Preisbewegung innerhalb von ``move_alert_window`` wird gemeldet.

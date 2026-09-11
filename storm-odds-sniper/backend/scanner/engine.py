@@ -24,6 +24,7 @@ import asyncio
 import contextlib
 from collections import Counter
 from dataclasses import dataclass
+from datetime import UTC
 
 from backend.core.arbitrage import ArbitrageConfig, find_arbitrage
 from backend.core.config import Settings, get_settings
@@ -796,6 +797,39 @@ class ScannerEngine:
             return None
         return await self._publish(alert)
 
+    def _followup_due_at(self, alert: Alert) -> float:
+        """Wann dieser Alarm nachkontrolliert wird.
+
+        Live: fünf Minuten später - in der Zeit bewegt sich der Markt, und
+        der Vergleich sagt etwas.
+
+        Vor dem Anpfiff: **am Anpfiff**. In fünf Minuten bewegt sich dort
+        nichts, der CLV wäre exakt der gemeldete Vorteil nochmal und das
+        Urteil immer "held" - null Information, die hinterher wie Beleg
+        aussieht. Der Anpfiff ist ohnehin, wogegen "Closing Line Value"
+        gemessen gehört: die Linie, bei der der Markt schließt.
+        """
+        jetzt = now_ts()
+        standard = jetzt + self.settings.followup_after_seconds
+        if alert.phase != "prematch" or not self.settings.prematch_followup_at_kickoff:
+            return standard
+
+        start = alert.event.start_time
+        if start is None:
+            # Ohne Anstoßzeit wird keine geraten - dann ein fester, längerer
+            # Abstand statt der Live-Wartezeit.
+            return jetzt + self.settings.prematch_followup_after_seconds
+
+        anpfiff = start.timestamp() if start.tzinfo else start.replace(tzinfo=UTC).timestamp()
+        ziel = anpfiff - self.settings.prematch_followup_lead_seconds
+        # Nie früher als die normale Wartezeit (ein Alarm zwei Minuten vor
+        # Anpfiff bekäme sonst eine Nachkontrolle in der Vergangenheit) und
+        # nie später als die Vormerkung in Redis lebt.
+        return min(
+            max(ziel, standard),
+            jetzt + self.settings.prematch_followup_max_seconds,
+        )
+
     def _gate_for(self, event: EventSnapshot) -> AlertGate:
         if event.status is EventStatus.LIVE:
             return self.gate
@@ -824,9 +858,7 @@ class ScannerEngine:
             # Ein Alarm ist eine Behauptung. Hier wird vorgemerkt, sie später
             # zu prüfen - mit Daten, die ohnehin einlaufen.
             with contextlib.suppress(Exception):
-                await self.state.schedule_followup(
-                    alert, due_at=now_ts() + self.settings.followup_after_seconds
-                )
+                await self.state.schedule_followup(alert, due_at=self._followup_due_at(alert))
         log.info(
             "ALERT",
             kind=alert.kind.value,
