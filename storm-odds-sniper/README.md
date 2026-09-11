@@ -1372,6 +1372,16 @@ Buchmacher in deinen Daten (30 Tage)
   NICHT in den Daten gefunden: efbet
 ```
 
+Die Spalte **zuletzt** trennt lebende Quellen von Altlasten. Eine Zeile aus
+der Datenbank, die seit Wochen nichts mehr liefert, sieht in einer reinen
+Zählung genauso lebendig aus wie eine aktive — und wer danach filtert,
+filtert auf etwas, das nie wieder einen Alarm auslöst:
+
+```
+  draftkings      4192401   25.5 %     2860       gerade
+  MockBookA        195325    1.2 %      776  vor 21 Tagen   ← Altlast
+```
+
 Die letzte Zeile ist die wichtigste: steht ein Name in der `.env`, den die
 Quelle nicht führt (Schreibfehler oder schlicht nicht im Angebot), kommt von
 dort **nie** ein Alarm — und ohne diesen Hinweis wartet man ewig darauf.

@@ -34,7 +34,44 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine  # no
 from backend.core.config import get_settings  # noqa: E402
 from backend.database.tables import AlertRow, Bookmaker, OddsSnapshot  # noqa: E402
 
-BALKEN = "─" * 68
+BALKEN = "─" * 72
+
+
+def _her(zeitpunkt) -> str:
+    """Wie lange ist der letzte Preis dieses Buchs her?
+
+    Die entscheidende Spalte. Ohne sie steht eine Altlast aus der Datenbank
+    neben einer laufenden Quelle und sieht genauso lebendig aus - und wer
+    danach filtert, filtert auf etwas, das nie wieder etwas liefert.
+    """
+    if zeitpunkt is None:
+        return "nie"
+    sekunden = (datetime.now(UTC) - zeitpunkt).total_seconds()
+    if sekunden < 120:
+        return "gerade"
+    if sekunden < 7200:
+        return f"vor {int(sekunden // 60)} Min"
+    if sekunden < 172800:
+        return f"vor {int(sekunden // 3600)} Std"
+    return f"vor {int(sekunden // 86400)} Tagen"
+
+
+def _her(zeitpunkt) -> str:
+    """Wie lange ist der letzte Preis dieses Buchs her?
+
+    Die entscheidende Spalte. Ohne sie steht eine Altlast aus der Datenbank
+    neben einer laufenden Quelle und sieht genauso lebendig aus.
+    """
+    if zeitpunkt is None:
+        return "nie"
+    sekunden = (datetime.now(UTC) - zeitpunkt).total_seconds()
+    if sekunden < 120:
+        return "gerade"
+    if sekunden < 7200:
+        return f"vor {int(sekunden // 60)} Min"
+    if sekunden < 172800:
+        return f"vor {int(sekunden // 3600)} Std"
+    return f"vor {int(sekunden // 86400)} Tagen"
 
 
 async def sammeln(days: int) -> tuple[list[dict], int]:
@@ -44,15 +81,19 @@ async def sammeln(days: int) -> tuple[list[dict], int]:
     seit = datetime.now(UTC) - timedelta(days=days)
 
     async with factory() as session:
-        preise = dict(
-            (
-                await session.execute(
-                    select(OddsSnapshot.bookmaker_id, func.count())
-                    .where(OddsSnapshot.received_at >= seit)
-                    .group_by(OddsSnapshot.bookmaker_id)
+        roh = (
+            await session.execute(
+                select(
+                    OddsSnapshot.bookmaker_id,
+                    func.count(),
+                    func.max(OddsSnapshot.received_at),
                 )
-            ).all()
-        )
+                .where(OddsSnapshot.received_at >= seit)
+                .group_by(OddsSnapshot.bookmaker_id)
+            )
+        ).all()
+        preise = {zeile[0]: zeile[1] for zeile in roh}
+        zuletzt = {zeile[0]: zeile[2] for zeile in roh}
         buecher = list((await session.execute(select(Bookmaker))).scalars().all())
         alarme = dict(
             (
@@ -72,6 +113,8 @@ async def sammeln(days: int) -> tuple[list[dict], int]:
             "exchange": buch.is_exchange,
             "quotes": preise.get(buch.id, 0),
             "alerts": alarme.get(buch.key, 0),
+            "last": zuletzt.get(buch.id),
+            "id": buch.id,
         }
         for buch in buecher
     ]
@@ -95,12 +138,18 @@ def ausgeben(zeilen: list[dict], gesamt: int, *, days: int, muster: str | None) 
         print(f"  Insgesamt bekannt: {len(zeilen)} - ohne --grep stehen sie alle da.")
         return
 
-    print(f"  {'Name (für ALERT_BOOKMAKERS)':<28}{'Preise':>10}{'Anteil':>9}{'Alarme':>9}  ")
+    print(
+        f"  {'Name (für ALERT_BOOKMAKERS)':<26}{'Preise':>10}{'Anteil':>8}"
+        f"{'Alarme':>8}{'zuletzt':>13}  "
+    )
     for z in gezeigt:
         anteil = f"{z['quotes'] / gesamt * 100:.1f} %" if gesamt else "–"
         marke = " ←" if z["key"].lower() in eigene else ""
         art = " (Börse)" if z["exchange"] else ""
-        print(f"  {z['key'][:26]:<28}{z['quotes']:>10}{anteil:>9}{z['alerts']:>9}{marke}{art}")
+        print(
+            f"  {z['key'][:24]:<26}{z['quotes']:>10}{anteil:>8}"
+            f"{z['alerts']:>8}{_her(z['last']):>13}{marke}{art}"
+        )
 
     print(f"\n  {len(gezeigt)} von {len(zeilen)} Buchmachern · {gesamt} Preise insgesamt")
     if eigene:
