@@ -24,3 +24,4 @@ htmlcov/
 # Laufzeitdaten
 data/
 *.log
+backups/

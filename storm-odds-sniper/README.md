@@ -1386,6 +1386,49 @@ Die letzte Zeile ist die wichtigste: steht ein Name in der `.env`, den die
 Quelle nicht führt (Schreibfehler oder schlicht nicht im Angebot), kommt von
 dort **nie** ein Alarm — und ohne diesen Hinweis wartet man ewig darauf.
 
+### Altlasten entfernen — mit Sicherung und Trockenlauf
+
+Steht in der Liste ein Buchmacher, der seit Wochen nichts mehr liefert
+(typisch: Reste der längst entfernten Simulation, `MockBookA` & Co.), dann
+verfälschen seine Zeilen jede Auswertung — Trefferbilanz, Buchmacherliste und
+vor allem die **Modellprüfung**, die dann auf erfundenen Preisen rechnet.
+
+```bash
+./scripts/purge-bookmaker.sh 'Mock%'              # Trockenlauf: nur zählen
+./scripts/purge-bookmaker.sh 'Mock%' --wirklich   # löschen
+```
+
+Drei Sicherungen, weil Löschen nicht rückgängig zu machen ist:
+
+* **Trockenlauf ist die Vorgabe.** Ohne `--wirklich` wird nichts verändert.
+* **Vorher läuft `./scripts/backup.sh`.** Scheitert die Sicherung, wird nicht
+  gelöscht — das ist keine Warnung, sondern ein Abbruch.
+* **Das Wett-Tagebuch wird nie angefasst.** Alles andere kann der Scanner neu
+  sammeln; was ein Mensch gespielt hat, kann niemand rekonstruieren. Betreffen
+  die Daten auch Wetten, sagt das Skript es und lässt die Zeilen stehen.
+
+Muster wie `%`, die alles treffen würden, werden abgelehnt.
+
+### Datensicherung
+
+```bash
+./scripts/backup.sh              # nach ./backups/
+./scripts/backup.sh --list       # vorhandene Stände
+./scripts/backup.sh --keep 20    # mehr aufheben (Standard 10)
+```
+
+Gesichert wird die ganze Datenbank. Am wichtigsten ist das **Wett-Tagebuch**:
+Alarme und Quotenverlauf sammelt der Scanner neu, aber was gespielt wurde und
+was es gebracht hat, steht nur dort. Eine Sicherung unter 1 KB wird als
+kaputt abgelehnt statt stillschweigend abgelegt.
+
+Zurückspielen (überschreibt den aktuellen Stand):
+
+```bash
+gunzip -c backups/storm-20260911-0730.sql.gz \
+  | docker compose exec -T postgres psql -U storm -d storm
+```
+
 > **Was nicht geht.** Buchmacher, die die Datenquelle nicht führt, lassen sich
 > nicht ergänzen. Ihre Webseiten abzugreifen ist in diesem Projekt
 > ausgeschlossen — siehe *Recht und Grenzen*. Eine Liste von Anbietern
