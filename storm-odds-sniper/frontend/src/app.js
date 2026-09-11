@@ -46,6 +46,8 @@
   const MIN_SCORED = 10;
 
   const state = {
+    //: Ab wann eine Quelle als still gilt - kommt aus /health.
+    silenceAfter: null,
     alerts: [],
     moves: [],
     events: new Map(),
@@ -703,6 +705,45 @@
       .join("");
   }
 
+  /** Gilt diese Quelle als verstummt? Grenze kommt vom Server. */
+  function istStill(p) {
+    const grenze = state.silenceAfter;
+    if (!grenze || p.seconds_since_message == null) return false;
+    return p.seconds_since_message > grenze;
+  }
+
+  function dauerText(sekunden) {
+    if (sekunden < 90) return `${Math.round(sekunden)} s`;
+    if (sekunden < 5400) return `${Math.round(sekunden / 60)} Min`;
+    return `${(sekunden / 3600).toFixed(1)} Std`;
+  }
+
+  /**
+   * Eine stille Quelle macht jede Zahl darunter zur Momentaufnahme von
+   * vorhin - ohne dass man es ihr ansieht. Deshalb ganz oben.
+   */
+  function reportSilence(providers) {
+    const box = $("source-silent");
+    if (!box) return;
+    const still = (providers || []).filter(istStill);
+    if (!still.length) {
+      box.hidden = true;
+      return;
+    }
+    const namen = still
+      .map((p) => `${esc(p.title)} (${dauerText(p.seconds_since_message)})`)
+      .join(", ");
+    box.hidden = false;
+    box.innerHTML = `
+      <strong>🔇 Quelle liefert nichts mehr</strong>
+      <span>
+        ${namen}. Alles auf dieser Seite ist damit ein Stand von vorhin —
+        auch wenn es aussieht wie ein ruhiger Markt. Solange das gilt, kann
+        kein Alarm entstehen, auch kein guter.
+        Nachsehen mit <code>./scripts/diagnose.sh</code>.
+      </span>`;
+  }
+
   function renderProviders(providers) {
     const list = $("providers-list");
     if (!providers.length) {
@@ -723,11 +764,24 @@
         const detail = p.detail
           ? `<div class="event-sub">${esc(p.detail)}</div>`
           : "";
+        // "connected" und trotzdem seit zwanzig Minuten nichts geliefert -
+        // das sah bisher kerngesund aus. Der Zustand sagt, ob die Verbindung
+        // steht; er sagt nichts darüber, ob Daten ankommen.
+        const still = istStill(p);
+        const seit =
+          p.seconds_since_message != null
+            ? `<span class="${still ? "neg" : "dim"}">${
+                still ? "still seit " : "zuletzt vor "
+              }${dauerText(p.seconds_since_message)}</span>`
+            : '<span class="dim">noch nichts geliefert</span>';
         return `<li>
           <div class="row">
-            <span><span class="dot ${dot}"></span> <strong>${esc(p.title)}</strong></span>
+            <span><span class="dot ${still ? "dot--warn" : dot}"></span> <strong>${esc(
+          p.title
+        )}</strong></span>
             <span class="mono dim">${esc(p.status)}</span>
           </div>
+          <div class="row"><span class="event-sub">${seit}</span></div>
           <div class="row">
             <span class="event-sub">${esc(p.kind)} · ${p.quotes || 0} Quoten · ${p.errors || 0} Fehler</span>
             <span class="event-sub mono">${
@@ -1606,6 +1660,12 @@
     reportApiDown(Object.keys(data).length === 0);
     // "Nichts gefunden" und "gar nicht gesucht" sehen im Dashboard gleich aus.
     // Genau dieser Unterschied gehört hingeschrieben.
+    // Dieselbe Grenze wie der Telegram-Alarm. Zwei Stellen mit
+    // verschiedenen Antworten auf dieselbe Frage wären schlimmer als eine
+    // fehlende Anzeige.
+    if (data.health && data.health.silence_alert_seconds != null) {
+      state.silenceAfter = data.health.silence_alert_seconds;
+    }
     const prematchAus = $("prematch-off");
     if (prematchAus) {
       prematchAus.hidden = istLive() || !data.health || data.health.prematch_enabled !== false;
@@ -1649,6 +1709,7 @@
     }
     if (providers) {
       renderProviders(providers);
+      reportSilence(providers);
     }
     if (health || stats) renderSystem(health || {}, stats || {});
 

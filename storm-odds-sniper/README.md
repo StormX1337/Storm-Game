@@ -1445,6 +1445,25 @@ nicht die Frage, ob das System überhaupt noch Daten bekommt.
 
 Abschalten: `SILENCE_ALERT_ENABLED=false`.
 
+**Im Dashboard steht dasselbe** — und zwar ganz oben, weil eine stille Quelle
+jede Zahl darunter zur Momentaufnahme von vorhin macht, ohne dass man es ihr
+ansieht:
+
+```
+🔇 Quelle liefert nichts mehr
+SportsGameOdds (25 Min). Alles auf dieser Seite ist damit ein Stand
+von vorhin — auch wenn es aussieht wie ein ruhiger Markt.
+```
+
+In der Anbieter-Kachel steht es je Quelle: `still seit 25 Min` gegen
+`zuletzt vor 4 s`. Vorher stand dort nur `connected` mit grünem Punkt — eine
+seit zwanzig Minuten stumme Quelle sah damit kerngesund aus. Der Zustand sagt,
+ob die *Verbindung* steht; er sagt nichts darüber, ob *Daten* ankommen.
+
+Dashboard und Telegram nehmen dieselbe Grenze: sie kommt aus `/health`
+(`silence_alert_seconds`). Zwei Stellen, die verschiedene Antworten auf
+dieselbe Frage geben, wären schlimmer als eine fehlende Anzeige.
+
 ### Börsen erkennen — sonst meldet die Arbitrage Verluste als Gewinne
 
 Eine Wettbörse zieht **Kommission vom Gewinn** ab. Eine Quote von 2.03 zahlt

@@ -30,6 +30,10 @@ class HealthResponse(BaseModel):
     #: Bänder zwischen Alarm- und Empfehlungsschwelle. Alarme, die hier
     #: hineinfallen, werden gemeldet und können nie gespielt werden.
     threshold_bands: list[str] = []
+    #: Ab wann eine Quelle als verstummt gilt. Das Dashboard rechnet damit
+    #: dieselbe Grenze wie der Telegram-Alarm - zwei Stellen, die verschiedene
+    #: Antworten auf dieselbe Frage geben, sind schlimmer als eine fehlende.
+    silence_alert_seconds: float | None = None
     components: list[HealthComponent]
 
 
