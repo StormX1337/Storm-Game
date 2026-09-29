@@ -11,7 +11,7 @@ import {
   toMilli,
   type BookSelection,
 } from '../src/domain';
-import type { FootballStatistics, TennisStatistics } from '@storm-bet/types';
+import type { BasketballStatistics, FootballStatistics, TennisStatistics } from '@storm-bet/types';
 
 const limits = {
   minStake: 10,
@@ -234,7 +234,7 @@ describe('settlement rules', () => {
   const r = (
     marketType: Parameters<typeof resolveSelection>[0]['marketType'],
     outcome: Parameters<typeof resolveSelection>[0]['outcome'],
-    stats: FootballStatistics | TennisStatistics,
+    stats: FootballStatistics | TennisStatistics | BasketballStatistics,
     line: number | null = null,
     playerId: string | null = null,
   ) => resolveSelection({ marketType, outcome, line, playerId }, 'FINISHED', stats);
@@ -307,6 +307,76 @@ describe('settlement rules', () => {
         null,
       ),
     ).toThrow(SettlementDataError);
+  });
+
+  it('settles half-time markets on the half, never on the full-time score', () => {
+    const halves = football(3, 1, { firstHalf: { home: 0, away: 1 } });
+    expect(r('HALF_TIME_RESULT', 'AWAY', halves)).toBe('WON');
+    expect(r('HALF_TIME_RESULT', 'HOME', halves)).toBe('LOST');
+    expect(r('FIRST_HALF_TOTAL_GOALS', 'UNDER', halves, 1.5)).toBe('WON');
+    expect(r('FIRST_HALF_HANDICAP', 'HOME', halves, 1)).toBe('VOID');
+    // Second half derived from full time minus first half: 3:0.
+    expect(r('SECOND_HALF_RESULT', 'HOME', halves)).toBe('WON');
+    expect(r('SECOND_HALF_TOTAL_GOALS', 'OVER', halves, 2.5)).toBe('WON');
+    expect(
+      r('SECOND_HALF_RESULT', 'DRAW', football(3, 1, { secondHalf: { home: 1, away: 1 } })),
+    ).toBe('WON');
+    // No half-time score recorded: left to staff, not guessed.
+    expect(() => r('HALF_TIME_RESULT', 'HOME', football(1, 0))).toThrow(SettlementDataError);
+
+    const basketball = (extra: Partial<BasketballStatistics>): BasketballStatistics => ({
+      sport: 'basketball',
+      points: { home: 110, away: 104 },
+      periods: [],
+      ...extra,
+    });
+    const quarters = basketball({
+      periods: [
+        { home: 30, away: 20 },
+        { home: 25, away: 30 },
+        { home: 28, away: 27 },
+        { home: 27, away: 27 },
+      ],
+    });
+    expect(r('FIRST_HALF_WINNER', 'HOME', quarters)).toBe('WON');
+    expect(r('FIRST_HALF_TOTAL_POINTS', 'OVER', quarters, 104.5)).toBe('WON');
+    expect(r('FIRST_HALF_SPREAD', 'AWAY', quarters, -5)).toBe('VOID');
+    expect(r('FIRST_HALF_WINNER', 'AWAY', basketball({ firstHalf: { home: 50, away: 50 } }))).toBe(
+      'VOID',
+    );
+    expect(() => r('FIRST_HALF_WINNER', 'HOME', basketball({}))).toThrow(SettlementDataError);
+  });
+
+  it('settles player markets from official stat lines', () => {
+    const stats: BasketballStatistics = {
+      sport: 'basketball',
+      points: { home: 110, away: 104 },
+      periods: [],
+      players: [
+        { playerId: 'p1', name: 'A', stats: { points: 28, rebounds: 7, assists: 9 } },
+        { playerId: 'p2', name: 'B', stats: { points: 12 } },
+      ],
+    };
+    expect(r('PLAYER_POINTS', 'OVER', stats, 27.5, 'p1')).toBe('WON');
+    expect(r('PLAYER_REBOUNDS', 'UNDER', stats, 7.5, 'p1')).toBe('WON');
+    expect(r('PLAYER_ASSISTS', 'OVER', stats, 9, 'p1')).toBe('VOID');
+    // Did not play: void. Figure not recorded: manual.
+    expect(r('PLAYER_POINTS', 'OVER', stats, 10.5, 'p3')).toBe('VOID');
+    expect(() => r('PLAYER_REBOUNDS', 'OVER', stats, 3.5, 'p2')).toThrow(SettlementDataError);
+    expect(() => r('PLAYER_POINTS', 'OVER', { ...stats, players: undefined }, 10.5, 'p1')).toThrow(
+      SettlementDataError,
+    );
+
+    const scorers = football(2, 0, {
+      goalEvents: undefined,
+      players: [
+        { playerId: 'kane', name: 'Kane', stats: { goals: 2 } },
+        { playerId: 'musiala', name: 'Musiala', stats: { goals: 0 } },
+      ],
+    });
+    expect(r('PLAYER_TO_SCORE', 'PLAYER', scorers, null, 'kane')).toBe('WON');
+    expect(r('PLAYER_TO_SCORE', 'PLAYER', scorers, null, 'musiala')).toBe('LOST');
+    expect(r('PLAYER_TO_SCORE', 'PLAYER', scorers, null, 'bench')).toBe('VOID');
   });
 });
 

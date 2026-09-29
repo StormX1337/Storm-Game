@@ -10,6 +10,23 @@ import { z } from 'zod';
 const count = z.number().int().min(0).max(1_000);
 const pair = z.object({ home: count, away: count });
 const side = z.enum(['HOME', 'AWAY']);
+const stat = z.number().int().min(0).max(1_000);
+const playerLines = z
+  .array(
+    z.object({
+      playerId: z.string().min(1).max(100),
+      name: z.string().max(80).nullable(),
+      stats: z
+        .object({
+          goals: stat.optional(),
+          points: stat.optional(),
+          rebounds: stat.optional(),
+          assists: stat.optional(),
+        })
+        .strict(),
+    }),
+  )
+  .max(80);
 
 export const footballStatisticsSchema = z.object({
   sport: z.literal('football'),
@@ -30,6 +47,9 @@ export const footballStatisticsSchema = z.object({
     )
     .max(60)
     .optional(),
+  firstHalf: pair.optional(),
+  secondHalf: pair.optional(),
+  players: playerLines.optional(),
 });
 
 export const tennisStatisticsSchema = z.object({
@@ -46,6 +66,8 @@ export const basketballStatisticsSchema = z.object({
   points: pair,
   periods: z.array(pair).max(10),
   fouls: pair.optional(),
+  firstHalf: pair.optional(),
+  players: playerLines.optional(),
 });
 
 export const eventStatisticsSchema = z.discriminatedUnion('sport', [

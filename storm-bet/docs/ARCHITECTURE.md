@@ -86,6 +86,13 @@ Jede Buchung speichert den Stand danach; die Tabelle ist append-only.
   Neustart) werden gesammelt nachgeschlagen. Amerikanische Quoten werden in Dezimalquoten umgerechnet;
   ohne feste Buchmacher gilt der Konsens-Preis, Märkte ohne Buchmacher-Marge entfallen. Fußball wird auf
   die reguläre Spielzeit abgerechnet (`reg`); nach Verlängerung bleibt das Ergebnis unbestätigt (manuell).
+  Halbzeit-Märkte kommen aus den Perioden `1h`/`2h`, Spieler-Märkte aus Quoten mit `playerID` (nur Kader
+  der beiden Teams); die Nachabfrage lädt das Ergebnis mit `expandResults=true`, daraus entstehen
+  `firstHalf`/`secondHalf`, Viertel und `players` (Statistikzeilen, im Sync auf interne Spieler-IDs
+  übersetzt).
+- Marktkatalog: jede Definition trägt `period` (`FULL`/`H1`/`H2`) und bei Spieler-Über/Unter die
+  `playerStat`; die Abrechnung liest genau diese Kennzahl. Fehlt sie, bleibt der Markt offen
+  (`SettlementDataError`), ein Spieler ohne Statistikzeile ist ein Nichtstarter (VOID).
 - Gemeinsam (`providers/shared.ts`): Validierung (Linien, Marge), Markt-Freigabe (Kontingent, Live-Alter),
   Score-Statistiken ohne erfundene Details.
 - `OddsSyncService` sperrt Märkte, die der Feed nicht mehr anbietet (z. B. verschobene Linie), statt sie mit

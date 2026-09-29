@@ -1,4 +1,14 @@
-import type { EventStatus, LiveState, MarketType, Pair, SportKey } from '@storm-bet/types';
+import type {
+  BasketballStatistics,
+  EventStatistics,
+  EventStatus,
+  FootballStatistics,
+  LiveState,
+  MarketType,
+  Pair,
+  PlayerStatLine,
+  SportKey,
+} from '@storm-bet/types';
 import { shortName } from '../mock/catalog';
 import {
   ProviderError,
@@ -14,12 +24,15 @@ import {
 import {
   americanToDecimal,
   buildMarket,
+  buildPlayerTotalMarket,
+  buildScorerMarket,
   errorDetail,
   marketGate,
   numberHeader,
   scoreStatistics,
   slug,
   SPORT_NAMES,
+  type PlayerQuote,
   type ProviderQuota,
   type RawMarket,
 } from './shared';
@@ -35,10 +48,12 @@ import {
  * answered from that snapshot. Below a reserve of remaining objects it stops
  * refreshing and suspends all markets.
  *
- * Offered are only markets that settle on the final score: 1X2 / match winner,
- * handicap (spread) and over/under. Prices are American odds, converted to
- * decimal; without configured bookmakers the consensus price is used, and a
- * market whose prices leave the book without margin is not offered.
+ * Offered are only markets the official result object can settle: 1X2 /
+ * match winner, handicap (spread) and over/under for the full game and the
+ * halves, the anytime goalscorer and basketball player points, rebounds and
+ * assists. Prices are American odds, converted to decimal; without configured
+ * bookmakers the consensus price is used, and a market whose prices leave the
+ * book without margin is not offered.
  */
 
 export interface SportsGameOddsOptions {
@@ -111,8 +126,17 @@ interface SgoStatus {
   periods?: { started?: string[]; ended?: string[] };
 }
 
+interface SgoPlayer {
+  playerID?: string;
+  teamID?: string;
+  name?: string;
+  firstName?: string;
+  lastName?: string;
+}
+
 interface SgoEvent {
   eventID?: string;
+  players?: Record<string, SgoPlayer>;
   sportID?: string;
   leagueID?: string;
   teams?: { home?: SgoTeam; away?: SgoTeam };
@@ -170,22 +194,60 @@ const KNOWN_LEAGUES: Record<string, { sportID: string; name: string }> = {
   WTA: { sportID: 'TENNIS', name: 'WTA' },
 };
 
-/** Bet types taken per sport; each settles on the final score. */
-const MARKET_FOR: Record<SportKey, Partial<Record<string, MarketType>>> = {
-  football: { ml3way: 'MATCH_RESULT', sp: 'ASIAN_HANDICAP', ou: 'TOTAL_GOALS' },
-  basketball: { ml: 'MATCH_WINNER', sp: 'POINT_SPREAD', ou: 'TOTAL_POINTS' },
-  tennis: { ml: 'MATCH_WINNER' },
+/** periodIDs of the halves (the feed's docs use both spellings). */
+const H1 = ['1h', 'h1'];
+const H2 = ['2h', 'h2'];
+const QUARTERS = [
+  ['1q', 'q1'],
+  ['2q', 'q2'],
+  ['3q', 'q3'],
+  ['4q', 'q4'],
+];
+
+/**
+ * Team markets per sport: the feed's bet type and the periods it is read
+ * from, in order of preference (football full-time bets are on regular time).
+ */
+const TEAM_MARKETS: Record<SportKey, { type: MarketType; betType: string; periods: string[] }[]> = {
+  football: [
+    { type: 'MATCH_RESULT', betType: 'ml3way', periods: ['reg', 'game'] },
+    { type: 'ASIAN_HANDICAP', betType: 'sp', periods: ['reg', 'game'] },
+    { type: 'TOTAL_GOALS', betType: 'ou', periods: ['reg', 'game'] },
+    { type: 'HALF_TIME_RESULT', betType: 'ml3way', periods: H1 },
+    { type: 'FIRST_HALF_HANDICAP', betType: 'sp', periods: H1 },
+    { type: 'FIRST_HALF_TOTAL_GOALS', betType: 'ou', periods: H1 },
+    { type: 'SECOND_HALF_RESULT', betType: 'ml3way', periods: H2 },
+    { type: 'SECOND_HALF_TOTAL_GOALS', betType: 'ou', periods: H2 },
+  ],
+  basketball: [
+    { type: 'MATCH_WINNER', betType: 'ml', periods: ['game'] },
+    { type: 'POINT_SPREAD', betType: 'sp', periods: ['game'] },
+    { type: 'TOTAL_POINTS', betType: 'ou', periods: ['game'] },
+    { type: 'FIRST_HALF_WINNER', betType: 'ml', periods: H1 },
+    { type: 'FIRST_HALF_SPREAD', betType: 'sp', periods: H1 },
+    { type: 'FIRST_HALF_TOTAL_POINTS', betType: 'ou', periods: H1 },
+  ],
+  tennis: [{ type: 'MATCH_WINNER', betType: 'ml', periods: ['game'] }],
 };
 
-/** Periods whose lines are taken, in order of preference (football bets are on regular time). */
-const PERIODS: Record<SportKey, string[]> = {
-  football: ['reg', 'game'],
-  basketball: ['game'],
-  tennis: ['game'],
+/** Basketball player over/under markets by the feed's statID. */
+const PLAYER_TOTALS: [string, MarketType][] = [
+  ['points', 'PLAYER_POINTS'],
+  ['rebounds', 'PLAYER_REBOUNDS'],
+  ['assists', 'PLAYER_ASSISTS'],
+];
+
+/** Player figures kept from the official result, per sport. */
+const PLAYER_FIGURES: Record<SportKey, ('goals' | 'points' | 'rebounds' | 'assists')[]> = {
+  football: ['goals'],
+  basketball: ['points', 'rebounds', 'assists'],
+  tennis: [],
 };
+
+const TEAM_ENTITIES = new Set(['home', 'away', 'all']);
 
 /** Football periods that belong to regular time; anything else means extra time or penalties. */
-const FOOTBALL_REGULAR = new Set(['game', 'reg', '1h', '2h']);
+const FOOTBALL_REGULAR = new Set(['game', 'reg', ...H1, ...H2]);
 
 const PAGE_SIZE = 50;
 const MAX_PAGES = 20;
@@ -366,7 +428,8 @@ export class SportsGameOddsProvider implements OddsProvider {
     if (ids.length && !this.quotaState.exhausted && now - this.liveAt >= this.options.liveTtlMs) {
       for (let i = 0; i < ids.length; i += PAGE_SIZE) {
         const chunk = ids.slice(i, i + PAGE_SIZE);
-        const data = await this.fetchEvents({ eventIDs: chunk.join(',') });
+        // Full box scores: player figures settle the player markets.
+        const data = await this.fetchEvents({ eventIDs: chunk.join(','), expandResults: 'true' });
         const found = new Set<string>();
         for (const event of data) {
           if (!event.eventID) continue;
@@ -450,13 +513,29 @@ export class SportsGameOddsProvider implements OddsProvider {
 
   // ─── mapping ──────────────────────────────────────────────────────────────
 
-  private team(league: League, team: SgoTeam, name: string): ProviderTeam {
+  private team(league: League, team: SgoTeam, name: string, event: SgoEvent): ProviderTeam {
+    const roster = team.teamID
+      ? [...this.roster(event)].filter(([, p]) => p.teamID === team.teamID)
+      : [];
     return {
       externalId: team.teamID ?? `${league.id}:${slug(name)}`,
       name,
       shortName: team.names?.short?.slice(0, 5) || shortName(name),
-      players: [],
+      players: roster.map(([externalId, p]) => ({ externalId, name: p.name, position: null })),
     };
+  }
+
+  /** Players of this event's two teams, by the feed's playerID. */
+  private roster(event: SgoEvent): Map<string, { name: string; teamID: string }> {
+    const teams = new Set([event.teams?.home?.teamID, event.teams?.away?.teamID]);
+    const out = new Map<string, { name: string; teamID: string }>();
+    for (const [key, p] of Object.entries(event.players ?? {})) {
+      const id = p.playerID ?? key;
+      const name = (p.name ?? [p.firstName, p.lastName].filter(Boolean).join(' ')).trim();
+      if (!name || !p.teamID || !teams.has(p.teamID)) continue;
+      out.set(id, { name: name.slice(0, 80), teamID: p.teamID });
+    }
+    return out;
   }
 
   private toEvent(event: SgoEvent, league: League): ProviderEvent | null {
@@ -472,6 +551,7 @@ export class SportsGameOddsProvider implements OddsProvider {
 
     let status: EventStatus;
     let score: Pair | null = null;
+    let final: Pair | null = null;
     let resultFinal = false;
     let liveState: LiveState | null;
     if (st.cancelled) {
@@ -481,7 +561,7 @@ export class SportsGameOddsProvider implements OddsProvider {
       liveState = null;
     } else if (st.finalized || st.completed || st.ended) {
       status = 'FINISHED';
-      const final = this.finalScore(league.sport, event);
+      final = this.finalScore(league.sport, event);
       score = final ?? live;
       resultFinal = !!st.finalized && final !== null;
       liveState = { period: 'FT', clock: null };
@@ -497,13 +577,17 @@ export class SportsGameOddsProvider implements OddsProvider {
       externalId: event.eventID,
       sportKey: league.sport,
       leagueExternalId: league.id,
-      home: this.team(league, home, homeName),
-      away: this.team(league, away, awayName),
+      home: this.team(league, home, homeName, event),
+      away: this.team(league, away, awayName, event),
       startTime: new Date(startsAt).toISOString(),
       status,
       score,
       liveState,
-      statistics: score ? scoreStatistics(league.sport, score) : null,
+      statistics: final
+        ? this.resultStatistics(league.sport, event, final)
+        : score
+          ? scoreStatistics(league.sport, score)
+          : null,
       resultFinal,
     };
   }
@@ -527,6 +611,63 @@ export class SportsGameOddsProvider implements OddsProvider {
     return period('reg') ?? period('game') ?? teams;
   }
 
+  /** Official figures: the score, the halves and player stat lines — only what the feed reports. */
+  private resultStatistics(sport: SportKey, event: SgoEvent, final: Pair): EventStatistics {
+    const results = event.results ?? {};
+    const period = (ids: string[]) => {
+      for (const id of ids) {
+        const pair = pairOf(results[id]?.home?.points, results[id]?.away?.points);
+        if (pair) return pair;
+      }
+      return null;
+    };
+    const stats = scoreStatistics(sport, final);
+    if (stats.sport === 'football') {
+      const football: FootballStatistics = { ...stats };
+      const firstHalf = period(H1);
+      const secondHalf = period(H2);
+      if (firstHalf) football.firstHalf = firstHalf;
+      if (secondHalf) football.secondHalf = secondHalf;
+      const players = this.playerLines(sport, event);
+      if (players) football.players = players;
+      return football;
+    }
+    if (stats.sport === 'basketball') {
+      const basketball: BasketballStatistics = { ...stats };
+      const quarters = QUARTERS.map(period);
+      if (quarters.every((q) => q !== null)) basketball.periods = quarters as Pair[];
+      const firstHalf = period(H1);
+      if (firstHalf) basketball.firstHalf = firstHalf;
+      const players = this.playerLines(sport, event);
+      if (players) basketball.players = players;
+      return basketball;
+    }
+    return stats;
+  }
+
+  /**
+   * Player stat lines from the full-game result (football regular time: a game
+   * with extra time never gets here). Undefined when the feed reports none.
+   */
+  private playerLines(sport: SportKey, event: SgoEvent): PlayerStatLine[] | undefined {
+    const figures = PLAYER_FIGURES[sport];
+    const game = event.results?.game ?? event.results?.reg;
+    if (!game || figures.length === 0) return undefined;
+    const roster = this.roster(event);
+    const lines: PlayerStatLine[] = [];
+    for (const [entity, values] of Object.entries(game)) {
+      if (TEAM_ENTITIES.has(entity)) continue;
+      const stats: PlayerStatLine['stats'] = {};
+      for (const figure of figures) {
+        const value = num(values?.[figure]);
+        if (value !== null && Number.isInteger(value) && value >= 0) stats[figure] = value;
+      }
+      if (Object.keys(stats).length === 0) continue;
+      lines.push({ playerId: entity, name: roster.get(entity)?.name ?? null, stats });
+    }
+    return lines.length ? lines : undefined;
+  }
+
   private buildMarkets(sport: SportKey, stored: Stored, event: ProviderEvent): ProviderMarket[] {
     const gate = marketGate({
       eventStatus: event.status,
@@ -535,15 +676,15 @@ export class SportsGameOddsProvider implements OddsProvider {
       ageMs: this.now() - stored.fetchedAt,
       liveMaxAgeMs: this.options.liveMaxAgeMs,
     });
-    const odds = Object.values(stored.event.odds ?? {}).filter(
-      (o) => o.statID === 'points' && !o.playerID && !o.ended && !o.cancelled,
+    const open = Object.values(stored.event.odds ?? {}).filter((o) => !o.ended && !o.cancelled);
+    const odds = open.filter(
+      (o) => o.statID === 'points' && !o.playerID && TEAM_ENTITIES.has(o.statEntityID ?? ''),
     );
     const bookmaker = this.pickBookmaker(sport, odds);
     const names = { home: event.home.name, away: event.away.name };
     const markets: ProviderMarket[] = [];
-    for (const [betType, type] of Object.entries(MARKET_FOR[sport])) {
-      if (!type) continue;
-      for (const periodID of PERIODS[sport]) {
+    for (const { type, betType, periods } of TEAM_MARKETS[sport]) {
+      for (const periodID of periods) {
         const inPeriod = odds.filter((o) => o.betTypeID === betType && o.periodID === periodID);
         const raw = this.rawMarket(betType, inPeriod, bookmaker);
         const market = raw ? buildMarket(type, raw, names, gate) : null;
@@ -551,6 +692,77 @@ export class SportsGameOddsProvider implements OddsProvider {
           markets.push(market);
           break;
         }
+      }
+    }
+    markets.push(...this.playerMarkets(sport, stored.event, open, bookmaker, gate));
+    return markets;
+  }
+
+  /**
+   * Player markets for players of the two teams: the anytime goalscorer
+   * ("yes" on goals, or over 0.5 goals) and basketball player over/unders.
+   */
+  private playerMarkets(
+    sport: SportKey,
+    event: SgoEvent,
+    odds: SgoOdd[],
+    bookmaker: string | null,
+    gate: ReturnType<typeof marketGate>,
+  ): ProviderMarket[] {
+    const roster = this.roster(event);
+    const byPlayer = new Map<string, SgoOdd[]>();
+    for (const o of odds) {
+      if (!o.playerID || o.statEntityID !== o.playerID || !roster.has(o.playerID)) continue;
+      byPlayer.set(o.playerID, [...(byPlayer.get(o.playerID) ?? []), o]);
+    }
+    if (sport === 'football') {
+      const quotes: PlayerQuote[] = [];
+      for (const [playerID, list] of byPlayer) {
+        const goals = list.filter(
+          (o) => o.statID === 'goals' && (o.periodID === 'game' || o.periodID === 'reg'),
+        );
+        const yes = this.quote(
+          goals.find((o) => o.betTypeID === 'yn' && o.sideID === 'yes'),
+          bookmaker,
+        );
+        const over = this.quote(
+          goals.find((o) => o.betTypeID === 'ou' && o.sideID === 'over'),
+          bookmaker,
+        );
+        const odds = yes?.odds ?? (over?.overUnder === 0.5 ? over.odds : null);
+        if (odds !== null)
+          quotes.push({ externalId: playerID, name: roster.get(playerID)!.name, odds });
+      }
+      const market = buildScorerMarket(quotes, gate);
+      return market ? [market] : [];
+    }
+    if (sport !== 'basketball') return [];
+    const markets: ProviderMarket[] = [];
+    for (const [playerID, list] of byPlayer) {
+      const player = { externalId: playerID, name: roster.get(playerID)!.name };
+      for (const [statID, type] of PLAYER_TOTALS) {
+        const mine = list.filter(
+          (o) => o.statID === statID && o.periodID === 'game' && o.betTypeID === 'ou',
+        );
+        const over = this.quote(
+          mine.find((o) => o.sideID === 'over'),
+          bookmaker,
+        );
+        const under = this.quote(
+          mine.find((o) => o.sideID === 'under'),
+          bookmaker,
+        );
+        if (!over || !under || over.overUnder === null || over.overUnder !== under.overUnder)
+          continue;
+        const market = buildPlayerTotalMarket(
+          type,
+          player,
+          over.overUnder,
+          over.odds,
+          under.odds,
+          gate,
+        );
+        if (market) markets.push(market);
       }
     }
     return markets;

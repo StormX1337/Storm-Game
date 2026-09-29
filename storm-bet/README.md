@@ -16,7 +16,8 @@ keinen Echtgeldbetrieb; der entsprechende Schalter ist technisch gesperrt.
 
 - Sportsbook für Fußball, Tennis und Basketball: Ligen, Events, Live-Events mit Spielstand und Statistiken
 - Märkte: 1X2, Doppelte Chance, Draw No Bet, Über/Unter, Asiatisches Handicap, Beide treffen, Ecken, Karten,
-  Torschützen, Sieger, Satzwetten, Spiele-/Punkte-Handicaps und -Totals
+  Torschützen, Sieger, Satzwetten, Spiele-/Punkte-Handicaps und -Totals; mit SportsGameOdds zusätzlich
+  Halbzeit-Wetten und Spieler-Wetten (Basketball-Punkte/-Rebounds/-Assists)
 - Wettschein mit Einzel-, Zweier-, Dreier- und Kombiwetten, serverseitiger Quote, sichtbarer Quotenänderung
   („Quote wurde aktualisiert.“) und ausdrücklicher Annahme; Sticky-Wettschein auf Mobile
 - Live-Updates per Server-Sent Events (Quoten, Marktstatus, Spielstand)

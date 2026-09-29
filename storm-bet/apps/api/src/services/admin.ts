@@ -633,6 +633,12 @@ export class AdminService {
           `${definition.label} ist für ${sport.name} nicht verfügbar.`,
         );
       }
+      if (definition.kind === 'PLAYER_TOTAL') {
+        throw new AppError(
+          'VALIDATION_ERROR',
+          `${definition.label} gibt es nur aus dem Quoten-Feed.`,
+        );
+      }
       if (definition.hasLine !== (m.line !== null)) {
         throw new AppError(
           'VALIDATION_ERROR',

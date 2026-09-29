@@ -191,8 +191,7 @@ export function buildMarket(
   const overround = prices.reduce<number>((sum, p) => sum + 1 / p!, 0);
   if (overround < 1) return null;
 
-  const selectionStatus =
-    gate.status === 'OPEN' ? 'OPEN' : gate.status === 'CLOSED' ? 'CLOSED' : 'SUSPENDED';
+  const selectionStatus = selectionStatusFor(gate);
   return {
     key: marketKey(type, line),
     type,
@@ -211,5 +210,89 @@ export function buildMarket(
       status: selectionStatus,
       playerExternalId: null,
     })),
+  };
+}
+
+function selectionStatusFor(gate: MarketGate): ProviderSelection['status'] {
+  return gate.status === 'OPEN' ? 'OPEN' : gate.status === 'CLOSED' ? 'CLOSED' : 'SUSPENDED';
+}
+
+export interface PlayerQuote {
+  /** The feed's player id; the sync layer maps it to the internal player. */
+  externalId: string;
+  name: string;
+  odds: number | null;
+}
+
+/**
+ * Anytime goalscorer: one selection per player. Each is its own yes-bet, so
+ * the prices of a scorer market do not add up to one book.
+ */
+export function buildScorerMarket(players: PlayerQuote[], gate: MarketGate): ProviderMarket | null {
+  const quotes = players
+    .map((p) => ({ ...p, odds: p.odds === null ? null : price(p.odds) }))
+    .filter((p): p is PlayerQuote & { odds: number } => p.odds !== null)
+    .sort((a, b) => a.odds - b.odds || a.name.localeCompare(b.name));
+  if (quotes.length === 0) return null;
+  const status = selectionStatusFor(gate);
+  return {
+    key: marketKey('PLAYER_TO_SCORE', null),
+    type: 'PLAYER_TO_SCORE',
+    name: MARKET_DEFINITIONS.PLAYER_TO_SCORE.label,
+    line: null,
+    status: gate.status,
+    suspensionReason: gate.status === 'SUSPENDED' ? gate.reason : null,
+    selections: quotes.map((p) => ({
+      key: `PLAYER:${p.externalId}`,
+      name: p.name,
+      outcome: 'PLAYER',
+      odds: p.odds,
+      status,
+      playerExternalId: p.externalId,
+    })),
+  };
+}
+
+/** Over/under on one player's figure; one market per player and line. */
+export function buildPlayerTotalMarket(
+  type: MarketType,
+  player: { externalId: string; name: string },
+  line: number,
+  over: number | null,
+  under: number | null,
+  gate: MarketGate,
+): ProviderMarket | null {
+  const definition = MARKET_DEFINITIONS[type];
+  if (definition.kind !== 'PLAYER_TOTAL' || !isSupportedLine(line) || line <= 0) return null;
+  const o = over === null ? null : price(over);
+  const u = under === null ? null : price(under);
+  if (o === null || u === null || 1 / o + 1 / u < 1) return null;
+  const status = selectionStatusFor(gate);
+  const figure = definition.label.replace(/^Spieler – /, '');
+  return {
+    key: `${type}:${player.externalId}:${line}`,
+    type,
+    name: `${player.name} – ${figure} ${lineLabel(line, false)}`,
+    line,
+    status: gate.status,
+    suspensionReason: gate.status === 'SUSPENDED' ? gate.reason : null,
+    selections: [
+      {
+        key: 'OVER',
+        name: `Über ${line}`,
+        outcome: 'OVER',
+        odds: o,
+        status,
+        playerExternalId: player.externalId,
+      },
+      {
+        key: 'UNDER',
+        name: `Unter ${line}`,
+        outcome: 'UNDER',
+        odds: u,
+        status,
+        playerExternalId: player.externalId,
+      },
+    ],
   };
 }

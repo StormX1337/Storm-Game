@@ -312,6 +312,33 @@ describe('admin API', () => {
     });
     expect(created.status).toBe(201);
     const eventId = created.body.id;
+
+    // Player over/unders need a feed player per selection: never created by hand.
+    const basketballLeague = catalog.leagues.find(
+      (l: { sportKey: string }) => l.sportKey === 'basketball',
+    );
+    const basketballTeams = catalog.teams.filter(
+      (x: { sportKey: string }) => x.sportKey === 'basketball',
+    );
+    const rejected = await adminClient.post('/api/admin/events', {
+      sport: 'basketball',
+      leagueId: basketballLeague.id,
+      homeTeamId: basketballTeams[0].id,
+      awayTeamId: basketballTeams[1].id,
+      startTime: new Date(Date.now() + 3_600_000).toISOString(),
+      markets: [
+        {
+          type: 'PLAYER_POINTS',
+          line: 20.5,
+          selections: [
+            { outcome: 'OVER', odds: 1.9 },
+            { outcome: 'UNDER', odds: 1.9 },
+          ],
+        },
+      ],
+    });
+    expect(rejected.status).toBe(400);
+    expect(rejected.body.error.message).toMatch(/nur aus dem Quoten-Feed/);
     const home = created.body.markets[0].selections.find(
       (s: { outcome: string }) => s.outcome === 'HOME',
     );

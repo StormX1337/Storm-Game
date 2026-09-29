@@ -133,12 +133,19 @@ extra. Beispiel: 5 Ligen, 48 h, Snapshot alle 30 Min. ⇒ etwa 30 Spiele × 48 =
 Der Gratis-Plan (2.500 Objekte/Monat, 10 Anfragen/Min.) reicht nur für eine Liga mit Snapshots im
 Stundenbereich. Unter `SGO_MIN_REMAINING` stoppt der Worker und suspendiert die Märkte.
 
-**Angebot:** wie bei The Odds API nur 1X2/Sieger, Handicap und Über/Unter (Fußball auf die reguläre
-Spielzeit). Ohne `SGO_BOOKMAKERS` wird der Konsens-Preis aller Buchmacher verwendet; ein Markt, dessen
-Preise dem Buchmacher keine Marge lassen, wird nicht angeboten. Endet ein Fußballspiel mit
-Verlängerung/Elfmeterschießen, wird das Ergebnis nicht automatisch bestätigt, sondern im Admin-Bereich
-erfasst. Abgesagte Spiele werden mit Quote 1,00 abgerechnet. Netzwerk: ausgehend HTTPS zu
-`api.sportsgameodds.com`.
+**Angebot:** 1X2/Sieger, Handicap und Über/Unter (Fußball auf die reguläre Spielzeit), dazu
+**Halbzeit-Wetten** (Fußball: 1. Halbzeit Ergebnis/Handicap/Tore, 2. Halbzeit Ergebnis/Tore; Basketball:
+
+1. Halbzeit Sieger/Handicap/Punkte) und **Spieler-Wetten** (Torschütze jederzeit; Basketball-Punkte,
+   -Rebounds und -Assists Über/Unter) – nur für Spieler der beiden Teams. Abgerechnet wird aus dem offiziellen
+   Ergebnisobjekt (Halbzeiten, Viertel, Spielerwerte). Ein Spieler ohne Statistikzeile gilt als nicht
+   eingesetzt (Wette ungültig, Einsatz zurück); fehlen Spielerwerte ganz, bleibt der Markt für Staff offen
+   (Halbzeitstand und Basketball-Spielerwerte lassen sich im Ergebnisformular erfassen). Spieler-Märkte
+   kosten keine Extra-Objekte. Ohne `SGO_BOOKMAKERS` wird der Konsens-Preis aller Buchmacher verwendet; ein Markt, dessen
+   Preise dem Buchmacher keine Marge lassen, wird nicht angeboten. Endet ein Fußballspiel mit
+   Verlängerung/Elfmeterschießen, wird das Ergebnis nicht automatisch bestätigt, sondern im Admin-Bereich
+   erfasst. Abgesagte Spiele werden mit Quote 1,00 abgerechnet. Netzwerk: ausgehend HTTPS zu
+   `api.sportsgameodds.com`.
 
 ## Tests
 

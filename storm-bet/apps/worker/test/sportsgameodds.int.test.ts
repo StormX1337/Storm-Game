@@ -30,7 +30,7 @@ describe('SportsGameOdds → sync → settlement', () => {
     const provider = new SportsGameOddsProvider({
       apiKey: 'test-key-1234567890',
       baseUrl: 'https://api.test/v2',
-      leagues: ['BUNDESLIGA'],
+      leagues: ['BUNDESLIGA', 'NBA'],
       bookmakers: [],
       horizonHours: 48,
       oddsTtlMs: 30 * MINUTE,
@@ -62,20 +62,50 @@ describe('SportsGameOdds → sync → settlement', () => {
     expect(byId.get('sgo-no-margin')!.markets).toHaveLength(0);
 
     const upcoming = byId.get('sgo-upcoming')!;
-    const pick = (type: string, outcome: string) => {
-      const market = upcoming.markets.find((m) => m.type === type);
+    const nba = byId.get('nba-1')!;
+    const players = new Map(
+      (await db.player.findMany({ where: { provider: key } })).map((p) => [p.externalId, p.id]),
+    );
+    const pick = (
+      event: typeof upcoming,
+      type: string,
+      outcome: string,
+      playerExternalId?: string,
+    ) => {
+      const market = event.markets.find(
+        (m) =>
+          m.type === type &&
+          (!playerExternalId ||
+            m.selections.some((s) => s.playerId === players.get(playerExternalId))),
+      );
       expect(market?.status, type).toBe('OPEN');
-      return market!.selections.find((s) => s.outcome === outcome)!;
+      return market!.selections.find(
+        (s) =>
+          s.outcome === outcome &&
+          (!playerExternalId || s.playerId === players.get(playerExternalId)),
+      )!;
     };
-    const home = pick('MATCH_RESULT', 'HOME');
-    const handicap = pick('ASIAN_HANDICAP', 'HOME');
-    const under = pick('TOTAL_GOALS', 'UNDER');
+    const home = pick(upcoming, 'MATCH_RESULT', 'HOME');
+    const handicap = pick(upcoming, 'ASIAN_HANDICAP', 'HOME');
+    const under = pick(upcoming, 'TOTAL_GOALS', 'UNDER');
     expect([home, handicap, under].map((s) => Number(s.odds))).toEqual([1.625, 1.926, 2.12]);
+    const halfTimeAway = pick(upcoming, 'HALF_TIME_RESULT', 'AWAY');
+    const secondHalfOver = pick(upcoming, 'SECOND_HALF_TOTAL_GOALS', 'OVER');
+    const kane = pick(upcoming, 'PLAYER_TO_SCORE', 'PLAYER', 'HARRY_KANE_1_BUNDESLIGA');
+    const musiala = pick(upcoming, 'PLAYER_TO_SCORE', 'PLAYER', 'JAMAL_MUSIALA_1_BUNDESLIGA');
+    const tatumOver = pick(nba, 'PLAYER_POINTS', 'OVER', 'JAYSON_TATUM_1_NBA');
+    const firstHalfUnder = pick(nba, 'FIRST_HALF_TOTAL_POINTS', 'UNDER');
+    const firstHalfHome = pick(nba, 'FIRST_HALF_WINNER', 'HOME');
+    expect(
+      [halfTimeAway, secondHalfOver, kane, musiala, tatumOver, firstHalfUnder, firstHalfHome].map(
+        (s) => Number(s.odds),
+      ),
+    ).toEqual([4, 1.909, 1.833, 3.1, 1.87, 1.909, 1.417]);
 
     const user = await db.user.create({
       data: { email: `sgo-${randomUUID()}@test.local`, displayName: 'SGO', passwordHash: 'x' },
     });
-    await withTransaction(db, (tx) => openWallet(tx, user.id, 10_000n));
+    await withTransaction(db, (tx) => openWallet(tx, user.id, 20_000n));
     const placement = new BetPlacementService({
       db,
       redis,
@@ -84,7 +114,19 @@ describe('SportsGameOdds → sync → settlement', () => {
       now: () => new Date(now),
     });
     const betIds: string[] = [];
-    for (const s of [home, handicap, under]) {
+    const picks = [
+      home,
+      handicap,
+      under,
+      halfTimeAway,
+      secondHalfOver,
+      kane,
+      musiala,
+      tatumOver,
+      firstHalfUnder,
+      firstHalfHome,
+    ];
+    for (const s of picks) {
       const placed = await placement.place(user.id, {
         idempotencyKey: randomUUID(),
         mode: 'COMBO',
@@ -95,44 +137,76 @@ describe('SportsGameOdds → sync → settlement', () => {
       betIds.push(placed.bets[0]!.id);
     }
 
-    // The game is played and the result finalized: 3:1 in regular time.
-    const row = api.data.find((e) => e.eventID === 'sgo-upcoming') as Record<string, unknown> & {
+    // Both games are played and their results finalized.
+    type Row = Record<string, unknown> & {
       status: Record<string, unknown>;
       teams: { home: Record<string, unknown>; away: Record<string, unknown> };
     };
-    Object.assign(row.status, {
-      started: true,
-      ended: true,
-      completed: true,
-      finalized: true,
-      periods: { started: ['1h', '2h'], ended: ['1h', '2h'] },
-    });
-    row.teams.home.score = 3;
-    row.teams.away.score = 1;
-    row.results = {
-      game: { home: { points: 3 }, away: { points: 1 } },
-      reg: { home: { points: 3 }, away: { points: 1 } },
+    const finish = (id: string, home: number, away: number, results: unknown) => {
+      const row = api.data.find((e) => e.eventID === id) as Row;
+      Object.assign(row.status, { started: true, ended: true, completed: true, finalized: true });
+      row.teams.home.score = home;
+      row.teams.away.score = away;
+      row.results = results;
     };
-    now = T0 + 240 * MINUTE;
+    // 3:1 in regular time, 0:1 at half time; Kane scores twice, Musiala not.
+    finish('sgo-upcoming', 3, 1, {
+      game: {
+        home: { points: 3 },
+        away: { points: 1 },
+        HARRY_KANE_1_BUNDESLIGA: { goals: 2 },
+        JAMAL_MUSIALA_1_BUNDESLIGA: { goals: 0 },
+        SERHOU_GUIRASSY_1_BUNDESLIGA: { goals: 1 },
+      },
+      reg: { home: { points: 3 }, away: { points: 1 } },
+      '1h': { home: { points: 0 }, away: { points: 1 } },
+      '2h': { home: { points: 3 }, away: { points: 0 } },
+    });
+    // 110:104, first half 50:55; Tatum scores 31.
+    finish('nba-1', 110, 104, {
+      game: {
+        home: { points: 110 },
+        away: { points: 104 },
+        JAYSON_TATUM_1_NBA: { points: 31, rebounds: 7, assists: 4 },
+        JIMMY_BUTLER_1_NBA: { points: 20, rebounds: 5, assists: 6 },
+      },
+      '1h': { home: { points: 50 }, away: { points: 55 } },
+    });
+    now = T0 + 15 * 60 * MINUTE;
     await sync.syncLive();
 
     const finished = await db.event.findUniqueOrThrow({ where: { id: upcoming.id } });
     expect(finished).toMatchObject({ status: 'FINISHED', homeScore: 3, awayScore: 1 });
     expect(finished.resultConfirmedAt).not.toBeNull();
+    // Stat lines carry internal player ids.
+    const stats = finished.statistics as { players: { playerId: string }[] };
+    expect(stats.players.map((p) => p.playerId)).toContain(players.get('HARRY_KANE_1_BUNDESLIGA'));
 
     const settlement = new SettlementService({ db, redis, now: () => new Date(now) });
     expect(await settlement.settleEvent(upcoming.id)).toMatchObject({
       completed: true,
+      settledBets: 7,
+    });
+    expect(await settlement.settleEvent(nba.id)).toMatchObject({
+      completed: true,
       settledBets: 3,
     });
-    const bets = new Map(
-      (await db.bet.findMany({ where: { id: { in: betIds } } })).map((b) => [b.id, b]),
-    );
-    expect(bets.get(betIds[0]!)).toMatchObject({ status: 'WON', payout: 1_625n });
-    expect(bets.get(betIds[1]!)).toMatchObject({ status: 'WON', payout: 1_926n });
-    expect(bets.get(betIds[2]!)).toMatchObject({ status: 'LOST', payout: 0n });
+    const bets = await db.bet.findMany({ where: { id: { in: betIds } } });
+    const byBet = new Map(bets.map((b) => [b.id, b]));
+    expect(betIds.map((id) => [byBet.get(id)!.status, byBet.get(id)!.payout])).toEqual([
+      ['WON', 1_625n], // 1X2 home
+      ['WON', 1_926n], // handicap -1.5
+      ['LOST', 0n], // under 3.5
+      ['WON', 4_000n], // half time: away
+      ['WON', 1_909n], // second half over 1.5 (3:0)
+      ['WON', 1_833n], // Kane scores
+      ['LOST', 0n], // Musiala does not
+      ['WON', 1_870n], // Tatum over 27.5 points
+      ['WON', 1_909n], // first half under 108.5 (105)
+      ['LOST', 0n], // first half home (50:55)
+    ]);
     expect(await db.wallet.findUniqueOrThrow({ where: { userId: user.id } })).toMatchObject({
-      balance: 10_000n - 3_000n + 1_625n + 1_926n,
+      balance: 20_000n - 10_000n + 1_625n + 1_926n + 4_000n + 1_909n + 1_833n + 1_870n + 1_909n,
       reserved: 0n,
     });
   });

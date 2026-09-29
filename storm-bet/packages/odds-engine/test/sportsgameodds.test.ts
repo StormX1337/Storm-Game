@@ -40,6 +40,17 @@ const window = {
   to: new Date(T0 + 48 * 3_600_000).toISOString(),
 };
 
+const FULL_GAME = new Set([
+  'MATCH_RESULT',
+  'ASIAN_HANDICAP',
+  'TOTAL_GOALS',
+  'MATCH_WINNER',
+  'POINT_SPREAD',
+  'TOTAL_POINTS',
+]);
+const fullGame = <T extends { type: string }>(markets: T[]) =>
+  markets.filter((m) => FULL_GAME.has(m.type));
+
 const prices = (market: { selections: { outcome: string; odds: number }[] } | undefined) =>
   Object.fromEntries((market?.selections ?? []).map((s) => [s.outcome, s.odds]));
 
@@ -96,7 +107,7 @@ describe('SportsGameOddsProvider', () => {
       home: { externalId: 'BAYERN_MUNICH_BUNDESLIGA', name: 'Bayern Munich', shortName: 'BAY' },
       resultFinal: false,
     });
-    const markets = await p.getMarkets('sgo-upcoming');
+    const markets = fullGame(await p.getMarkets('sgo-upcoming'));
     expect(markets.map((m) => m.key).sort()).toEqual([
       'ASIAN_HANDICAP:-1.5',
       'MATCH_RESULT',
@@ -144,7 +155,7 @@ describe('SportsGameOddsProvider', () => {
   it('maps basketball and tennis', async () => {
     const { provider: p } = provider();
     await p.getEvents(window);
-    const nba = await p.getMarkets('nba-1');
+    const nba = fullGame(await p.getMarkets('nba-1'));
     expect(nba.map((m) => m.key).sort()).toEqual([
       'MATCH_WINNER',
       'POINT_SPREAD:-7.5',
@@ -154,6 +165,111 @@ describe('SportsGameOddsProvider', () => {
     const tennis = await p.getMarkets('atp-1');
     expect(tennis.map((m) => m.key)).toEqual(['MATCH_WINNER']);
     expect(prices(tennis[0])).toEqual({ HOME: 1.3, AWAY: 3.6 });
+  });
+
+  it('offers first- and second-half markets from the half periods', async () => {
+    const { provider: p } = provider();
+    await p.getEvents(window);
+    const football = await p.getMarkets('sgo-upcoming');
+    const byType = (t: string) => football.find((m) => m.type === t);
+    expect(prices(byType('HALF_TIME_RESULT'))).toEqual({ HOME: 2.2, DRAW: 2.3, AWAY: 4 });
+    expect(byType('FIRST_HALF_HANDICAP')).toMatchObject({ key: 'FIRST_HALF_HANDICAP:-0.5' });
+    expect(prices(byType('FIRST_HALF_TOTAL_GOALS'))).toEqual({ OVER: 2.05, UNDER: 1.8 });
+    expect(prices(byType('SECOND_HALF_RESULT'))).toEqual({ HOME: 2.05, DRAW: 3.2, AWAY: 4.2 });
+    expect(byType('SECOND_HALF_TOTAL_GOALS')).toMatchObject({
+      key: 'SECOND_HALF_TOTAL_GOALS:1.5',
+      name: '2. Halbzeit – Tore Über/Unter 1.5',
+    });
+
+    const nba = await p.getMarkets('nba-1');
+    expect(prices(nba.find((m) => m.type === 'FIRST_HALF_WINNER'))).toEqual({
+      HOME: 1.417,
+      AWAY: 2.95,
+    });
+    expect(nba.map((m) => m.key)).toEqual(
+      expect.arrayContaining(['FIRST_HALF_SPREAD:-4.5', 'FIRST_HALF_TOTAL_POINTS:108.5']),
+    );
+  });
+
+  it('offers player markets only for players of the two teams', async () => {
+    const { provider: p } = provider();
+    const [event] = (await p.getEvents(window)).filter((e) => e.externalId === 'sgo-upcoming');
+    expect(event!.home.players.map((pl) => pl.externalId).sort()).toEqual([
+      'HARRY_KANE_1_BUNDESLIGA',
+      'JAMAL_MUSIALA_1_BUNDESLIGA',
+    ]);
+    expect(event!.away.players.map((pl) => pl.name)).toEqual(['Serhou Guirassy']);
+
+    const scorer = (await p.getMarkets('sgo-upcoming')).find((m) => m.type === 'PLAYER_TO_SCORE')!;
+    // "yes" or over 0.5 goals; the player of another team is left out.
+    expect(scorer.selections.map((s) => [s.key, s.name, s.odds, s.playerExternalId])).toEqual([
+      ['PLAYER:HARRY_KANE_1_BUNDESLIGA', 'Harry Kane', 1.833, 'HARRY_KANE_1_BUNDESLIGA'],
+      ['PLAYER:JAMAL_MUSIALA_1_BUNDESLIGA', 'Jamal Musiala', 3.1, 'JAMAL_MUSIALA_1_BUNDESLIGA'],
+      [
+        'PLAYER:SERHOU_GUIRASSY_1_BUNDESLIGA',
+        'Serhou Guirassy',
+        3.5,
+        'SERHOU_GUIRASSY_1_BUNDESLIGA',
+      ],
+    ]);
+
+    const nba = await p.getMarkets('nba-1');
+    const players = nba.filter((m) => m.type.startsWith('PLAYER_'));
+    expect(players.map((m) => m.key).sort()).toEqual([
+      'PLAYER_ASSISTS:JIMMY_BUTLER_1_NBA:5.5',
+      'PLAYER_POINTS:JAYSON_TATUM_1_NBA:27.5',
+      'PLAYER_REBOUNDS:JAYSON_TATUM_1_NBA:8.5',
+    ]);
+    const tatum = players.find((m) => m.type === 'PLAYER_POINTS')!;
+    expect(tatum).toMatchObject({ name: 'Jayson Tatum – Punkte Über/Unter 27.5', line: 27.5 });
+    expect(tatum.selections.map((s) => [s.outcome, s.name, s.odds, s.playerExternalId])).toEqual([
+      ['OVER', 'Über 27.5', 1.87, 'JAYSON_TATUM_1_NBA'],
+      ['UNDER', 'Unter 27.5', 1.952, 'JAYSON_TATUM_1_NBA'],
+    ]);
+  });
+
+  it('reads halves, quarters and player stat lines from the official result', async () => {
+    let now = T0;
+    const { provider: p } = provider({}, fakeSgo(), () => now);
+    await p.getEvent('sgo-finished');
+    await p.getEvent('nba-finished');
+    now += 3 * MINUTE;
+    expect((await p.getEvent('sgo-finished'))!.statistics).toEqual({
+      sport: 'football',
+      goals: { home: 2, away: 2 },
+      firstHalf: { home: 1, away: 0 },
+      secondHalf: { home: 1, away: 2 },
+      players: [
+        { playerId: 'LOIS_OPENDA_1_BUNDESLIGA', name: 'Loïs Openda', stats: { goals: 2 } },
+        { playerId: 'XAVI_SIMONS_1_BUNDESLIGA', name: 'Xavi Simons', stats: { goals: 0 } },
+        { playerId: 'PATRIK_SCHICK_1_BUNDESLIGA', name: 'Patrik Schick', stats: { goals: 2 } },
+      ],
+    });
+    const nba = (await p.getEvent('nba-finished'))!;
+    expect(nba).toMatchObject({ status: 'FINISHED', resultFinal: true });
+    expect(nba.statistics).toMatchObject({
+      sport: 'basketball',
+      points: { home: 112, away: 104 },
+      firstHalf: { home: 56, away: 52 },
+      periods: [
+        { home: 30, away: 24 },
+        { home: 26, away: 28 },
+        { home: 29, away: 25 },
+        { home: 27, away: 27 },
+      ],
+      players: [
+        {
+          playerId: 'NIKOLA_JOKIC_1_NBA',
+          name: 'Nikola Jokić',
+          stats: { points: 31, rebounds: 13, assists: 9 },
+        },
+        {
+          playerId: 'LEBRON_JAMES_1_NBA',
+          name: 'LeBron James',
+          stats: { points: 27, rebounds: 8, assists: 11 },
+        },
+      ],
+    });
   });
 
   it('shows running games with their score and suspends live prices by default', async () => {
@@ -211,6 +327,7 @@ describe('SportsGameOddsProvider', () => {
       'BUNDESLIGA,UEFA_CHAMPIONS_LEAGUE,NBA,ATP',
     );
     expect(eventCalls()[1]!.params.get('eventIDs')).toBe('sgo-live');
+    expect(eventCalls()[1]!.params.get('expandResults')).toBe('true');
 
     now += 2 * MINUTE;
     await p.getEvents(window);

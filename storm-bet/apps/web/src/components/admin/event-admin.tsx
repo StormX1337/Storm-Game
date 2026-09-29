@@ -6,7 +6,7 @@ import type {
   AdminSelectionDto,
   EventStatistics,
 } from '@storm-bet/types';
-import { hasPermission, Permission } from '@storm-bet/types';
+import { hasPermission, MARKET_DEFINITIONS, Permission } from '@storm-bet/types';
 import {
   Badge,
   Button,
@@ -263,7 +263,10 @@ export function ResultForm({ event }: { event: AdminEventDto }) {
     yellowA: '0',
     redH: '0',
     redA: '0',
+    htH: '',
+    htA: '',
   });
+  const [lines, setLines] = useState<Record<string, Record<string, string>>>({});
   const [sets, setSets] = useState([
     ['6', '4'],
     ['6', '4'],
@@ -282,6 +285,39 @@ export function ResultForm({ event }: { event: AdminEventDto }) {
   const players = playerMarket?.selections.filter((s) => s.playerId) ?? [];
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setF((p) => ({ ...p, [k]: e.target.value }));
+
+  // Half-time score: only when entered (half markets stay open otherwise).
+  const firstHalf =
+    f.htH.trim() !== '' && f.htA.trim() !== '' ? { home: num(f.htH), away: num(f.htA) } : null;
+  const halfInvalid =
+    event.sport.key === 'football' &&
+    firstHalf !== null &&
+    (firstHalf.home > num(f.home) || firstHalf.away > num(f.away));
+
+  // Basketball player over/unders: one stat line per priced player.
+  const statFor = {
+    PLAYER_POINTS: 'points',
+    PLAYER_REBOUNDS: 'rebounds',
+    PLAYER_ASSISTS: 'assists',
+  };
+  const playerLines = new Map<string, { name: string; stats: Set<string> }>();
+  for (const m of event.markets) {
+    if (MARKET_DEFINITIONS[m.type].kind !== 'PLAYER_TOTAL') continue;
+    const playerId = m.selections.find((s) => s.playerId)?.playerId;
+    if (!playerId) continue;
+    const entry = playerLines.get(playerId) ?? {
+      name: m.name.split(' – ')[0] ?? '',
+      stats: new Set(),
+    };
+    entry.stats.add(statFor[m.type as keyof typeof statFor]);
+    playerLines.set(playerId, entry);
+  }
+  const pricedPlayers = [...playerLines.entries()];
+  const statLines = pricedPlayers.flatMap(([playerId, { name }]) => {
+    const entered = Object.entries(lines[playerId] ?? {}).filter(([, v]) => v.trim() !== '');
+    if (entered.length === 0) return [];
+    return [{ playerId, name, stats: Object.fromEntries(entered.map(([k, v]) => [k, num(v)])) }];
+  });
 
   let statistics: EventStatistics;
   if (event.sport.key === 'football') {
@@ -307,6 +343,7 @@ export function ResultForm({ event }: { event: AdminEventDto }) {
       shotsOnTarget: { home: goals.home, away: goals.away },
       possession: { home: 50, away: 50 },
       goalEvents,
+      ...(firstHalf && !halfInvalid ? { firstHalf } : {}),
     };
   } else if (event.sport.key === 'tennis') {
     const played = sets
@@ -325,7 +362,14 @@ export function ResultForm({ event }: { event: AdminEventDto }) {
     };
   } else {
     const points = { home: num(f.home), away: num(f.away) };
-    statistics = { sport: 'basketball', points, periods: [points], fouls: { home: 0, away: 0 } };
+    statistics = {
+      sport: 'basketball',
+      points,
+      periods: [points],
+      fouls: { home: 0, away: 0 },
+      ...(firstHalf ? { firstHalf } : {}),
+      ...(pricedPlayers.length ? { players: statLines } : {}),
+    };
   }
 
   const pair = (label: string, a: keyof typeof f, b: keyof typeof f) => (
@@ -361,6 +405,7 @@ export function ResultForm({ event }: { event: AdminEventDto }) {
         {event.sport.key === 'football' ? (
           <>
             {pair('Tore', 'home', 'away')}
+            {pair('Halbzeit', 'htH', 'htA')}
             {pair('Ecken', 'cornersH', 'cornersA')}
             {pair('Gelbe Karten', 'yellowH', 'yellowA')}
             {pair('Rote Karten', 'redH', 'redA')}
@@ -392,9 +437,52 @@ export function ResultForm({ event }: { event: AdminEventDto }) {
             </Field>
           ))
         ) : (
-          pair('Punkte', 'home', 'away')
+          <>
+            {pair('Punkte', 'home', 'away')}
+            {pair('1. Halbzeit', 'htH', 'htA')}
+          </>
         )}
       </div>
+      {halfInvalid ? (
+        <p className="mt-2 text-xs text-down">
+          Der Halbzeitstand ist höher als das Endergebnis und wird nicht übernommen.
+        </p>
+      ) : null}
+      {event.sport.key === 'basketball' && pricedPlayers.length > 0 ? (
+        <div className="mt-4 space-y-2">
+          <p className="text-xs text-fg-muted">
+            Spielerwerte: leer lassen = nicht eingesetzt (Wetten auf diesen Spieler sind ungültig,
+            Einsatz zurück).
+          </p>
+          {pricedPlayers.map(([playerId, { name, stats }]) => (
+            <div key={playerId} className="flex flex-wrap items-end gap-2">
+              <span className="w-40 truncate pb-2 text-sm">{name}</span>
+              {(['points', 'rebounds', 'assists'] as const)
+                .filter((k) => stats.has(k))
+                .map((k) => (
+                  <Field
+                    key={k}
+                    label={{ points: 'Punkte', rebounds: 'Rebounds', assists: 'Assists' }[k]}
+                    htmlFor={`pl-${playerId}-${k}`}
+                  >
+                    <Input
+                      id={`pl-${playerId}-${k}`}
+                      inputMode="numeric"
+                      className="w-20 text-center"
+                      value={lines[playerId]?.[k] ?? ''}
+                      onChange={(e) =>
+                        setLines((p) => ({
+                          ...p,
+                          [playerId]: { ...p[playerId], [k]: e.target.value },
+                        }))
+                      }
+                    />
+                  </Field>
+                ))}
+            </div>
+          ))}
+        </div>
+      ) : null}
       {event.sport.key === 'football' &&
       players.length > 0 &&
       statistics.sport === 'football' &&

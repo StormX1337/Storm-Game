@@ -23,6 +23,17 @@ export const MarketType = {
   GAME_HANDICAP: 'GAME_HANDICAP',
   TOTAL_POINTS: 'TOTAL_POINTS',
   POINT_SPREAD: 'POINT_SPREAD',
+  HALF_TIME_RESULT: 'HALF_TIME_RESULT',
+  FIRST_HALF_HANDICAP: 'FIRST_HALF_HANDICAP',
+  FIRST_HALF_TOTAL_GOALS: 'FIRST_HALF_TOTAL_GOALS',
+  SECOND_HALF_RESULT: 'SECOND_HALF_RESULT',
+  SECOND_HALF_TOTAL_GOALS: 'SECOND_HALF_TOTAL_GOALS',
+  FIRST_HALF_WINNER: 'FIRST_HALF_WINNER',
+  FIRST_HALF_SPREAD: 'FIRST_HALF_SPREAD',
+  FIRST_HALF_TOTAL_POINTS: 'FIRST_HALF_TOTAL_POINTS',
+  PLAYER_POINTS: 'PLAYER_POINTS',
+  PLAYER_REBOUNDS: 'PLAYER_REBOUNDS',
+  PLAYER_ASSISTS: 'PLAYER_ASSISTS',
 } as const;
 export type MarketType = (typeof MarketType)[keyof typeof MarketType];
 export const MARKET_TYPES = Object.values(MarketType) as [MarketType, ...MarketType[]];
@@ -54,6 +65,16 @@ export const OUTCOMES = Object.values(Outcome) as [Outcome, ...Outcome[]];
  */
 export type ResultMetric = 'score' | 'corners' | 'cards' | 'games';
 
+/**
+ * Part of the game a market is decided on. Football halves are regular time
+ * (the second half never includes extra time); a basketball first half is
+ * quarters one and two.
+ */
+export type MarketPeriod = 'FULL' | 'H1' | 'H2';
+
+/** Per-player figure a player over/under market is decided on. */
+export type PlayerStat = 'goals' | 'points' | 'rebounds' | 'assists';
+
 export type SettlementKind =
   | 'THREE_WAY'
   | 'DOUBLE_CHANCE'
@@ -64,13 +85,18 @@ export type SettlementKind =
   | 'BOTH_SCORE'
   | 'PLAYER_SCORES'
   | 'FIRST_SET'
-  | 'SET_SCORE';
+  | 'SET_SCORE'
+  /** One market per player and line; OVER/UNDER on that player's figure. */
+  | 'PLAYER_TOTAL';
 
 export interface MarketDefinition {
   type: MarketType;
   label: string;
   sports: readonly SportKey[];
   metric: ResultMetric;
+  period: MarketPeriod;
+  /** For PLAYER_TOTAL: the player figure it settles on. */
+  playerStat?: PlayerStat;
   kind: SettlementKind;
   hasLine: boolean;
   outcomes: readonly Outcome[];
@@ -82,12 +108,55 @@ const FOOTBALL = [SportKey.FOOTBALL] as const;
 const TENNIS = [SportKey.TENNIS] as const;
 const BASKETBALL = [SportKey.BASKETBALL] as const;
 
+const half = (
+  type: MarketType,
+  label: string,
+  sports: readonly SportKey[],
+  period: 'H1' | 'H2',
+  kind: 'THREE_WAY' | 'TWO_WAY' | 'TOTAL' | 'HANDICAP',
+  sortOrder: number,
+): MarketDefinition => ({
+  type,
+  label,
+  sports,
+  metric: 'score',
+  period,
+  kind,
+  hasLine: kind === 'TOTAL' || kind === 'HANDICAP',
+  outcomes:
+    kind === 'THREE_WAY'
+      ? ['HOME', 'DRAW', 'AWAY']
+      : kind === 'TOTAL'
+        ? ['OVER', 'UNDER']
+        : ['HOME', 'AWAY'],
+  sortOrder,
+});
+
+const playerTotal = (
+  type: MarketType,
+  label: string,
+  playerStat: PlayerStat,
+  sortOrder: number,
+): MarketDefinition => ({
+  type,
+  label,
+  sports: BASKETBALL,
+  metric: 'score',
+  period: 'FULL',
+  playerStat,
+  kind: 'PLAYER_TOTAL',
+  hasLine: true,
+  outcomes: ['OVER', 'UNDER'],
+  sortOrder,
+});
+
 export const MARKET_DEFINITIONS: Record<MarketType, MarketDefinition> = {
   MATCH_RESULT: {
     type: 'MATCH_RESULT',
     label: 'Ergebnis (1X2)',
     sports: FOOTBALL,
     metric: 'score',
+    period: 'FULL',
     kind: 'THREE_WAY',
     hasLine: false,
     outcomes: ['HOME', 'DRAW', 'AWAY'],
@@ -98,6 +167,7 @@ export const MARKET_DEFINITIONS: Record<MarketType, MarketDefinition> = {
     label: 'Doppelte Chance',
     sports: FOOTBALL,
     metric: 'score',
+    period: 'FULL',
     kind: 'DOUBLE_CHANCE',
     hasLine: false,
     outcomes: ['HOME_OR_DRAW', 'HOME_OR_AWAY', 'DRAW_OR_AWAY'],
@@ -108,6 +178,7 @@ export const MARKET_DEFINITIONS: Record<MarketType, MarketDefinition> = {
     label: 'Unentschieden, keine Wette',
     sports: FOOTBALL,
     metric: 'score',
+    period: 'FULL',
     kind: 'DRAW_NO_BET',
     hasLine: false,
     outcomes: ['HOME', 'AWAY'],
@@ -118,6 +189,7 @@ export const MARKET_DEFINITIONS: Record<MarketType, MarketDefinition> = {
     label: 'Tore Über/Unter',
     sports: FOOTBALL,
     metric: 'score',
+    period: 'FULL',
     kind: 'TOTAL',
     hasLine: true,
     outcomes: ['OVER', 'UNDER'],
@@ -128,6 +200,7 @@ export const MARKET_DEFINITIONS: Record<MarketType, MarketDefinition> = {
     label: 'Asiatisches Handicap',
     sports: FOOTBALL,
     metric: 'score',
+    period: 'FULL',
     kind: 'HANDICAP',
     hasLine: true,
     outcomes: ['HOME', 'AWAY'],
@@ -138,6 +211,7 @@ export const MARKET_DEFINITIONS: Record<MarketType, MarketDefinition> = {
     label: 'Beide Teams treffen',
     sports: FOOTBALL,
     metric: 'score',
+    period: 'FULL',
     kind: 'BOTH_SCORE',
     hasLine: false,
     outcomes: ['YES', 'NO'],
@@ -148,6 +222,7 @@ export const MARKET_DEFINITIONS: Record<MarketType, MarketDefinition> = {
     label: 'Ecken Über/Unter',
     sports: FOOTBALL,
     metric: 'corners',
+    period: 'FULL',
     kind: 'TOTAL',
     hasLine: true,
     outcomes: ['OVER', 'UNDER'],
@@ -158,6 +233,7 @@ export const MARKET_DEFINITIONS: Record<MarketType, MarketDefinition> = {
     label: 'Karten Über/Unter',
     sports: FOOTBALL,
     metric: 'cards',
+    period: 'FULL',
     kind: 'TOTAL',
     hasLine: true,
     outcomes: ['OVER', 'UNDER'],
@@ -168,6 +244,7 @@ export const MARKET_DEFINITIONS: Record<MarketType, MarketDefinition> = {
     label: 'Torschütze (jederzeit)',
     sports: FOOTBALL,
     metric: 'score',
+    period: 'FULL',
     kind: 'PLAYER_SCORES',
     hasLine: false,
     outcomes: ['PLAYER'],
@@ -178,6 +255,7 @@ export const MARKET_DEFINITIONS: Record<MarketType, MarketDefinition> = {
     label: 'Sieger',
     sports: [SportKey.TENNIS, SportKey.BASKETBALL],
     metric: 'score',
+    period: 'FULL',
     kind: 'TWO_WAY',
     hasLine: false,
     outcomes: ['HOME', 'AWAY'],
@@ -188,6 +266,7 @@ export const MARKET_DEFINITIONS: Record<MarketType, MarketDefinition> = {
     label: 'Gewinner 1. Satz',
     sports: TENNIS,
     metric: 'score',
+    period: 'FULL',
     kind: 'FIRST_SET',
     hasLine: false,
     outcomes: ['HOME', 'AWAY'],
@@ -198,6 +277,7 @@ export const MARKET_DEFINITIONS: Record<MarketType, MarketDefinition> = {
     label: 'Satzergebnis',
     sports: TENNIS,
     metric: 'score',
+    period: 'FULL',
     kind: 'SET_SCORE',
     hasLine: false,
     outcomes: ['SETS_2_0', 'SETS_2_1', 'SETS_1_2', 'SETS_0_2'],
@@ -208,6 +288,7 @@ export const MARKET_DEFINITIONS: Record<MarketType, MarketDefinition> = {
     label: 'Spiele Über/Unter',
     sports: TENNIS,
     metric: 'games',
+    period: 'FULL',
     kind: 'TOTAL',
     hasLine: true,
     outcomes: ['OVER', 'UNDER'],
@@ -218,6 +299,7 @@ export const MARKET_DEFINITIONS: Record<MarketType, MarketDefinition> = {
     label: 'Spiele-Handicap',
     sports: TENNIS,
     metric: 'games',
+    period: 'FULL',
     kind: 'HANDICAP',
     hasLine: true,
     outcomes: ['HOME', 'AWAY'],
@@ -228,6 +310,7 @@ export const MARKET_DEFINITIONS: Record<MarketType, MarketDefinition> = {
     label: 'Punkte Über/Unter',
     sports: BASKETBALL,
     metric: 'score',
+    period: 'FULL',
     kind: 'TOTAL',
     hasLine: true,
     outcomes: ['OVER', 'UNDER'],
@@ -238,11 +321,80 @@ export const MARKET_DEFINITIONS: Record<MarketType, MarketDefinition> = {
     label: 'Handicap (Punkte)',
     sports: BASKETBALL,
     metric: 'score',
+    period: 'FULL',
     kind: 'HANDICAP',
     hasLine: true,
     outcomes: ['HOME', 'AWAY'],
     sortOrder: 20,
   },
+
+  HALF_TIME_RESULT: half(
+    'HALF_TIME_RESULT',
+    '1. Halbzeit – Ergebnis',
+    FOOTBALL,
+    'H1',
+    'THREE_WAY',
+    100,
+  ),
+  FIRST_HALF_HANDICAP: half(
+    'FIRST_HALF_HANDICAP',
+    '1. Halbzeit – Handicap',
+    FOOTBALL,
+    'H1',
+    'HANDICAP',
+    110,
+  ),
+  FIRST_HALF_TOTAL_GOALS: half(
+    'FIRST_HALF_TOTAL_GOALS',
+    '1. Halbzeit – Tore Über/Unter',
+    FOOTBALL,
+    'H1',
+    'TOTAL',
+    120,
+  ),
+  SECOND_HALF_RESULT: half(
+    'SECOND_HALF_RESULT',
+    '2. Halbzeit – Ergebnis',
+    FOOTBALL,
+    'H2',
+    'THREE_WAY',
+    130,
+  ),
+  SECOND_HALF_TOTAL_GOALS: half(
+    'SECOND_HALF_TOTAL_GOALS',
+    '2. Halbzeit – Tore Über/Unter',
+    FOOTBALL,
+    'H2',
+    'TOTAL',
+    140,
+  ),
+  FIRST_HALF_WINNER: half(
+    'FIRST_HALF_WINNER',
+    '1. Halbzeit – Sieger',
+    BASKETBALL,
+    'H1',
+    'TWO_WAY',
+    100,
+  ),
+  FIRST_HALF_SPREAD: half(
+    'FIRST_HALF_SPREAD',
+    '1. Halbzeit – Handicap',
+    BASKETBALL,
+    'H1',
+    'HANDICAP',
+    110,
+  ),
+  FIRST_HALF_TOTAL_POINTS: half(
+    'FIRST_HALF_TOTAL_POINTS',
+    '1. Halbzeit – Punkte Über/Unter',
+    BASKETBALL,
+    'H1',
+    'TOTAL',
+    120,
+  ),
+  PLAYER_POINTS: playerTotal('PLAYER_POINTS', 'Spieler – Punkte Über/Unter', 'points', 200),
+  PLAYER_REBOUNDS: playerTotal('PLAYER_REBOUNDS', 'Spieler – Rebounds Über/Unter', 'rebounds', 210),
+  PLAYER_ASSISTS: playerTotal('PLAYER_ASSISTS', 'Spieler – Assists Über/Unter', 'assists', 220),
 };
 
 export function getMarketDefinition(type: MarketType): MarketDefinition {

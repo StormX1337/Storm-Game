@@ -2,9 +2,12 @@ import {
   MARKET_DEFINITIONS,
   type EventStatistics,
   type EventStatus,
+  type MarketPeriod,
   type MarketType,
   type Outcome,
   type Pair,
+  type PlayerStat,
+  type PlayerStatLine,
   type SelectionResult,
 } from '@storm-bet/types';
 
@@ -50,6 +53,55 @@ function metric(stats: EventStatistics, which: 'score' | 'corners' | 'cards' | '
   throw new SettlementDataError(`metric "${which}" is not recorded for ${stats.sport}`);
 }
 
+/** The score of one half; only 'score' is recorded per half. */
+function halfScore(stats: EventStatistics, period: 'H1' | 'H2'): Pair {
+  if (stats.sport === 'football') {
+    const first = stats.firstHalf;
+    if (period === 'H1' && first) return first;
+    if (period === 'H2') {
+      if (stats.secondHalf) return stats.secondHalf;
+      if (first && first.home <= stats.goals.home && first.away <= stats.goals.away)
+        return { home: stats.goals.home - first.home, away: stats.goals.away - first.away };
+    }
+  }
+  if (stats.sport === 'basketball' && period === 'H1') {
+    if (stats.firstHalf) return stats.firstHalf;
+    const [q1, q2] = stats.periods;
+    // periods holds quarters only when there are at least four of them.
+    if (q1 && q2 && stats.periods.length >= 4)
+      return { home: q1.home + q2.home, away: q1.away + q2.away };
+  }
+  throw new SettlementDataError(`${period} score is not recorded for ${stats.sport}`);
+}
+
+function resultFigure(
+  stats: EventStatistics,
+  which: 'score' | 'corners' | 'cards' | 'games',
+  period: MarketPeriod,
+): Pair {
+  if (period === 'FULL') return metric(stats, which);
+  if (which !== 'score') throw new SettlementDataError(`${which} is not recorded per half`);
+  return halfScore(stats, period);
+}
+
+/**
+ * A player's figure, or null when the player did not play (missing from a
+ * recorded list — the bet is then void). No recorded list at all, or a
+ * recorded player without this figure, cannot be settled automatically.
+ */
+function playerFigure(
+  players: PlayerStatLine[] | undefined,
+  playerId: string,
+  stat: PlayerStat,
+): number | null {
+  if (!players) throw new SettlementDataError('player figures were not recorded');
+  const line = players.find((p) => p.playerId === playerId);
+  if (!line) return null;
+  const value = line.stats[stat];
+  if (value === undefined) throw new SettlementDataError(`${stat} not recorded for a player`);
+  return value;
+}
+
 const won = (condition: boolean): SelectionResult => (condition ? 'WON' : 'LOST');
 
 /**
@@ -77,7 +129,19 @@ export function resolveSelection(
     );
   }
   const { outcome } = selection;
-  const value = metric(stats, definition.metric);
+  if (definition.kind === 'PLAYER_TOTAL') {
+    if (stats.sport === 'tennis' || !definition.playerStat) {
+      throw new SettlementDataError(`${selection.marketType} has no player figures`);
+    }
+    if (!selection.playerId) throw new SettlementDataError('player market without a player');
+    if (selection.line == null) throw new SettlementDataError('player total without a line');
+    const figure = playerFigure(stats.players, selection.playerId, definition.playerStat);
+    if (figure === null || figure === selection.line) return 'VOID';
+    if (outcome === 'OVER') return won(figure > selection.line);
+    if (outcome === 'UNDER') return won(figure < selection.line);
+    throw new SettlementDataError(`outcome ${outcome} does not belong to ${selection.marketType}`);
+  }
+  const value = resultFigure(stats, definition.metric, definition.period);
 
   switch (definition.kind) {
     case 'THREE_WAY':
@@ -120,6 +184,11 @@ export function resolveSelection(
     case 'PLAYER_SCORES': {
       if (stats.sport !== 'football') break;
       if (!selection.playerId) throw new SettlementDataError('player market without a player');
+      if (stats.players) {
+        // Official stat lines: a player who did not play is a non-runner (void).
+        const goals = playerFigure(stats.players, selection.playerId, 'goals');
+        return goals === null ? 'VOID' : won(goals > 0);
+      }
       if (!stats.goalEvents) throw new SettlementDataError('goal scorers were not recorded');
       return won(stats.goalEvents.some((g) => g.playerId === selection.playerId));
     }

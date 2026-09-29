@@ -14,6 +14,15 @@ export interface GoalEvent {
   playerName: string | null;
 }
 
+/** One player's official figures, as far as the feed reports them. */
+export interface PlayerStatLine {
+  /** Internal player id once synced; the provider's own id never leaves the sync layer. */
+  playerId: string;
+  name: string | null;
+  /** Keys are PlayerStat values (goals, points, rebounds, assists). */
+  stats: Partial<Record<'goals' | 'points' | 'rebounds' | 'assists', number>>;
+}
+
 /**
  * Detailed figures are optional: a feed that only reports the score leaves
  * them out rather than claiming zero. Markets that need a missing figure are
@@ -29,6 +38,15 @@ export interface FootballStatistics {
   /** Percentages, summing to 100. */
   possession?: Pair;
   goalEvents?: GoalEvent[];
+  /** Score of the first half. */
+  firstHalf?: Pair;
+  /** Goals of the second half (regular time only). */
+  secondHalf?: Pair;
+  /**
+   * Players with an official stat line. A player missing from a recorded list
+   * did not play; an absent list means player figures were not recorded.
+   */
+  players?: PlayerStatLine[];
 }
 
 export interface TennisStatistics {
@@ -48,6 +66,10 @@ export interface BasketballStatistics {
   /** Points per quarter (overtime periods appended); empty when the feed only reports totals. */
   periods: Pair[];
   fouls?: Pair;
+  /** Score after two quarters, when the feed reports it without quarter scores. */
+  firstHalf?: Pair;
+  /** See FootballStatistics.players. */
+  players?: PlayerStatLine[];
 }
 
 export type EventStatistics = FootballStatistics | TennisStatistics | BasketballStatistics;

@@ -293,6 +293,7 @@ export class OddsSyncService {
     if (events.length === 0) return report;
     if (events.some((e) => !this.leagueIds.has(e.leagueExternalId))) await this.syncReferenceData();
     const { teams, players } = await this.ensureTeams(events);
+    await this.addStatisticsPlayers(events, players);
 
     const existing = await this.db.event.findMany({
       where: { provider: this.provider.key, externalId: { in: events.map((e) => e.externalId) } },
@@ -392,6 +393,31 @@ export class OddsSyncService {
     return merged;
   }
 
+  /**
+   * Players named in official statistics but not in this batch's rosters
+   * (a final result may come without a roster) are looked up, so their stat
+   * lines match the selections priced earlier.
+   */
+  private async addStatisticsPlayers(
+    events: ProviderEvent[],
+    players: Map<string, string>,
+  ): Promise<void> {
+    const ids = new Set<string>();
+    for (const { statistics: s } of events) {
+      if (s?.sport === 'football')
+        for (const g of s.goalEvents ?? []) if (g.playerId) ids.add(g.playerId);
+      if (s?.sport === 'football' || s?.sport === 'basketball')
+        for (const p of s.players ?? []) ids.add(p.playerId);
+    }
+    const missing = [...ids].filter((id) => !players.has(id));
+    if (missing.length === 0) return;
+    const rows = await this.db.player.findMany({
+      where: { provider: this.provider.key, externalId: { in: missing } },
+      select: { id: true, externalId: true },
+    });
+    for (const r of rows) players.set(r.externalId, r.id);
+  }
+
   private eventValues(event: ProviderEvent, players: Map<string, string>) {
     let statistics = event.statistics;
     if (statistics?.sport === 'football' && statistics.goalEvents) {
@@ -400,6 +426,19 @@ export class OddsSyncService {
         goalEvents: statistics.goalEvents.map((g) => ({
           ...g,
           playerId: g.playerId ? (players.get(g.playerId) ?? null) : null,
+        })),
+      };
+    }
+    if (
+      (statistics?.sport === 'football' || statistics?.sport === 'basketball') &&
+      statistics.players
+    ) {
+      // An unknown player keeps the feed's id: it matches no selection, as it should.
+      statistics = {
+        ...statistics,
+        players: statistics.players.map((p) => ({
+          ...p,
+          playerId: players.get(p.playerId) ?? p.playerId,
         })),
       };
     }

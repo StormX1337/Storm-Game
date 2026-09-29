@@ -62,7 +62,11 @@ export function CreateEventForm({ catalog }: { catalog: AdminCatalogDto }) {
   const [busy, setBusy] = useState(false);
 
   const available = MARKET_TYPES.filter(
-    (t) => MARKET_DEFINITIONS[t].sports.includes(sport) && t !== 'PLAYER_TO_SCORE',
+    // Player markets need a player per selection; they come from the feed only.
+    (t) =>
+      MARKET_DEFINITIONS[t].sports.includes(sport) &&
+      t !== 'PLAYER_TO_SCORE' &&
+      MARKET_DEFINITIONS[t].kind !== 'PLAYER_TOTAL',
   );
 
   const changeSport = (next: SportKey) => {

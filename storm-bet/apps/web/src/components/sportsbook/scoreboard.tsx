@@ -52,6 +52,11 @@ export function Scoreboard({ event }: { event: EventDetailDto }) {
                 ? EVENT_STATUS_LABELS[live.status]
                 : formatDateTime(event.startTime)}
           </p>
+          {stats && stats.sport !== 'tennis' && stats.firstHalf ? (
+            <p className="tabular mt-0.5 text-xs text-fg-subtle">
+              Halbzeit {stats.firstHalf.home}:{stats.firstHalf.away}
+            </p>
+          ) : null}
         </div>
         <TeamName name={event.away.name} short={event.away.shortName} align="left" />
       </div>

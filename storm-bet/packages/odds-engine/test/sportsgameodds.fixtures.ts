@@ -61,6 +61,14 @@ const team = (teamID: string, long: string, short: string, score?: number) => ({
   ...(score === undefined ? {} : { score }),
 });
 
+const player = (playerID: string, teamID: string, name: string) => ({
+  [playerID]: { playerID, teamID, name },
+});
+
+/** A player prop: statEntityID is the player. */
+const prop = (oddID: string, book: Side, by: Record<string, Side> = {}) =>
+  odd(oddID, book, by, { playerID: oddID.split('-')[1] });
+
 const status = (startsAt: string, flags: Record<string, unknown> = {}) => ({
   startsAt,
   started: false,
@@ -84,7 +92,37 @@ export function events(): Record<string, unknown>[] {
         away: team('BORUSSIA_DORTMUND_BUNDESLIGA', 'Borussia Dortmund', 'BVB'),
       },
       status: status(iso(120)),
+      players: {
+        ...player('HARRY_KANE_1_BUNDESLIGA', 'BAYERN_MUNICH_BUNDESLIGA', 'Harry Kane'),
+        ...player('JAMAL_MUSIALA_1_BUNDESLIGA', 'BAYERN_MUNICH_BUNDESLIGA', 'Jamal Musiala'),
+        ...player(
+          'SERHOU_GUIRASSY_1_BUNDESLIGA',
+          'BORUSSIA_DORTMUND_BUNDESLIGA',
+          'Serhou Guirassy',
+        ),
+        // Listed, but not on either team of this match.
+        ...player('LEROY_SANE_1_SUPERLIG', 'GALATASARAY_SUPERLIG', 'Leroy Sané'),
+      },
       odds: odds(
+        // Halves.
+        odd('points-home-1h-ml3way-home', { odds: '+120' }),
+        odd('points-all-1h-ml3way-draw', { odds: '+130' }),
+        odd('points-away-1h-ml3way-away', { odds: '+300' }),
+        odd('points-home-1h-sp-home', { odds: '-105', spread: '-0.5' }),
+        odd('points-away-1h-sp-away', { odds: '-115', spread: '+0.5' }),
+        odd('points-all-1h-ou-over', { odds: '+105', overUnder: '1.5' }),
+        odd('points-all-1h-ou-under', { odds: '-125', overUnder: '1.5' }),
+        odd('points-home-2h-ml3way-home', { odds: '+105' }),
+        odd('points-all-2h-ml3way-draw', { odds: '+220' }),
+        odd('points-away-2h-ml3way-away', { odds: '+320' }),
+        odd('points-all-2h-ou-over', { odds: '-110', overUnder: '1.5' }),
+        odd('points-all-2h-ou-under', { odds: '-110', overUnder: '1.5' }),
+        // Anytime goalscorer: yes/no or over 0.5 goals.
+        prop('goals-HARRY_KANE_1_BUNDESLIGA-game-yn-yes', { odds: '-120' }),
+        prop('goals-HARRY_KANE_1_BUNDESLIGA-game-yn-no', { odds: '-105' }),
+        prop('goals-JAMAL_MUSIALA_1_BUNDESLIGA-game-ou-over', { odds: '+210', overUnder: '0.5' }),
+        prop('goals-SERHOU_GUIRASSY_1_BUNDESLIGA-game-yn-yes', { odds: '+250' }),
+        prop('goals-LEROY_SANE_1_SUPERLIG-game-yn-yes', { odds: '+300' }),
         odd(
           'points-home-reg-ml3way-home',
           { odds: '-160' },
@@ -198,7 +236,26 @@ export function events(): Record<string, unknown>[] {
         away: team('MIAMI_HEAT_NBA', 'Miami Heat', 'MIA'),
       },
       status: status(iso(600)),
+      players: {
+        ...player('JAYSON_TATUM_1_NBA', 'BOSTON_CELTICS_NBA', 'Jayson Tatum'),
+        ...player('JIMMY_BUTLER_1_NBA', 'MIAMI_HEAT_NBA', 'Jimmy Butler'),
+      },
       odds: odds(
+        odd('points-home-1h-ml-home', { odds: '-240' }),
+        odd('points-away-1h-ml-away', { odds: '+195' }),
+        odd('points-home-1h-sp-home', { odds: '-110', spread: '-4.5' }),
+        odd('points-away-1h-sp-away', { odds: '-110', spread: '+4.5' }),
+        odd('points-all-1h-ou-over', { odds: '-110', overUnder: '108.5' }),
+        odd('points-all-1h-ou-under', { odds: '-110', overUnder: '108.5' }),
+        prop('points-JAYSON_TATUM_1_NBA-game-ou-over', { odds: '-115', overUnder: '27.5' }),
+        prop('points-JAYSON_TATUM_1_NBA-game-ou-under', { odds: '-105', overUnder: '27.5' }),
+        prop('rebounds-JAYSON_TATUM_1_NBA-game-ou-over', { odds: '+100', overUnder: '8.5' }),
+        prop('rebounds-JAYSON_TATUM_1_NBA-game-ou-under', { odds: '-130', overUnder: '8.5' }),
+        prop('assists-JIMMY_BUTLER_1_NBA-game-ou-over', { odds: '-110', overUnder: '5.5' }),
+        prop('assists-JIMMY_BUTLER_1_NBA-game-ou-under', { odds: '-110', overUnder: '5.5' }),
+        // Over and under on different lines: not one market.
+        prop('rebounds-JIMMY_BUTLER_1_NBA-game-ou-over', { odds: '-110', overUnder: '6.5' }),
+        prop('rebounds-JIMMY_BUTLER_1_NBA-game-ou-under', { odds: '-110', overUnder: '7.5' }),
         odd('points-home-game-ml-home', { odds: '-275' }),
         odd('points-away-game-ml-away', { odds: '+220' }),
         odd('points-home-game-sp-home', { odds: '-110', spread: '-7.5' }),
@@ -238,8 +295,19 @@ export function events(): Record<string, unknown>[] {
         finalized: true,
         periods: { started: ['1h', '2h'], ended: ['1h', '2h'] },
       }),
+      players: {
+        ...player('LOIS_OPENDA_1_BUNDESLIGA', 'RB_LEIPZIG_BUNDESLIGA', 'Loïs Openda'),
+        ...player('XAVI_SIMONS_1_BUNDESLIGA', 'RB_LEIPZIG_BUNDESLIGA', 'Xavi Simons'),
+        ...player('PATRIK_SCHICK_1_BUNDESLIGA', 'BAYER_LEVERKUSEN_BUNDESLIGA', 'Patrik Schick'),
+      },
       results: {
-        game: { home: { points: 2 }, away: { points: 2 } },
+        game: {
+          home: { points: 2 },
+          away: { points: 2 },
+          LOIS_OPENDA_1_BUNDESLIGA: { goals: 2, shots: 4 },
+          XAVI_SIMONS_1_BUNDESLIGA: { goals: 0, assists: 1 },
+          PATRIK_SCHICK_1_BUNDESLIGA: { goals: 2 },
+        },
         reg: { home: { points: 2 }, away: { points: 2 } },
         '1h': { home: { points: 1 }, away: { points: 0 } },
         '2h': { home: { points: 1 }, away: { points: 2 } },
@@ -267,6 +335,35 @@ export function events(): Record<string, unknown>[] {
         game: { home: { points: 2 }, away: { points: 1 } },
         reg: { home: { points: 1 }, away: { points: 1 } },
         ot: { home: { points: 1 }, away: { points: 0 } },
+      },
+      odds: {},
+    },
+    {
+      eventID: 'nba-finished',
+      sportID: 'BASKETBALL',
+      leagueID: 'NBA',
+      type: 'match',
+      teams: {
+        home: team('DENVER_NUGGETS_NBA', 'Denver Nuggets', 'DEN', 112),
+        away: team('LA_LAKERS_NBA', 'Los Angeles Lakers', 'LAL', 104),
+      },
+      status: status(iso(-240), { started: true, ended: true, completed: true, finalized: true }),
+      players: {
+        ...player('NIKOLA_JOKIC_1_NBA', 'DENVER_NUGGETS_NBA', 'Nikola Jokić'),
+        ...player('LEBRON_JAMES_1_NBA', 'LA_LAKERS_NBA', 'LeBron James'),
+      },
+      results: {
+        game: {
+          home: { points: 112 },
+          away: { points: 104 },
+          NIKOLA_JOKIC_1_NBA: { points: 31, rebounds: 13, assists: 9, steals: 2 },
+          LEBRON_JAMES_1_NBA: { points: 27, rebounds: 8, assists: 11 },
+        },
+        '1q': { home: { points: 30 }, away: { points: 24 } },
+        '2q': { home: { points: 26 }, away: { points: 28 } },
+        '3q': { home: { points: 29 }, away: { points: 25 } },
+        '4q': { home: { points: 27 }, away: { points: 27 } },
+        '1h': { home: { points: 56 }, away: { points: 52 } },
       },
       odds: {},
     },
