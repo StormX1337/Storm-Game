@@ -421,6 +421,13 @@ describe('admin API', () => {
 });
 
 describe('errors', () => {
+  it('rejects unknown filter values with a validation error', async () => {
+    const admin = await loginAs(t.app, (await createUser(t.db, 'ADMIN')).email);
+    const res = await admin.get('/api/admin/transactions?type=NOPE');
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_ERROR');
+  });
+
   it('never leaks internals', async () => {
     const res = await new Client(t.app).get('/api/events/not-a-uuid');
     expect(res.status).toBe(400);

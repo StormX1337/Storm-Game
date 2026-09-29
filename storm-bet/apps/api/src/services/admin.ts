@@ -1100,7 +1100,7 @@ export class AdminService {
     const where: Prisma.TransactionWhereInput = {};
     if (query.userId) where.userId = query.userId;
     if (query.betId) where.betId = query.betId;
-    if (query.type) where.type = query.type as Prisma.EnumTransactionTypeFilter['equals'];
+    if (query.type) where.type = query.type;
     const rows = await this.db.transaction.findMany({
       where,
       include: {

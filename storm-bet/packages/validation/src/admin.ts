@@ -3,6 +3,7 @@ import {
   EVENT_STATUSES,
   MARKET_TYPES,
   SPORT_KEYS,
+  TRANSACTION_TYPES,
   USER_ROLES,
   USER_STATUSES,
   isSupportedLine,
@@ -133,7 +134,7 @@ export const adminVoidBetSchema = z.object({ reason });
 export const adminTransactionListQuery = z.object({
   userId: uuid.optional(),
   betId: uuid.optional(),
-  type: z.string().max(20).optional(),
+  type: z.enum(TRANSACTION_TYPES).optional(),
   cursor: z.string().max(200).optional(),
   limit: z.coerce.number().int().min(1).max(100).default(25),
 });
