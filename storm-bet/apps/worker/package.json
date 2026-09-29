@@ -7,7 +7,8 @@
     "dev": "tsx watch --env-file-if-exists=../../.env --clear-screen=false src/main.ts",
     "build": "node ../../scripts/build-service.mjs src/main.ts dist/main.js",
     "start": "node --enable-source-maps dist/main.js",
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json",
+    "seed": "tsx --env-file-if-exists=../../.env src/seed.ts"
   },
   "dependencies": {
     "@storm-bet/betting-engine": "workspace:*",
@@ -17,7 +18,8 @@
     "@storm-bet/redis": "workspace:*",
     "@storm-bet/types": "workspace:*",
     "bullmq": "5.63.0",
-    "pino": "9.14.0"
+    "pino": "9.14.0",
+    "@storm-bet/security": "workspace:*"
   },
   "devDependencies": {
     "esbuild": "0.25.12",

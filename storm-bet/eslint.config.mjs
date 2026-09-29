@@ -65,7 +65,7 @@ export default tseslint.config(
   // Console output is the point of CLIs, seeds and build scripts.
   {
     files: [
-      'packages/database/src/seed/**/*.ts',
+      'apps/worker/src/seed.ts',
       'scripts/**/*.{ts,mjs,js}',
       '**/*.config.{ts,mts,mjs,js}',
     ],
@@ -75,6 +75,7 @@ export default tseslint.config(
   {
     files: ['**/test/**/*.{ts,tsx}', '**/*.test.{ts,tsx}', 'tests/**/*.ts'],
     languageOptions: { globals: { ...globals.node, ...globals.browser } },
-    rules: { 'no-console': 'off' },
+    // Tests assert on loosely typed JSON responses.
+    rules: { 'no-console': 'off', '@typescript-eslint/no-explicit-any': 'off' },
   },
 );

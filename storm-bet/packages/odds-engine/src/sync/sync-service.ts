@@ -5,7 +5,7 @@ import { publishRealtime, type Redis } from '@storm-bet/redis';
 import type { MarketStatus, RealtimeMessage, SelectionStatus } from '@storm-bet/types';
 import { MARKET_DEFINITIONS } from '@storm-bet/types';
 import type { OddsProvider, ProviderEvent, ProviderMarket, ProviderTeam } from '../provider';
-import { mapLimit, silentLogger, type Logger } from '../util';
+import { mapLimit, silentLogger, stableStringify, type Logger } from '../util';
 
 export interface SyncOptions {
   /** How far ahead fixtures are imported. */
@@ -419,7 +419,7 @@ export class OddsSyncService {
     values: ReturnType<OddsSyncService['eventValues']>,
   ): Prisma.EventUpdateInput | null {
     const changes: Prisma.EventUpdateInput = {};
-    const json = (v: unknown) => JSON.stringify(v === Prisma.DbNull ? null : v);
+    const json = (v: unknown) => stableStringify(v === Prisma.DbNull ? null : v);
     if (current.status !== values.status) changes.status = values.status;
     if (current.homeScore !== values.homeScore) changes.homeScore = values.homeScore;
     if (current.awayScore !== values.awayScore) changes.awayScore = values.awayScore;

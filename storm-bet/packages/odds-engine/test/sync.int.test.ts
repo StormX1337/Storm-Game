@@ -38,6 +38,7 @@ describe('OddsSyncService', () => {
 
     const second = await sync.syncCatalog();
     expect(second.createdEvents).toBe(0);
+    expect(second.updatedEvents).toBe(0);
     expect(second.createdMarkets).toBe(0);
     expect(second.updatedSelections).toBe(0);
 
@@ -86,5 +87,15 @@ describe('OddsSyncService', () => {
     for (const goal of stats.goalEvents) {
       if (goal.playerId) expect(goal.playerId).toMatch(/^[0-9a-f-]{36}$/);
     }
+  });
+});
+
+describe('stableStringify', () => {
+  it('ignores key order', async () => {
+    const { stableStringify } = await import('../src/util');
+    expect(stableStringify({ period: 'PRE', clock: null })).toBe(
+      stableStringify({ clock: null, period: 'PRE' }),
+    );
+    expect(stableStringify({ a: [1, { y: 1, x: 2 }] })).toBe('{"a":[1,{"x":2,"y":1}]}');
   });
 });

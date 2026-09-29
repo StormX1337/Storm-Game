@@ -328,3 +328,73 @@ export interface AdminOverviewDto {
   system: SystemHealthDto;
   providers: ProviderHealthDto[];
 }
+
+export interface UserRefDto {
+  id: string;
+  email: string;
+  displayName: string;
+}
+
+export interface AdminBetDto extends BetDto {
+  user: UserRefDto;
+}
+
+export interface AdminBetDetailDto extends AdminBetDto {
+  transactions: TransactionDto[];
+  audit: AuditLogDto[];
+}
+
+export interface AdminTransactionDto extends TransactionDto {
+  user: UserRefDto;
+}
+
+export interface AdminSelectionDto extends SelectionDto {
+  rawStatus: SelectionStatus;
+  result: SelectionResult;
+  suspensionReason: string | null;
+}
+
+export interface AdminMarketDto extends Omit<MarketDto, 'selections'> {
+  rawStatus: MarketStatus;
+  tradingSuspended: boolean;
+  settledAt: string | null;
+  selections: AdminSelectionDto[];
+}
+
+export interface AdminEventDto extends Omit<EventDetailDto, 'markets'> {
+  provider: string;
+  rawStatus: EventStatus;
+  isActive: boolean;
+  tradingSuspended: boolean;
+  resultConfirmedAt: string | null;
+  settledAt: string | null;
+  betCount: number;
+  openBetCount: number;
+  markets: AdminMarketDto[];
+}
+
+export interface AdminEventListItemDto extends EventSummaryDto {
+  provider: string;
+  rawStatus: EventStatus;
+  isActive: boolean;
+  tradingSuspended: boolean;
+  resultConfirmedAt: string | null;
+  settledAt: string | null;
+}
+
+export interface AdminCatalogDto {
+  sports: { key: SportKey; name: string }[];
+  leagues: { id: string; name: string; sportKey: SportKey }[];
+  teams: {
+    id: string;
+    name: string;
+    sportKey: SportKey;
+    players: { id: string; name: string }[];
+  }[];
+}
+
+export interface AdminUserDetailDto extends AdminUserDto {
+  limits: LimitDto[];
+  selfExclusion: SelfExclusionDto;
+  activeSessions: number;
+}
