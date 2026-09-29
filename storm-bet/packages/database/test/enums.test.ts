@@ -20,6 +20,10 @@ const pairs: [string, Record<string, string>, readonly string[]][] = [
   ['KycStatus', $Enums.KycStatus, shared.KYC_STATUSES],
   ['MarketType', $Enums.MarketType, shared.MARKET_TYPES],
   ['Outcome', $Enums.Outcome, shared.OUTCOMES],
+  ['CasinoGameType', $Enums.CasinoGameType, shared.CASINO_GAME_TYPES],
+  ['CasinoGameStatus', $Enums.CasinoGameStatus, shared.CASINO_GAME_STATUSES],
+  ['CasinoSessionStatus', $Enums.CasinoSessionStatus, shared.CASINO_SESSION_STATUSES],
+  ['CasinoRoundStatus', $Enums.CasinoRoundStatus, shared.CASINO_ROUND_STATUSES],
 ];
 
 describe('shared enums mirror the database', () => {

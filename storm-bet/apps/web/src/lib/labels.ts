@@ -46,6 +46,9 @@ export const TRANSACTION_LABELS: Record<TransactionType, string> = {
   BET_LOST: 'Verlust',
   BET_VOID: 'Storno',
   BET_REFUND: 'Erstattung',
+  CASINO_BET: 'Casino-Einsatz',
+  CASINO_WIN: 'Casino-Gewinn',
+  CASINO_REFUND: 'Casino-Erstattung',
 };
 
 export const ROLE_LABELS: Record<UserRole, string> = {

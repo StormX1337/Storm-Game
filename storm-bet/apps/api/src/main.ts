@@ -11,6 +11,7 @@ import { createRedis, createSubscriber, JsonCache, RealtimeHub } from '@storm-be
 import { Queue } from 'bullmq';
 import pino from 'pino';
 import { buildApp } from './app';
+import { CasinoService, MockCasinoProvider } from '@storm-bet/casino';
 import type { AppContext } from './context';
 import { LogMailer, SmtpMailer } from './lib/mailer';
 
@@ -49,6 +50,7 @@ async function main(): Promise<void> {
       now,
     }),
     settlement: new SettlementService({ db, redis, logger, now }),
+    casino: new CasinoService({ db, redis, providers: [new MockCasinoProvider()], now }),
     queues,
     now,
   };

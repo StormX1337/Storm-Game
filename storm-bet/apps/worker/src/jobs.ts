@@ -1,4 +1,5 @@
 import type { SettlementService } from '@storm-bet/betting-engine';
+import type { CasinoService } from '@storm-bet/casino';
 import type { PrismaClient } from '@storm-bet/database';
 import type { OddsSyncService } from '@storm-bet/odds-engine';
 import { acquireLock, type Redis } from '@storm-bet/redis';
@@ -9,6 +10,7 @@ export interface JobDeps {
   redis: Redis;
   sync: OddsSyncService;
   settlement: SettlementService;
+  casino: CasinoService;
   logger: Logger;
 }
 
@@ -35,7 +37,7 @@ async function exclusive<T>(
 export type JobName = 'catalog-sync' | 'live-sync' | 'prematch-sync' | 'settle-due' | 'cleanup';
 
 export function createJobHandlers(deps: JobDeps): Record<JobName, () => Promise<unknown>> {
-  const { db, redis, sync, settlement, logger } = deps;
+  const { db, redis, sync, settlement, casino, logger } = deps;
   return {
     'catalog-sync': () =>
       exclusive(redis, 'catalog-sync', 120_000, async () => {
@@ -75,8 +77,10 @@ export function createJobHandlers(deps: JobDeps): Record<JobName, () => Promise<
         const tokens = await db.authToken.deleteMany({
           where: { expiresAt: { lt: new Date(Date.now() - 24 * 3_600_000) } },
         });
-        logger.info({ sessions: sessions.count, tokens: tokens.count }, 'cleanup');
-        return { sessions: sessions.count, tokens: tokens.count };
+        // Idle casino sessions close; an unfinished blackjack hand is stood.
+        const casinoSessions = await casino.expireIdleSessions(30 * 60_000);
+        logger.info({ sessions: sessions.count, tokens: tokens.count, casinoSessions }, 'cleanup');
+        return { sessions: sessions.count, tokens: tokens.count, casinoSessions };
       }),
   };
 }

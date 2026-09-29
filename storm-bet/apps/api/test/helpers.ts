@@ -15,6 +15,7 @@ import { hashPassword } from '@storm-bet/security';
 import type { UserRole } from '@storm-bet/types';
 import type { FastifyInstance, LightMyRequestResponse } from 'fastify';
 import { buildApp } from '../src/app';
+import { CasinoService, MockCasinoProvider } from '@storm-bet/casino';
 import type { AppContext } from '../src/context';
 import type { Mailer, MailMessage } from '../src/lib/mailer';
 
@@ -53,6 +54,7 @@ export async function createTestApp() {
     demoWallet: demoWalletPolicyFrom(env),
     placement: new BetPlacementService({ db, redis, limits, requireEmailVerification: false, now }),
     settlement: new SettlementService({ db, redis, now }),
+    casino: new CasinoService({ db, redis, providers: [new MockCasinoProvider()], now }),
     queues: [],
     now,
   };

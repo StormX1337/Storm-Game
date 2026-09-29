@@ -102,6 +102,28 @@ Jede Buchung speichert den Stand danach; die Tabelle ist append-only.
 - `OddsSyncService` – schreibt nur Unterschiede (Batch-Updates), erhöht `oddsVersion`, veröffentlicht
   Änderungen über Redis Pub/Sub; manuelle Sperren durch Staff bleiben erhalten.
 
+## Casino
+
+Zusätzliches Modul (`packages/casino`), das die Sportsbook-Pfade nicht berührt; gemeinsam genutzt werden
+nur Wallet, Hauptbuch, Limits/Selbstsperre, RBAC und Audit-Log.
+
+- `CasinoProvider` – `getGames`, `getGame`, `getCategories`, `createDemoSession`, `closeSession`. Der Katalog
+  wird in die Datenbank synchronisiert (Seed/Worker-Start); was Staff verwaltet (Status, Empfehlung,
+  Reihenfolge, Einsatzgrenzen), überschreibt der Sync nie. `MockCasinoProvider` betreibt alle Spiele auf
+  diesem Server (`serverRounds`); ein lizenzierter externer Anbieter implementiert dieselbe Schnittstelle,
+  liefert eine Launch-URL und bucht Runden über einen Server-zu-Server-Wallet-Callback.
+- Spiel-Engines (rein, testbar, Zufall über `crypto.randomInt`): Slot 5×3 mit 10 Linien (RTP exakt 95,36 %),
+  europäisches Roulette (97,30 %), Punto Banco mit 8 Decks, Blackjack mit 6 Decks (S17, 3:2, Verdoppeln).
+  Jede Karten-Runde mischt einen frischen Schuh; der Rest des Schuhs bleibt serverseitig (`state`).
+- Runde: Redis-Lock pro Nutzer → Transaktion: Idempotenz (`userId`, `idempotencyKey`, Request-Hash),
+  offene Sitzung, Kontostatus, Selbstsperre, Einsatzlimits (Sport + Casino gemeinsam), Wallet `FOR UPDATE`,
+  Ergebnis, `casino_rounds`-Zeile, `CASINO_BET` (−Einsatz) und ggf. `CASINO_WIN`. Blackjack-Aktionen sind
+  über die Schritt-Nummer idempotent; eine abgelaufene Sitzung (30 Min. inaktiv, Worker) steht offene Hände.
+  Staff kann offene Runden mit `CASINO_REFUND` erstatten (Audit).
+- Datenbank-Guards: Ledger-Referenz (Wette, Casino-Runde oder keine), Vorzeichen der Casino-Buchungen,
+  höchstens eine Auszahlung pro Runde, Auszahlung nur passend zum Rundenstatus, abgeschlossene Runden
+  weder änderbar noch löschbar.
+
 ## Settlement
 
 Ein Event mit bestätigtem Ergebnis (oder abgesagt) wird unter einem Redis-Lock abgerechnet: jede Auswahl wird

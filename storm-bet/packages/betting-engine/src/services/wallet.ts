@@ -51,6 +51,7 @@ interface LedgerEntry {
   amount: bigint;
   reservedDelta: bigint;
   betId: string | null;
+  casinoRoundId?: string | null;
   description: string;
   metadata?: Record<string, unknown>;
 }
@@ -66,6 +67,7 @@ async function appendLedger(tx: Tx, entry: LedgerEntry): Promise<void> {
       balanceAfter: entry.wallet.balance,
       reservedAfter: entry.wallet.reserved,
       betId: entry.betId,
+      casinoRoundId: entry.casinoRoundId ?? null,
       description: entry.description,
       metadata: (entry.metadata ?? {}) as Prisma.InputJsonValue,
     },
@@ -248,4 +250,71 @@ export async function getWallet(db: DbOrTx, userId: string): Promise<WalletDto> 
   });
   if (!wallet) throw new AppError('NOT_FOUND', 'Für dieses Konto existiert kein Wallet.');
   return toWalletDto(wallet);
+}
+
+/**
+ * Casino stake: leaves the balance immediately (a round is decided at once or
+ * holds the stake itself). Fails without side effects if it does not fit.
+ * The caller holds the wallet lock (lockWallet) in the same transaction.
+ */
+export async function debitCasino(
+  tx: Tx,
+  wallet: WalletRow,
+  amount: bigint,
+  casinoRoundId: string,
+  description: string,
+): Promise<WalletRow> {
+  if (amount <= 0n) throw new AppError('VALIDATION_ERROR', 'Einsatz muss positiv sein.');
+  const rows = await tx.$queryRaw<RawWallet[]>`
+    UPDATE "wallets"
+    SET "balance" = "balance" - ${amount}, "version" = "version" + 1, "updated_at" = now()
+    WHERE "id" = ${wallet.id}::uuid AND "balance" - "reserved" >= ${amount}
+    RETURNING "id", "user_id", "balance", "reserved"`;
+  if (!rows[0]) {
+    throw new AppError('INSUFFICIENT_BALANCE', undefined, {
+      details: {
+        available: moneyToNumber(wallet.balance - wallet.reserved),
+        required: moneyToNumber(amount),
+      },
+    });
+  }
+  const updated = fromRaw(rows[0]);
+  await appendLedger(tx, {
+    wallet: updated,
+    type: 'CASINO_BET',
+    amount: -amount,
+    reservedDelta: 0n,
+    betId: null,
+    casinoRoundId,
+    description,
+  });
+  return updated;
+}
+
+/** Casino win or refund. The database allows one per round, matching its status. */
+export async function creditCasino(
+  tx: Tx,
+  wallet: WalletRow,
+  type: 'CASINO_WIN' | 'CASINO_REFUND',
+  amount: bigint,
+  casinoRoundId: string,
+  description: string,
+): Promise<WalletRow> {
+  if (amount <= 0n) return wallet;
+  const rows = await tx.$queryRaw<RawWallet[]>`
+    UPDATE "wallets"
+    SET "balance" = "balance" + ${amount}, "version" = "version" + 1, "updated_at" = now()
+    WHERE "id" = ${wallet.id}::uuid
+    RETURNING "id", "user_id", "balance", "reserved"`;
+  const updated = fromRaw(rows[0] as RawWallet);
+  await appendLedger(tx, {
+    wallet: updated,
+    type,
+    amount,
+    reservedDelta: 0n,
+    betId: null,
+    casinoRoundId,
+    description,
+  });
+  return updated;
 }

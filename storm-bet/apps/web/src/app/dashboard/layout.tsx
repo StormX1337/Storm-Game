@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { DashboardNav } from '@/components/dashboard/nav';
 import { DemoBanner } from '@/components/shell/demo-banner';
 import { Footer } from '@/components/shell/footer';
+import { MobileTabBar } from '@/components/shell/mobile-tab-bar';
 import { Header } from '@/components/shell/header';
 import { getSessionUser } from '@/lib/server-api';
 
@@ -27,6 +28,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         <main className="min-w-0 space-y-6">{children}</main>
       </div>
       <Footer />
+      <MobileTabBar />
     </>
   );
 }

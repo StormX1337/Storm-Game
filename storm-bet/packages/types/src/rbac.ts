@@ -19,6 +19,8 @@ export const Permission = {
   AUDIT_READ: 'audit:read',
   PROVIDERS_READ: 'providers:read',
   SYSTEM_READ: 'system:read',
+  CASINO_READ: 'casino:read',
+  CASINO_MANAGE: 'casino:manage',
 } as const;
 export type Permission = (typeof Permission)[keyof typeof Permission];
 
@@ -32,6 +34,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
     Permission.EVENTS_READ,
     Permission.BETS_READ,
     Permission.TRANSACTIONS_READ,
+    Permission.CASINO_READ,
   ],
   [UserRole.TRADER]: [
     Permission.ADMIN_ACCESS,
@@ -42,6 +45,8 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
     Permission.BETS_SETTLE,
     Permission.PROVIDERS_READ,
     Permission.SYSTEM_READ,
+    Permission.CASINO_READ,
+    Permission.CASINO_MANAGE,
   ],
   [UserRole.ADMIN]: ALL,
 };

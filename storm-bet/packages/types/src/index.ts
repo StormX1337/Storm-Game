@@ -5,3 +5,4 @@ export * from './markets';
 export * from './statistics';
 export * from './dto';
 export * from './realtime';
+export * from './casino';

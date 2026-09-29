@@ -108,6 +108,9 @@ export const TransactionType = {
   BET_LOST: 'BET_LOST',
   BET_VOID: 'BET_VOID',
   BET_REFUND: 'BET_REFUND',
+  CASINO_BET: 'CASINO_BET',
+  CASINO_WIN: 'CASINO_WIN',
+  CASINO_REFUND: 'CASINO_REFUND',
 } as const;
 export type TransactionType = (typeof TransactionType)[keyof typeof TransactionType];
 export const TRANSACTION_TYPES = values(TransactionType);
@@ -144,3 +147,32 @@ export const SportKey = {
 } as const;
 export type SportKey = (typeof SportKey)[keyof typeof SportKey];
 export const SPORT_KEYS = values(SportKey);
+
+export const CasinoGameType = {
+  SLOT: 'SLOT',
+  ROULETTE: 'ROULETTE',
+  BLACKJACK: 'BLACKJACK',
+  BACCARAT: 'BACCARAT',
+} as const;
+export type CasinoGameType = (typeof CasinoGameType)[keyof typeof CasinoGameType];
+export const CASINO_GAME_TYPES = values(CasinoGameType);
+
+export const CasinoGameStatus = {
+  ACTIVE: 'ACTIVE',
+  MAINTENANCE: 'MAINTENANCE',
+  DISABLED: 'DISABLED',
+} as const;
+export type CasinoGameStatus = (typeof CasinoGameStatus)[keyof typeof CasinoGameStatus];
+export const CASINO_GAME_STATUSES = values(CasinoGameStatus);
+
+export const CasinoSessionStatus = { OPEN: 'OPEN', CLOSED: 'CLOSED' } as const;
+export type CasinoSessionStatus = (typeof CasinoSessionStatus)[keyof typeof CasinoSessionStatus];
+export const CASINO_SESSION_STATUSES = values(CasinoSessionStatus);
+
+export const CasinoRoundStatus = {
+  OPEN: 'OPEN',
+  SETTLED: 'SETTLED',
+  REFUNDED: 'REFUNDED',
+} as const;
+export type CasinoRoundStatus = (typeof CasinoRoundStatus)[keyof typeof CasinoRoundStatus];
+export const CASINO_ROUND_STATUSES = values(CasinoRoundStatus);

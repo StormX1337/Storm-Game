@@ -117,12 +117,16 @@ export async function loadEffectiveLimits(
 }
 
 /** Sum of stakes placed in the rolling window ending now. */
+/** Stakes of bets and casino rounds: a stake limit covers the whole account. */
 export async function stakedSince(db: DbOrTx, userId: string, since: Date): Promise<bigint> {
-  const result = await db.bet.aggregate({
-    where: { userId, placedAt: { gt: since } },
-    _sum: { stake: true },
-  });
-  return result._sum.stake ?? 0n;
+  const [bets, casino] = await Promise.all([
+    db.bet.aggregate({ where: { userId, placedAt: { gt: since } }, _sum: { stake: true } }),
+    db.casinoRound.aggregate({
+      where: { userId, createdAt: { gt: since } },
+      _sum: { stake: true },
+    }),
+  ]);
+  return (bets._sum.stake ?? 0n) + (casino._sum.stake ?? 0n);
 }
 
 export interface LimitViolation {

@@ -45,7 +45,7 @@ export function MobileBetSlipBar() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       {items.length > 0 ? (
-        <div className="fixed inset-x-0 bottom-0 z-40 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] lg:hidden">
+        <div className="fixed inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-40 p-3 md:bottom-0 md:pb-[calc(0.75rem+env(safe-area-inset-bottom))] lg:hidden">
           <button
             onClick={() => setOpen(true)}
             className="flex w-full items-center gap-3 rounded-lg bg-accent px-4 py-3 text-accent-fg shadow-[var(--shadow-pop)] animate-slide-up"

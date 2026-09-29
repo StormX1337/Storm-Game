@@ -1,5 +1,6 @@
 import { createServer } from 'node:http';
 import { SettlementService } from '@storm-bet/betting-engine';
+import { CasinoService, MockCasinoProvider, syncCasinoCatalog } from '@storm-bet/casino';
 import { parseEnv, QUEUES, REDIS_KEYS, workerEnvSchema } from '@storm-bet/config';
 import { createPrismaClient } from '@storm-bet/database';
 import { OddsSyncService } from '@storm-bet/odds-engine';
@@ -30,7 +31,11 @@ async function main(): Promise<void> {
     logger,
   });
   const settlement = new SettlementService({ db, redis, logger });
-  const handlers = createJobHandlers({ db, redis, sync, settlement, logger });
+  const casinoProvider = new MockCasinoProvider();
+  const casino = new CasinoService({ db, redis, providers: [casinoProvider] });
+  const casinoCatalog = await syncCasinoCatalog(db, casinoProvider);
+  logger.info(casinoCatalog, 'casino catalogue synced');
+  const handlers = createJobHandlers({ db, redis, sync, settlement, casino, logger });
 
   const schedule: { queue: string; job: JobName; every: number }[] = [
     { queue: QUEUES.oddsSync, job: 'catalog-sync', every: env.CATALOG_SYNC_INTERVAL_MS },

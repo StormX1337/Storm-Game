@@ -11,6 +11,7 @@ import { accountRoutes } from './routes/account';
 import { adminRoutes } from './routes/admin';
 import { authRoutes } from './routes/auth';
 import { betRoutes } from './routes/bets';
+import { casinoRoutes } from './routes/casino';
 import { catalogRoutes } from './routes/catalog';
 import { contactRoutes } from './routes/contact';
 import { healthRoutes } from './routes/health';
@@ -19,6 +20,7 @@ import { walletRoutes } from './routes/wallet';
 import { AccountService } from './services/account';
 import { AdminService } from './services/admin';
 import { AuthService } from './services/auth';
+import { CasinoCatalogService } from './services/casino';
 import { CatalogService } from './services/catalog';
 import { SessionService } from './services/sessions';
 
@@ -87,6 +89,7 @@ export async function buildApp(
     ctx.now,
     ctx.env.ODDS_PROVIDER,
   );
+  const casinoCatalog = new CasinoCatalogService(ctx.db, ctx.cache, ctx.now);
   const tracker = new LiveEventTracker(ctx.db);
 
   await app.register(cookie);
@@ -126,7 +129,8 @@ export async function buildApp(
       await api.register(accountRoutes(ctx, accounts, sessions));
       await api.register(contactRoutes(ctx));
       await api.register(streamRoutes(ctx, tracker));
-      await api.register(adminRoutes(ctx, admin, accounts), { prefix: '/admin' });
+      await api.register(casinoRoutes(ctx, casinoCatalog), { prefix: '/casino' });
+      await api.register(adminRoutes(ctx, admin, accounts, casinoCatalog), { prefix: '/admin' });
     },
     { prefix: '/api' },
   );

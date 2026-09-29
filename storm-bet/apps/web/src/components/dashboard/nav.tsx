@@ -3,6 +3,7 @@
 import { cn } from '@storm-bet/ui';
 import {
   ArrowLeftRight,
+  Dices,
   Gauge,
   LayoutDashboard,
   Receipt,
@@ -17,6 +18,7 @@ const ITEMS = [
   { href: '/dashboard', label: 'Übersicht', icon: LayoutDashboard, exact: true },
   { href: '/dashboard/wallet', label: 'Guthaben', icon: Wallet },
   { href: '/dashboard/bets', label: 'Meine Wetten', icon: Receipt },
+  { href: '/casino/history', label: 'Casino-Verlauf', icon: Dices },
   { href: '/dashboard/transactions', label: 'Transaktionen', icon: ArrowLeftRight },
   { href: '/dashboard/profile', label: 'Profil', icon: User },
   { href: '/dashboard/security', label: 'Sicherheit', icon: ShieldCheck },

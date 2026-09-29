@@ -68,6 +68,9 @@ importers:
       '@storm-bet/betting-engine':
         specifier: workspace:*
         version: link:../../packages/betting-engine
+      '@storm-bet/casino':
+        specifier: workspace:*
+        version: link:../../packages/casino
       '@storm-bet/compliance':
         specifier: workspace:*
         version: link:../../packages/compliance
@@ -205,6 +208,9 @@ importers:
       '@storm-bet/betting-engine':
         specifier: workspace:*
         version: link:../../packages/betting-engine
+      '@storm-bet/casino':
+        specifier: workspace:*
+        version: link:../../packages/casino
       '@storm-bet/config':
         specifier: workspace:*
         version: link:../../packages/config
@@ -269,6 +275,31 @@ importers:
       '@storm-bet/validation':
         specifier: workspace:*
         version: link:../validation
+    devDependencies:
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+
+  packages/casino:
+    dependencies:
+      '@storm-bet/betting-engine':
+        specifier: workspace:*
+        version: link:../betting-engine
+      '@storm-bet/compliance':
+        specifier: workspace:*
+        version: link:../compliance
+      '@storm-bet/database':
+        specifier: workspace:*
+        version: link:../database
+      '@storm-bet/redis':
+        specifier: workspace:*
+        version: link:../redis
+      '@storm-bet/security':
+        specifier: workspace:*
+        version: link:../security
+      '@storm-bet/types':
+        specifier: workspace:*
+        version: link:../types
     devDependencies:
       typescript:
         specifier: 5.9.3

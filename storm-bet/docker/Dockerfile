@@ -35,6 +35,7 @@ COPY apps/api/package.json apps/api/
 COPY apps/worker/package.json apps/worker/
 COPY apps/web/package.json apps/web/
 COPY packages/betting-engine/package.json packages/betting-engine/
+COPY packages/casino/package.json packages/casino/
 COPY packages/compliance/package.json packages/compliance/
 COPY packages/config/package.json packages/config/
 COPY packages/database/package.json packages/database/

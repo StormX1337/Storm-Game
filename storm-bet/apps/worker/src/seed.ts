@@ -1,3 +1,4 @@
+import { MockCasinoProvider, syncCasinoCatalog } from '@storm-bet/casino';
 import { randomUUID } from 'node:crypto';
 import { BetPlacementService, openWallet } from '@storm-bet/betting-engine';
 import { bettingLimitsFrom, parseEnv, seedEnvSchema, workerEnvSchema } from '@storm-bet/config';
@@ -102,6 +103,9 @@ async function main(): Promise<void> {
     console.log(
       `  ${catalog.events} Events (${catalog.createdEvents} neu), ${catalog.createdMarkets + live.createdMarkets} Märkte neu angelegt`,
     );
+
+    const casino = await syncCasinoCatalog(db, new MockCasinoProvider());
+    console.log(`  Casino: ${casino.games} Demo-Spiele (${casino.created} neu)`);
 
     const openBets = await db.bet.count({ where: { userId: demo.id } });
     if (openBets === 0) {

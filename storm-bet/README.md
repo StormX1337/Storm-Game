@@ -21,13 +21,19 @@ keinen Echtgeldbetrieb; der entsprechende Schalter ist technisch gesperrt.
 - Wettschein mit Einzel-, Zweier-, Dreier- und Kombiwetten, serverseitiger Quote, sichtbarer Quotenänderung
   („Quote wurde aktualisiert.“) und ausdrücklicher Annahme; Sticky-Wettschein auf Mobile
 - Live-Updates per Server-Sent Events (Quoten, Marktstatus, Spielstand)
+- **Casino (DEMO MODE – No real money)**: Lobby mit Empfohlen/Beliebt/Neu, Kategorien (Slots, Roulette,
+  Blackjack, Baccarat, Tischspiele, Live Casino), Suche und Favoriten; spielbare Demo-Versionen von Slots,
+  europäischem Roulette, Blackjack und Baccarat – jede Runde serverseitig entschieden und gespeichert;
+  Casino-Verlauf unter `/casino/history`
+- Navigation: Sport, Live, Casino, Aktionen, Meine Wetten, Wallet, Profil; mobile Bottom-Navigation
 - Dashboard: Guthaben, offene/abgerechnete Wetten, Wetthistorie mit Quoten-Snapshot, Transaktionen, Profil,
   Sitzungen, Einsatzlimits mit Bedenkzeit, Selbstsperre
 
 **Betrieb**
 
 - Admin-Panel mit RBAC (Support, Trader, Admin): Nutzer, Events, Märkte, Quoten (manuelle Events),
-  Ergebniserfassung und Abrechnung, Wetten, Transaktionen, Audit-Log, Odds-Provider, System Health
+  Ergebniserfassung und Abrechnung, Wetten, Transaktionen, Audit-Log, Odds-Provider, System Health;
+  Casino (`/admin/casino`): Spiele, Status, Empfehlungen, Kategorien, Anbieter, Sitzungen, Demo-Runden
 - Worker: Odds-Sync (Katalog, Live, Pre-Match), Settlement, Wartung – über BullMQ-Scheduler
 
 **Integrität**
@@ -35,6 +41,8 @@ keinen Echtgeldbetrieb; der entsprechende Schalter ist technisch gesperrt.
 - Wettplatzierung in einer PostgreSQL-Transaktion mit Row-Locks, idempotent über Wettschein-Schlüssel
 - Wallet mit Saldo / reserviert / verfügbar; jede Bewegung im unveränderlichen Hauptbuch
 - Datenbank-Trigger: kein negatives Wallet, keine Doppelauszahlung, abgerechnete Wetten und Audit-Log unveränderlich
+- Casino-Runden in einer Transaktion mit Wallet-Lock, idempotent (Schlüssel + Request-Hash bzw. Schritt-Nummer),
+  höchstens eine Auszahlung pro Runde (DB-Index + Trigger), abgeschlossene Runden unveränderlich
 
 ## Schnellstart (Docker)
 
@@ -91,6 +99,7 @@ packages/
   security/       Argon2id, Tokens, CSRF, CIDR
   odds-engine/    OddsProvider-Interface, Mock-, TheOddsApi-, SportsGameOdds-Provider, Resilience, Sync
   betting-engine/ Quoten-Mathematik, Wettschein-Regeln, Placement, Wallet, Settlement
+  casino/         CasinoProvider-Interface, MockCasinoProvider, Spiel-Engines, Runden-/Sitzungs-Service
   compliance/     Limits, Selbstsperre, Jurisdiktion, KYC-/Zahlungs-Schnittstellen
   ui/             Design-System (Tailwind v4, shadcn-Stil auf Radix)
 tests/            Vitest-Integration-Setup, Playwright-E2E

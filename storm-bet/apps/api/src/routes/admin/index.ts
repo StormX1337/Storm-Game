@@ -26,6 +26,8 @@ import { requirePermission } from '../../plugins/auth';
 import { enforceRateLimit, RATE_LIMITS } from '../../plugins/rate-limit';
 import type { AccountService } from '../../services/account';
 import type { AdminService } from '../../services/admin';
+import type { CasinoCatalogService } from '../../services/casino';
+import { adminCasinoRoutes } from './casino';
 import { actorOf } from '../request-info';
 
 /**
@@ -34,7 +36,12 @@ import { actorOf } from '../request-info';
  * allowlist, and every mutation writes an audit record in the same
  * transaction as the change.
  */
-export function adminRoutes(ctx: AppContext, admin: AdminService, accounts: AccountService) {
+export function adminRoutes(
+  ctx: AppContext,
+  admin: AdminService,
+  accounts: AccountService,
+  casino: CasinoCatalogService,
+) {
   const allowlist = ctx.env.ADMIN_IP_ALLOWLIST.split(',')
     .map((s) => s.trim())
     .filter(Boolean);
@@ -56,6 +63,8 @@ export function adminRoutes(ctx: AppContext, admin: AdminService, accounts: Acco
 
     const actor = (request: Parameters<typeof actorOf>[0]) =>
       actorOf(request, ctx.env.AUDIT_LOG_IP);
+
+    await app.register(adminCasinoRoutes(ctx, casino), { prefix: '/casino' });
 
     // Overview & health
     app.get('/overview', async (request) => {

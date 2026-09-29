@@ -160,18 +160,19 @@ Migrationen an und legen eigene Datensätze an – es wird nie etwas zurückgese
 
 Besonders abgesichert:
 
-| Test                                                    | Datei                                                                                             |
-| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| Wette darf nicht doppelt platziert werden               | `packages/betting-engine/test/betting.int.test.ts`                                                |
-| Quote wird während des Place-Vorgangs geändert          | ebenda (paralleler Row-Lock)                                                                      |
-| Wallet darf niemals negativ werden                      | ebenda (parallele Wetten + DB-Constraint)                                                         |
-| Settlement darf nicht doppelt auszahlen                 | ebenda (parallele Läufe + Ledger-Trigger)                                                         |
-| Login, Registrierung, Brute-Force, CSRF, Passwort-Reset | `apps/api/test/api.int.test.ts`                                                                   |
-| Rollen/Berechtigungen, Admin-APIs                       | ebenda                                                                                            |
-| Quoten-, Wettschein- und Abrechnungsregeln              | `packages/betting-engine/test/domain.test.ts`                                                     |
-| Simulator, Resilience, Sync                             | `packages/odds-engine/test/*`                                                                     |
-| The-Odds-API-Mapping, Kontingent, Sync → Abrechnung     | `packages/odds-engine/test/the-odds-api.test.ts`, `apps/worker/test/the-odds-api.int.test.ts`     |
-| SportsGameOdds-Mapping, Kontingent, Sync → Abrechnung   | `packages/odds-engine/test/sportsgameodds.test.ts`, `apps/worker/test/sportsgameodds.int.test.ts` |
+| Test                                                                    | Datei                                                                                             |
+| ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Wette darf nicht doppelt platziert werden                               | `packages/betting-engine/test/betting.int.test.ts`                                                |
+| Quote wird während des Place-Vorgangs geändert                          | ebenda (paralleler Row-Lock)                                                                      |
+| Wallet darf niemals negativ werden                                      | ebenda (parallele Wetten + DB-Constraint)                                                         |
+| Settlement darf nicht doppelt auszahlen                                 | ebenda (parallele Läufe + Ledger-Trigger)                                                         |
+| Login, Registrierung, Brute-Force, CSRF, Passwort-Reset                 | `apps/api/test/api.int.test.ts`                                                                   |
+| Rollen/Berechtigungen, Admin-APIs                                       | ebenda                                                                                            |
+| Quoten-, Wettschein- und Abrechnungsregeln                              | `packages/betting-engine/test/domain.test.ts`                                                     |
+| Simulator, Resilience, Sync                                             | `packages/odds-engine/test/*`                                                                     |
+| The-Odds-API-Mapping, Kontingent, Sync → Abrechnung                     | `packages/odds-engine/test/the-odds-api.test.ts`, `apps/worker/test/the-odds-api.int.test.ts`     |
+| SportsGameOdds-Mapping, Kontingent, Sync → Abrechnung                   | `packages/odds-engine/test/sportsgameodds.test.ts`, `apps/worker/test/sportsgameodds.int.test.ts` |
+| Casino: Engines, Idempotenz, Blackjack-Schritte, DB-Guards, Admin/Audit | `packages/casino/test/games.test.ts`, `apps/api/test/casino.int.test.ts`                          |
 
 ## Docker
 

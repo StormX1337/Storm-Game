@@ -2,6 +2,7 @@ import type { SportDto } from '@storm-bet/types';
 import { BetSlipPanel, MobileBetSlipBar } from '@/components/betslip/bet-slip-panel';
 import { DemoBanner } from '@/components/shell/demo-banner';
 import { Footer } from '@/components/shell/footer';
+import { MobileTabBar } from '@/components/shell/mobile-tab-bar';
 import { Header } from '@/components/shell/header';
 import { Sidebar, SportTabs } from '@/components/shell/sidebar';
 import { tryServerApi } from '@/lib/server-api';
@@ -32,6 +33,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
         </div>
       </div>
       <Footer />
+      <MobileTabBar />
       <MobileBetSlipBar />
     </>
   );

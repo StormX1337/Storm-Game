@@ -15,6 +15,9 @@ export const RATE_LIMITS = {
   admin: { bucket: 'admin-user', limit: 300, windowMs: 60_000 },
   adminWrite: { bucket: 'admin-write-user', limit: 60, windowMs: 60_000 },
   stream: { bucket: 'stream-ip', limit: 30, windowMs: 60_000 },
+  casino: { bucket: 'casino-user', limit: 240, windowMs: 60_000 },
+  casinoPlay: { bucket: 'casino-play-user', limit: 120, windowMs: 60_000 },
+  casinoSession: { bucket: 'casino-session-user', limit: 30, windowMs: 60_000 },
 } satisfies Record<string, RateLimitRule>;
 
 /**

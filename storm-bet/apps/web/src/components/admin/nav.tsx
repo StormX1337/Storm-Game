@@ -3,6 +3,7 @@
 import { hasPermission, Permission, type UserRole } from '@storm-bet/types';
 import { cn } from '@storm-bet/ui';
 import {
+  Dices,
   Activity,
   ArrowLeftRight,
   CalendarDays,
@@ -31,6 +32,7 @@ const ITEMS = [
     permission: Permission.EVENTS_READ,
   },
   { href: '/admin/bets', label: 'Wetten', icon: Receipt, permission: Permission.BETS_READ },
+  { href: '/admin/casino', label: 'Casino', icon: Dices, permission: Permission.CASINO_READ },
   {
     href: '/admin/transactions',
     label: 'Transaktionen',
