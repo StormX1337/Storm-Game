@@ -310,6 +310,9 @@ export class SportsGameOddsProvider implements OddsProvider {
     this.baseUrl = (options.baseUrl ?? 'https://api.sportsgameodds.com/v2').replace(/\/$/, '');
   }
 
+  /** The plan has no monthly object limit. */
+  unlimited = false;
+
   getQuota(): ProviderQuota {
     return { ...this.quotaState };
   }
@@ -482,6 +485,27 @@ export class SportsGameOddsProvider implements OddsProvider {
     return out;
   }
 
+  private remoteLeagues: SgoLeague[] = [];
+
+  /**
+   * Every league the key can access, marked by whether this book can offer
+   * its sport (football, basketball, tennis) and whether it is configured.
+   */
+  async availableLeagues(): Promise<
+    { id: string; name: string; sportID: string; supported: boolean; active: boolean }[]
+  > {
+    const active = new Set((await this.leagues()).map((l) => l.id));
+    return this.remoteLeagues
+      .filter((l) => l.leagueID && l.enabled !== false)
+      .map((l) => ({
+        id: l.leagueID!,
+        name: l.name ?? l.leagueID!,
+        sportID: l.sportID ?? '',
+        supported: SPORT_FOR[l.sportID ?? ''] !== undefined,
+        active: active.has(l.leagueID!),
+      }));
+  }
+
   private async leagues(): Promise<League[]> {
     const now = this.now();
     if (this.leaguesSnapshot && now - this.leaguesSnapshot.fetchedAt < LEAGUES_TTL_MS)
@@ -493,9 +517,21 @@ export class SportsGameOddsProvider implements OddsProvider {
       if (error instanceof HttpError && (error.status === 401 || error.status === 403)) throw error;
       // Otherwise fall back to the built-in league list.
     }
+    this.remoteLeagues = remote;
     const byId = new Map(remote.map((l) => [l.leagueID ?? '', l]));
+    // "*" takes every league of a supported sport the key can access.
+    const wanted = this.options.leagues.includes('*')
+      ? [
+          ...new Set([
+            ...this.options.leagues.filter((id) => id !== '*'),
+            ...(remote.length
+              ? remote.flatMap((l) => (l.leagueID ? [l.leagueID] : []))
+              : Object.keys(KNOWN_LEAGUES)),
+          ]),
+        ]
+      : this.options.leagues;
     const data: League[] = [];
-    for (const id of this.options.leagues) {
+    for (const id of wanted) {
       const r = byId.get(id);
       const known = KNOWN_LEAGUES[id];
       if (r?.enabled === false) continue;
@@ -861,6 +897,7 @@ export class SportsGameOddsProvider implements OddsProvider {
     const month = usage?.rateLimits?.['per-month'];
     const max = month?.['max-entities'];
     const current = month?.['current-entities'];
+    this.unlimited = max === 'unlimited';
     this.quotaState.used = typeof current === 'number' ? current : this.quotaState.used;
     this.quotaState.remaining =
       typeof max === 'number' && typeof current === 'number' ? Math.max(0, max - current) : null;

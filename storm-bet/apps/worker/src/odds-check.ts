@@ -32,11 +32,28 @@ async function main(): Promise<void> {
       );
     }
   }
+  if (provider instanceof SportsGameOddsProvider) {
+    const available = await provider.availableLeagues();
+    const more = available.filter((l) => l.supported && !l.active);
+    const unsupported = available.filter((l) => !l.supported);
+    if (more.length) {
+      console.log(`\nWeitere verfügbare Ligen (in SGO_LEAGUES eintragen oder SGO_LEAGUES=*):`);
+      for (const l of more) console.log(`  ${l.sportID.padEnd(10)} ${l.id.padEnd(36)} ${l.name}`);
+    }
+    if (unsupported.length) {
+      console.log(
+        `\nNicht unterstützte Sportarten (${unsupported.length} Ligen): ${[...new Set(unsupported.map((l) => l.sportID))].join(', ')}`,
+      );
+    }
+  }
   if (provider instanceof TheOddsApiProvider || provider instanceof SportsGameOddsProvider) {
     const q =
       provider instanceof SportsGameOddsProvider ? await provider.loadQuota() : provider.getQuota();
     const unit = provider instanceof TheOddsApiProvider ? 'Credits' : 'Event-Objekte (Monat)';
-    console.log(`\n${unit}: verbleibend ${q.remaining ?? '?'}, verbraucht ${q.used ?? '?'}`);
+    const unlimited = provider instanceof SportsGameOddsProvider && provider.unlimited;
+    console.log(
+      `\n${unit}: verbleibend ${unlimited ? 'unbegrenzt' : (q.remaining ?? '?')}, verbraucht ${q.used ?? '?'}`,
+    );
   }
 }
 

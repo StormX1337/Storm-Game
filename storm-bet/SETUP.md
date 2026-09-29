@@ -46,7 +46,7 @@ bricht den Start mit einer klaren Meldung ab.
 | `ODDS_API_ODDS_TTL_SECONDS`, `ODDS_API_SCORES_TTL_SECONDS`, `ODDS_API_MIN_REMAINING`           | –       | Abruftakt pro Wettbewerb und Credit-Reserve                                                       |
 | `ODDS_API_LIVE_BETTING`, `ODDS_API_LIVE_MAX_AGE_SECONDS`                                       | –       | Live-Wetten auf echte Spiele (Standard aus) und maximales Quotenalter                             |
 | `SGO_API_KEY`                                                                                  | Feed    | API-Key von SportsGameOdds; Pflicht bei `ODDS_PROVIDER=sportsgameodds`                            |
-| `SGO_LEAGUES`, `SGO_BOOKMAKERS`, `SGO_HORIZON_HOURS`                                           | –       | Ligen (leagueIDs), feste Buchmacher (leer = Konsens), Zeitfenster                                 |
+| `SGO_LEAGUES`, `SGO_BOOKMAKERS`, `SGO_HORIZON_HOURS`                                           | –       | Ligen (leagueIDs, `*` = alle des Plans), feste Buchmacher (leer = Konsens), Zeitfenster           |
 | `SGO_ODDS_TTL_SECONDS`, `SGO_LIVE_TTL_SECONDS`, `SGO_MIN_REMAINING`                            | –       | Snapshot- und Live-Takt, Reserve an Event-Objekten                                                |
 | `SGO_LIVE_BETTING`, `SGO_LIVE_MAX_AGE_SECONDS`                                                 | –       | Live-Wetten (Standard aus) und maximales Quotenalter                                              |
 | `PROVIDER_*`                                                                                   | –       | Timeout, Retries, Rate-Limit, Cache des Odds-Providers                                            |

@@ -88,6 +88,18 @@ describe('SportsGameOddsProvider', () => {
     expect(api.calls.every((c) => !c.params.has('apiKey'))).toBe(true);
   });
 
+  it('takes every supported league of the plan with "*"', async () => {
+    const { provider: p } = provider({ leagues: ['*'] });
+    expect((await p.getLeagues()).map((l) => l.externalId)).toEqual([
+      'BUNDESLIGA',
+      'UEFA_CHAMPIONS_LEAGUE',
+      'NBA',
+      'ATP',
+    ]);
+    const nfl = (await p.availableLeagues()).find((l) => l.id === 'NFL');
+    expect(nfl).toMatchObject({ supported: false, active: false });
+  });
+
   it('falls back to the built-in league list when the leagues endpoint fails', async () => {
     const { provider: p } = provider({}, fakeSgo({ leaguesStatus: 503 }));
     expect((await p.getLeagues()).map((l) => [l.externalId, l.sportKey])).toEqual([
