@@ -1,0 +1,57 @@
+{
+  "name": "storm-bet",
+  "version": "0.1.0",
+  "private": true,
+  "description": "STORM BET — sportsbook platform (demo / play-money only)",
+  "license": "UNLICENSED",
+  "type": "module",
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "pnpm db:generate && concurrently -k -n api,worker,web -c blue,green,magenta \"pnpm --filter @storm-bet/api dev\" \"pnpm --filter @storm-bet/worker dev\" \"pnpm --filter @storm-bet/web dev\"",
+    "build": "pnpm db:generate && pnpm --filter @storm-bet/api build && pnpm --filter @storm-bet/worker build && pnpm --filter @storm-bet/web build",
+    "start": "concurrently -k -n api,worker,web \"pnpm --filter @storm-bet/api start\" \"pnpm --filter @storm-bet/worker start\" \"pnpm --filter @storm-bet/web start\"",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test --config tests/e2e/playwright.config.ts",
+    "lint": "eslint . --max-warnings=0",
+    "lint:fix": "eslint . --fix",
+    "typecheck": "pnpm -r --no-bail typecheck",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "db:generate": "pnpm --filter @storm-bet/database generate",
+    "db:migrate": "pnpm --filter @storm-bet/database migrate",
+    "db:migrate:dev": "pnpm --filter @storm-bet/database migrate:dev",
+    "db:reset": "pnpm --filter @storm-bet/database reset",
+    "db:seed": "pnpm --filter @storm-bet/database seed",
+    "db:studio": "pnpm --filter @storm-bet/database studio"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.5",
+    "@next/eslint-plugin-next": "15.5.26",
+    "@playwright/test": "1.56.1",
+    "@types/node": "22.20.4",
+    "concurrently": "9.2.4",
+    "eslint": "9.39.5",
+    "eslint-plugin-react-hooks": "5.2.0",
+    "globals": "16.5.0",
+    "prettier": "3.6.2",
+    "tsx": "4.20.6",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.46.4",
+    "vitest": "3.2.4"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/client",
+      "@prisma/engines",
+      "prisma",
+      "esbuild",
+      "sharp",
+      "unrs-resolver",
+      "msgpackr-extract"
+    ]
+  }
+}

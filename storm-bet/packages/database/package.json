@@ -1,0 +1,32 @@
+{
+  "name": "@storm-bet/database",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "prisma": {
+    "schema": "prisma/schema.prisma"
+  },
+  "scripts": {
+    "generate": "prisma generate",
+    "migrate": "node --env-file-if-exists=../../.env ./node_modules/prisma/build/index.js migrate deploy",
+    "migrate:dev": "node --env-file-if-exists=../../.env ./node_modules/prisma/build/index.js migrate dev",
+    "reset": "node --env-file-if-exists=../../.env ./node_modules/prisma/build/index.js migrate reset --force --skip-seed",
+    "seed": "tsx --env-file-if-exists=../../.env src/seed/index.ts",
+    "studio": "node --env-file-if-exists=../../.env ./node_modules/prisma/build/index.js studio",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@prisma/client": "6.19.3",
+    "@storm-bet/config": "workspace:*",
+    "@storm-bet/types": "workspace:*",
+    "prisma": "6.19.3"
+  },
+  "devDependencies": {
+    "@storm-bet/security": "workspace:*",
+    "tsx": "4.20.6",
+    "typescript": "5.9.3"
+  }
+}

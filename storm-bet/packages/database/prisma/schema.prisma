@@ -1,0 +1,618 @@
+// STORM BET — PostgreSQL schema.
+//
+// Conventions
+// - UUID primary keys, snake_case tables and columns.
+// - Money is BIGINT minor units of the DEMO currency (1 = 0.01 DEMO). Odds
+//   are NUMERIC(8,3) decimal odds. Neither is ever a float.
+// - Ledger tables (transactions, audit_logs) and settled bets are protected
+//   by triggers created in the migrations, not only by application code.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ──────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  USER
+  SUPPORT
+  TRADER
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  LOCKED
+  CLOSED
+}
+
+enum KycStatus {
+  NOT_REQUIRED
+  NOT_STARTED
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum AuthTokenType {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+}
+
+enum EventStatus {
+  SCHEDULED
+  LIVE
+  SUSPENDED
+  FINISHED
+  CANCELLED
+  POSTPONED
+}
+
+enum MarketStatus {
+  OPEN
+  SUSPENDED
+  CLOSED
+  SETTLED
+}
+
+enum MarketType {
+  MATCH_RESULT
+  DOUBLE_CHANCE
+  DRAW_NO_BET
+  TOTAL_GOALS
+  ASIAN_HANDICAP
+  BOTH_TEAMS_TO_SCORE
+  TOTAL_CORNERS
+  TOTAL_CARDS
+  PLAYER_TO_SCORE
+  MATCH_WINNER
+  FIRST_SET_WINNER
+  SET_BETTING
+  TOTAL_GAMES
+  GAME_HANDICAP
+  TOTAL_POINTS
+  POINT_SPREAD
+}
+
+enum Outcome {
+  HOME
+  DRAW
+  AWAY
+  HOME_OR_DRAW
+  HOME_OR_AWAY
+  DRAW_OR_AWAY
+  OVER
+  UNDER
+  YES
+  NO
+  SETS_2_0
+  SETS_2_1
+  SETS_1_2
+  SETS_0_2
+  PLAYER
+}
+
+enum SelectionStatus {
+  OPEN
+  SUSPENDED
+  CLOSED
+}
+
+enum SelectionResult {
+  PENDING
+  WON
+  LOST
+  VOID
+}
+
+enum BetStatus {
+  PENDING
+  WON
+  LOST
+  VOID
+  REFUNDED
+}
+
+enum BetType {
+  SINGLE
+  DOUBLE
+  TRIPLE
+  ACCUMULATOR
+}
+
+enum SlipMode {
+  SINGLES
+  COMBO
+}
+
+enum OddsChangePolicy {
+  REJECT
+  ACCEPT_HIGHER
+}
+
+enum TransactionType {
+  DEPOSIT_DEMO
+  BET_PLACED
+  BET_WON
+  BET_LOST
+  BET_VOID
+  BET_REFUND
+}
+
+enum LimitType {
+  STAKE_PER_BET
+  STAKE_DAILY
+  STAKE_WEEKLY
+  STAKE_MONTHLY
+}
+
+// ─── Identity ───────────────────────────────────────────────────────────────
+
+model User {
+  id              String     @id @default(uuid()) @db.Uuid
+  /// Stored lower-cased; uniqueness is case-insensitive by construction.
+  email           String     @unique
+  displayName     String     @map("display_name")
+  passwordHash    String     @map("password_hash")
+  role            UserRole   @default(USER)
+  status          UserStatus @default(ACTIVE)
+  emailVerifiedAt DateTime?  @map("email_verified_at")
+  lockedAt        DateTime?  @map("locked_at")
+  lockedReason    String?    @map("locked_reason")
+  /// ISO 3166-1 alpha-2. Prepared for the jurisdiction layer.
+  country         String?    @db.Char(2)
+  /// Prepared for age verification before any real-money integration.
+  dateOfBirth     DateTime?  @map("date_of_birth") @db.Date
+  kycStatus       KycStatus  @default(NOT_REQUIRED) @map("kyc_status")
+  passwordChangedAt DateTime @default(now()) @map("password_changed_at")
+  lastLoginAt     DateTime?  @map("last_login_at")
+  createdAt       DateTime   @default(now()) @map("created_at")
+  updatedAt       DateTime   @updatedAt @map("updated_at")
+
+  sessions       Session[]
+  authTokens     AuthToken[]
+  wallet         Wallet?
+  transactions   Transaction[]
+  betSlips       BetSlip[]
+  bets           Bet[]
+  limits         UserLimit[]
+  selfExclusions SelfExclusion[]
+  auditLogs      AuditLog[]     @relation("AuditActor")
+
+  @@index([role])
+  @@index([status])
+  @@index([createdAt])
+  @@map("users")
+}
+
+model Session {
+  id            String    @id @default(uuid()) @db.Uuid
+  userId        String    @map("user_id") @db.Uuid
+  /// SHA-256 of the cookie token. The token itself is never stored.
+  tokenHash     String    @unique @map("token_hash")
+  ip            String?
+  userAgent     String?   @map("user_agent")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  lastSeenAt    DateTime  @default(now()) @map("last_seen_at")
+  expiresAt     DateTime  @map("expires_at")
+  revokedAt     DateTime? @map("revoked_at")
+  revokedReason String?   @map("revoked_reason")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+model AuthToken {
+  id        String        @id @default(uuid()) @db.Uuid
+  userId    String        @map("user_id") @db.Uuid
+  type      AuthTokenType
+  tokenHash String        @unique @map("token_hash")
+  expiresAt DateTime      @map("expires_at")
+  usedAt    DateTime?     @map("used_at")
+  createdAt DateTime      @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type])
+  @@index([expiresAt])
+  @@map("auth_tokens")
+}
+
+// ─── Responsible gaming ─────────────────────────────────────────────────────
+
+model UserLimit {
+  id                 String    @id @default(uuid()) @db.Uuid
+  userId             String    @map("user_id") @db.Uuid
+  type               LimitType
+  amount             BigInt
+  effectiveFrom      DateTime  @default(now()) @map("effective_from")
+  /// Increases wait out a cooling-off period; decreases apply at once.
+  pendingAmount      BigInt?   @map("pending_amount")
+  pendingEffectiveAt DateTime? @map("pending_effective_at")
+  /// Set by staff (support) rather than by the player.
+  setByStaff         Boolean   @default(false) @map("set_by_staff")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, type])
+  @@map("user_limits")
+}
+
+model SelfExclusion {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  startsAt  DateTime  @default(now()) @map("starts_at")
+  /// Null means indefinite.
+  endsAt    DateTime? @map("ends_at")
+  reason    String?
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, endsAt])
+  @@map("self_exclusions")
+}
+
+// ─── Sportsbook catalogue ───────────────────────────────────────────────────
+
+model Sport {
+  id        String   @id @default(uuid()) @db.Uuid
+  key       String   @unique
+  name      String
+  sortOrder Int      @default(0) @map("sort_order")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  leagues League[]
+  teams   Team[]
+  events  Event[]
+
+  @@map("sports")
+}
+
+model League {
+  id         String   @id @default(uuid()) @db.Uuid
+  sportId    String   @map("sport_id") @db.Uuid
+  provider   String
+  externalId String   @map("external_id")
+  name       String
+  country    String?
+  sortOrder  Int      @default(0) @map("sort_order")
+  isActive   Boolean  @default(true) @map("is_active")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  sport  Sport   @relation(fields: [sportId], references: [id])
+  events Event[]
+
+  @@unique([provider, externalId])
+  @@index([sportId])
+  @@map("leagues")
+}
+
+model Team {
+  id         String   @id @default(uuid()) @db.Uuid
+  sportId    String   @map("sport_id") @db.Uuid
+  provider   String
+  externalId String   @map("external_id")
+  name       String
+  shortName  String   @map("short_name")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  sport      Sport    @relation(fields: [sportId], references: [id])
+  players    Player[]
+  homeEvents Event[]  @relation("HomeTeam")
+  awayEvents Event[]  @relation("AwayTeam")
+
+  @@unique([provider, externalId])
+  @@index([sportId])
+  @@map("teams")
+}
+
+model Player {
+  id         String   @id @default(uuid()) @db.Uuid
+  teamId     String   @map("team_id") @db.Uuid
+  provider   String
+  externalId String   @map("external_id")
+  name       String
+  position   String?
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  team       Team        @relation(fields: [teamId], references: [id])
+  selections Selection[]
+
+  @@unique([provider, externalId])
+  @@index([teamId])
+  @@map("players")
+}
+
+model Event {
+  id               String      @id @default(uuid()) @db.Uuid
+  sportId          String      @map("sport_id") @db.Uuid
+  leagueId         String      @map("league_id") @db.Uuid
+  homeTeamId       String      @map("home_team_id") @db.Uuid
+  awayTeamId       String      @map("away_team_id") @db.Uuid
+  /// "mock" for simulated data, "manual" for events created by staff.
+  provider         String
+  externalId       String      @map("external_id")
+  startTime        DateTime    @map("start_time")
+  status           EventStatus @default(SCHEDULED)
+  /// Staff switch: an inactive event is hidden and takes no bets.
+  isActive         Boolean     @default(true) @map("is_active")
+  /// Staff lock that survives provider updates.
+  tradingSuspended Boolean     @default(false) @map("trading_suspended")
+  homeScore        Int?        @map("home_score")
+  awayScore        Int?        @map("away_score")
+  /// { period, clock } — see LiveState in @storm-bet/types.
+  liveState        Json?       @map("live_state")
+  /// Sport-specific statistics — see EventStatistics in @storm-bet/types.
+  statistics       Json?
+  /// Set once the final result is confirmed and may be settled against.
+  resultConfirmedAt DateTime?  @map("result_confirmed_at")
+  settledAt        DateTime?   @map("settled_at")
+  createdAt        DateTime    @default(now()) @map("created_at")
+  updatedAt        DateTime    @updatedAt @map("updated_at")
+
+  sport    Sport    @relation(fields: [sportId], references: [id])
+  league   League   @relation(fields: [leagueId], references: [id])
+  homeTeam Team     @relation("HomeTeam", fields: [homeTeamId], references: [id])
+  awayTeam Team     @relation("AwayTeam", fields: [awayTeamId], references: [id])
+  markets  Market[]
+  betSelections BetSelection[]
+
+  @@unique([provider, externalId])
+  @@index([status, startTime])
+  @@index([sportId, status, startTime])
+  @@index([leagueId, startTime])
+  @@index([startTime])
+  @@index([resultConfirmedAt, settledAt])
+  @@map("events")
+}
+
+model Market {
+  id         String       @id @default(uuid()) @db.Uuid
+  eventId    String       @map("event_id") @db.Uuid
+  /// Stable key within the event, e.g. "TOTAL_GOALS:2.5".
+  key        String
+  type       MarketType
+  name       String
+  line       Decimal?     @db.Decimal(6, 2)
+  status     MarketStatus @default(OPEN)
+  /// Staff lock that survives provider updates.
+  tradingSuspended Boolean @default(false) @map("trading_suspended")
+  sortOrder  Int          @default(0) @map("sort_order")
+  settledAt  DateTime?    @map("settled_at")
+  createdAt  DateTime     @default(now()) @map("created_at")
+  updatedAt  DateTime     @updatedAt @map("updated_at")
+
+  event      Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  selections Selection[]
+  betSelections BetSelection[]
+
+  @@unique([eventId, key])
+  @@index([eventId, status])
+  @@index([status])
+  @@map("markets")
+}
+
+model Selection {
+  id               String          @id @default(uuid()) @db.Uuid
+  marketId         String          @map("market_id") @db.Uuid
+  /// Stable key within the market, e.g. "OVER" or "PLAYER:<id>".
+  key              String
+  name             String
+  outcome          Outcome
+  playerId         String?         @map("player_id") @db.Uuid
+  odds             Decimal         @db.Decimal(8, 3)
+  /// Bumped on every price or status change; a client quoting an older
+  /// version is quoting a stale price.
+  oddsVersion      Int             @default(1) @map("odds_version")
+  oddsUpdatedAt    DateTime        @default(now()) @map("odds_updated_at")
+  status           SelectionStatus @default(OPEN)
+  suspensionReason String?         @map("suspension_reason")
+  result           SelectionResult @default(PENDING)
+  sortOrder        Int             @default(0) @map("sort_order")
+  createdAt        DateTime        @default(now()) @map("created_at")
+  updatedAt        DateTime        @updatedAt @map("updated_at")
+
+  market        Market         @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  player        Player?        @relation(fields: [playerId], references: [id])
+  betSelections BetSelection[]
+  oddsSnapshots OddsSnapshot[]
+
+  @@unique([marketId, key])
+  @@index([marketId])
+  @@index([status])
+  @@map("selections")
+}
+
+// ─── Wallet ─────────────────────────────────────────────────────────────────
+
+model Wallet {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @unique @map("user_id") @db.Uuid
+  currency  String   @default("DEMO")
+  /// Total funds, reserved stakes included.
+  balance   BigInt   @default(0)
+  /// Stakes of open bets. available = balance - reserved.
+  reserved  BigInt   @default(0)
+  version   Int      @default(0)
+  lastTopUpAt DateTime? @map("last_top_up_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Restrict)
+  transactions Transaction[]
+
+  @@map("wallets")
+}
+
+model Transaction {
+  id            String          @id @default(uuid()) @db.Uuid
+  walletId      String          @map("wallet_id") @db.Uuid
+  userId        String          @map("user_id") @db.Uuid
+  type          TransactionType
+  /// Signed change to the balance.
+  amount        BigInt
+  /// Signed change to the reserved part.
+  reservedDelta BigInt          @map("reserved_delta")
+  balanceAfter  BigInt          @map("balance_after")
+  reservedAfter BigInt          @map("reserved_after")
+  betId         String?         @map("bet_id") @db.Uuid
+  description   String
+  metadata      Json            @default("{}")
+  createdAt     DateTime        @default(now()) @map("created_at")
+
+  wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Restrict)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Restrict)
+  bet    Bet?   @relation(fields: [betId], references: [id], onDelete: Restrict)
+
+  /// A bet can be charged once and paid once. The partial unique index on
+  /// settlement types (see migration) closes the remaining gap.
+  @@unique([betId, type])
+  @@index([userId, createdAt])
+  @@index([walletId, createdAt])
+  @@index([type])
+  @@index([createdAt])
+  @@map("transactions")
+}
+
+// ─── Bets ───────────────────────────────────────────────────────────────────
+
+model BetSlip {
+  id             String   @id @default(uuid()) @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  /// Client-generated key; a retried request replays instead of re-betting.
+  idempotencyKey String   @map("idempotency_key")
+  /// SHA-256 of the normalised request, to refuse key reuse for a different slip.
+  requestHash    String   @map("request_hash")
+  mode           SlipMode
+  totalStake     BigInt   @map("total_stake")
+  ip             String?
+  userAgent      String?  @map("user_agent")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  user User  @relation(fields: [userId], references: [id], onDelete: Restrict)
+  bets Bet[]
+
+  @@unique([userId, idempotencyKey])
+  @@index([userId, createdAt])
+  @@map("bet_slips")
+}
+
+model Bet {
+  id               String           @id @default(uuid()) @db.Uuid
+  reference        String           @unique
+  userId           String           @map("user_id") @db.Uuid
+  slipId           String           @map("slip_id") @db.Uuid
+  type             BetType
+  status           BetStatus        @default(PENDING)
+  stake            BigInt
+  totalOdds        Decimal          @map("total_odds") @db.Decimal(14, 3)
+  potentialReturn  BigInt           @map("potential_return")
+  payout           BigInt?
+  oddsChangePolicy OddsChangePolicy @map("odds_change_policy")
+  placedAt         DateTime         @default(now()) @map("placed_at")
+  settledAt        DateTime?        @map("settled_at")
+  settlementNote   String?          @map("settlement_note")
+  createdAt        DateTime         @default(now()) @map("created_at")
+  updatedAt        DateTime         @updatedAt @map("updated_at")
+
+  user         User           @relation(fields: [userId], references: [id], onDelete: Restrict)
+  slip         BetSlip        @relation(fields: [slipId], references: [id], onDelete: Restrict)
+  selections   BetSelection[]
+  transactions Transaction[]
+
+  @@index([userId, status, placedAt])
+  @@index([userId, placedAt])
+  @@index([status])
+  @@index([placedAt])
+  @@map("bets")
+}
+
+model BetSelection {
+  id          String          @id @default(uuid()) @db.Uuid
+  betId       String          @map("bet_id") @db.Uuid
+  selectionId String          @map("selection_id") @db.Uuid
+  marketId    String          @map("market_id") @db.Uuid
+  eventId     String          @map("event_id") @db.Uuid
+  /// Odds the bet was accepted at.
+  odds        Decimal         @db.Decimal(8, 3)
+  result      SelectionResult @default(PENDING)
+  /// Names frozen at placement: history must read the same after a rename.
+  eventName     String        @map("event_name")
+  marketName    String        @map("market_name")
+  selectionName String        @map("selection_name")
+  createdAt   DateTime        @default(now()) @map("created_at")
+  updatedAt   DateTime        @updatedAt @map("updated_at")
+
+  bet       Bet           @relation(fields: [betId], references: [id], onDelete: Restrict)
+  selection Selection     @relation(fields: [selectionId], references: [id], onDelete: Restrict)
+  market    Market        @relation(fields: [marketId], references: [id], onDelete: Restrict)
+  event     Event         @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  snapshot  OddsSnapshot?
+
+  @@unique([betId, selectionId])
+  @@index([selectionId])
+  @@index([marketId])
+  @@index([eventId, result])
+  @@map("bet_selections")
+}
+
+/// What the book looked like at the moment a leg was accepted.
+model OddsSnapshot {
+  id             String       @id @default(uuid()) @db.Uuid
+  betSelectionId String       @unique @map("bet_selection_id") @db.Uuid
+  selectionId    String       @map("selection_id") @db.Uuid
+  odds           Decimal      @db.Decimal(8, 3)
+  oddsVersion    Int          @map("odds_version")
+  eventStatus    EventStatus  @map("event_status")
+  marketStatus   MarketStatus @map("market_status")
+  homeScore      Int?         @map("home_score")
+  awayScore      Int?         @map("away_score")
+  source         String
+  capturedAt     DateTime     @default(now()) @map("captured_at")
+
+  betSelection BetSelection @relation(fields: [betSelectionId], references: [id], onDelete: Restrict)
+  selection    Selection    @relation(fields: [selectionId], references: [id], onDelete: Restrict)
+
+  @@index([selectionId])
+  @@map("odds_snapshots")
+}
+
+// ─── Audit ──────────────────────────────────────────────────────────────────
+
+/// Append-only. A trigger rejects UPDATE and DELETE for every role.
+model AuditLog {
+  id         String    @id @default(uuid()) @db.Uuid
+  actorId    String?   @map("actor_id") @db.Uuid
+  actorRole  UserRole? @map("actor_role")
+  action     String
+  targetType String    @map("target_type")
+  targetId   String?   @map("target_id")
+  ip         String?
+  userAgent  String?   @map("user_agent")
+  metadata   Json      @default("{}")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  actor User? @relation("AuditActor", fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([actorId, createdAt])
+  @@index([targetType, targetId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
