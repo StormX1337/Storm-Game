@@ -22,3 +22,4 @@ export type {
 } from '@prisma/client';
 export * from './client';
 export * from './convert';
+export * from './audit';

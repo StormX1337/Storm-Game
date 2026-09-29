@@ -16,7 +16,8 @@
     "@storm-bet/database": "workspace:*",
     "@storm-bet/redis": "workspace:*",
     "@storm-bet/compliance": "workspace:*",
-    "@storm-bet/validation": "workspace:*"
+    "@storm-bet/validation": "workspace:*",
+    "@storm-bet/security": "workspace:*"
   },
   "devDependencies": {
     "typescript": "5.9.3"

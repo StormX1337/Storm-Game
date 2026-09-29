@@ -13,7 +13,9 @@ export interface CreateClientOptions {
 export function createPrismaClient(options: CreateClientOptions = {}): PrismaClient {
   return new PrismaClient({
     ...(options.url ? { datasources: { db: { url: options.url } } } : {}),
-    log: options.logQueries ? ['query', 'warn', 'error'] : ['warn', 'error'],
+    // Query errors surface as exceptions and are logged by the service that
+    // handles them; Prisma's own error printing would only duplicate them.
+    log: options.logQueries ? ['query', 'warn', 'error'] : ['warn'],
   });
 }
 
