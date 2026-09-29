@@ -1,0 +1,79 @@
+name: Football Value Scanner
+
+on:
+  push:
+    branches: ['**']
+    paths: ['football-scanner/**', '.github/workflows/football-scanner.yml']
+  pull_request:
+    paths: ['football-scanner/**', '.github/workflows/football-scanner.yml']
+
+concurrency:
+  group: football-scanner-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (lint, migrations, tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: football-scanner/backend
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: scanner
+          POSTGRES_PASSWORD: scanner
+          POSTGRES_DB: scanner_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U scanner"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      FVS_TEST_DATABASE_URL: postgresql+psycopg://scanner:scanner@127.0.0.1:5432/scanner_test
+      FVS_TEST_REDIS_URL: redis://127.0.0.1:6379/15
+      # Test-only value; protects nothing but an ephemeral runner.
+      FVS_SECRET_KEY: ci-secret-key-not-used-anywhere-else-000000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -e '.[dev]'
+      - run: ruff check .
+      - run: ruff format --check .
+      # The migration must build exactly the schema the models describe.
+      - run: alembic upgrade head && alembic check
+        env:
+          FVS_DATABASE_URL: postgresql+psycopg://scanner:scanner@127.0.0.1:5432/scanner_test
+      - run: python -m pytest
+
+  web:
+    name: Web (lint, types, build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: football-scanner/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: football-scanner/web/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'

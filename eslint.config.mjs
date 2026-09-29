@@ -20,6 +20,8 @@ export default tseslint.config(
       '**/playwright-report/**',
       'packages/database/generated/**',
       'apps/web/next-env.d.ts',
+      // A separate product with its own ESLint config and CI workflow.
+      'football-scanner/**',
     ],
   },
 

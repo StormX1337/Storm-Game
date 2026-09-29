@@ -1,0 +1,69 @@
+name: football-value-scanner
+
+x-backend-env: &backend-env
+  FVS_ENV: production
+  FVS_DATABASE_URL: postgresql+psycopg://scanner:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/scanner
+  FVS_REDIS_URL: redis://redis:6379/0
+  FVS_SECRET_KEY: ${FVS_SECRET_KEY:?set FVS_SECRET_KEY (32+ random characters)}
+  FVS_ALLOWED_ORIGINS: ${FVS_ALLOWED_ORIGINS:-http://localhost:3000}
+  FVS_COOKIE_SECURE: ${FVS_COOKIE_SECURE:-true}
+  FVS_API_FOOTBALL_KEY: ${FVS_API_FOOTBALL_KEY:-}
+  FVS_THE_ODDS_API_KEY: ${FVS_THE_ODDS_API_KEY:-}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: scanner
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: scanner
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U scanner']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    environment: *backend-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build: ./backend
+    restart: unless-stopped
+    command: ['python', '-m', 'app.worker']
+    environment: *backend-env
+    depends_on:
+      backend:
+        condition: service_started
+
+  web:
+    build:
+      context: ./web
+      args:
+        BACKEND_URL: http://backend:8000
+    restart: unless-stopped
+    ports:
+      - '${WEB_PORT:-3000}:3000'
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
