@@ -21,6 +21,14 @@
 - Rate-Limits (Redis, Sliding Window) pro IP und pro Nutzer, u. a. für Login, Registrierung, Wetten, Admin
 - Fehler: einheitliches Format mit Request-ID, niemals Stacktraces oder interne Meldungen
 
+## Client-IP und Proxies
+
+Die Web-App leitet `X-Forwarded-For` an die API weiter; die API glaubt dem Header nur von Adressen aus
+`TRUST_PROXY` (Standard: Loopback und private Netze). In Produktion muss deshalb vor der Web-App ein
+Reverse-Proxy stehen, der den Header **überschreibt** (nginx: `proxy_set_header X-Forwarded-For
+$remote_addr;`), sonst könnten Clients über einen selbst gesetzten Header IP-basierte Rate-Limits umgehen.
+Kontobezogene Schutzmechanismen (Login-Sperre, Wett-Limits pro Nutzer) sind davon unabhängig.
+
 ## Admin
 
 - RBAC mit feingranularen Berechtigungen (`packages/types/src/rbac.ts`), auf jeder Route serverseitig geprüft

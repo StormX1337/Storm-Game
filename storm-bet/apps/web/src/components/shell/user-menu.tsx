@@ -26,6 +26,7 @@ import { useState } from 'react';
 import { api, errorMessage } from '@/lib/api-client';
 import { formatMoney } from '@/lib/format';
 import { useSession } from '../providers/session';
+import { NotificationBell } from './notifications';
 
 export function UserMenu() {
   const { user, wallet } = useSession();
@@ -78,6 +79,7 @@ export function UserMenu() {
           <span className="ml-1 hidden text-xs font-normal text-fg-subtle sm:inline">DEMO</span>
         </span>
       </Link>
+      <NotificationBell />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button
