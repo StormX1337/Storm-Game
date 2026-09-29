@@ -1,0 +1,129 @@
+# STORM BET — full stack: postgres, redis, a one-off migrate/seed job, api,
+# worker and web. Only the web container is published; it proxies /api to the
+# API over the internal network.
+#
+#   cp .env.example .env   # set AUTH_SECRET, POSTGRES_PASSWORD, seed passwords
+#   docker compose up -d --build
+#
+# Production: put a TLS-terminating reverse proxy in front of `web` and set
+# APP_URL to its https:// origin (cookies become Secure, HSTS is sent).
+
+name: storm-bet
+
+x-server-env: &server-env
+  NODE_ENV: production
+  DATABASE_URL: postgresql://${POSTGRES_USER:-stormbet}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-stormbet}?schema=public
+  REDIS_URL: redis://redis:6379
+
+x-build: &build
+  context: .
+  dockerfile: docker/Dockerfile
+  args:
+    APP_URL: ${APP_URL:-http://localhost:3000}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-stormbet}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-stormbet}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # BullMQ requires noeviction: a queue must never lose jobs to memory pressure.
+    command: ['redis-server', '--appendonly', 'yes', '--maxmemory-policy', 'noeviction']
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  migrate:
+    image: storm-bet/worker:${STORM_BET_TAG:-latest}
+    build:
+      <<: *build
+      target: worker
+    env_file: .env
+    environment:
+      <<: *server-env
+    command:
+      - sh
+      - -c
+      - node node_modules/@storm-bet/database/scripts/prisma.mjs migrate deploy && if [ "$${SEED_ON_START:-true}" = "true" ]; then node dist/seed.js; fi
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: 'no'
+    healthcheck:
+      disable: true
+
+  api:
+    image: storm-bet/api:${STORM_BET_TAG:-latest}
+    build:
+      <<: *build
+      target: api
+    restart: unless-stopped
+    init: true
+    env_file: .env
+    environment:
+      <<: *server-env
+      API_HOST: 0.0.0.0
+      API_PORT: 4000
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    expose:
+      - '4000'
+
+  worker:
+    image: storm-bet/worker:${STORM_BET_TAG:-latest}
+    build:
+      <<: *build
+      target: worker
+    restart: unless-stopped
+    init: true
+    env_file: .env
+    environment:
+      <<: *server-env
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  web:
+    image: storm-bet/web:${STORM_BET_TAG:-latest}
+    build:
+      <<: *build
+      target: web
+    restart: unless-stopped
+    init: true
+    environment:
+      NODE_ENV: production
+      APP_URL: ${APP_URL:-http://localhost:3000}
+      API_INTERNAL_URL: http://api:4000
+    ports:
+      - '${WEB_PORT:-3000}:3000'
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  redisdata:

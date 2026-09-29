@@ -44,16 +44,14 @@ async function main(): Promise<void> {
     queues.set(name, new Queue(name, { connection: bullConnection(), prefix: BULL_PREFIX }));
   }
   for (const entry of schedule) {
-    await queues
-      .get(entry.queue)!
-      .upsertJobScheduler(
-        entry.job,
-        { every: entry.every },
-        {
-          name: entry.job,
-          opts: { removeOnComplete: { count: 50 }, removeOnFail: { count: 200 } },
-        },
-      );
+    await queues.get(entry.queue)!.upsertJobScheduler(
+      entry.job,
+      { every: entry.every },
+      {
+        name: entry.job,
+        opts: { removeOnComplete: { count: 50 }, removeOnFail: { count: 200 } },
+      },
+    );
   }
 
   let lastSuccess = Date.now();
