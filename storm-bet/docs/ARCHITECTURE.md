@@ -11,7 +11,7 @@
                                   Cache · Queues · Events          Wartung · Heartbeat
                                                                          │
                                                                    OddsProvider
-                                           (MockOddsProvider | TheOddsApiProvider → Resilient)
+                          (MockOddsProvider | TheOddsApiProvider | SportsGameOddsProvider → Resilient)
 ```
 
 ## Prinzipien
@@ -80,6 +80,16 @@ Jede Buchung speichert den Stand danach; die Tabelle ist append-only.
   unter `ODDS_API_MIN_REMAINING` keine kostenpflichtigen Abrufe mehr, Märkte suspendiert, Provider-Status
   `DEGRADED`. Live-Märkte sind standardmäßig suspendiert (`ODDS_API_LIVE_BETTING=false`) und werden auch bei
   aktivem Live-Betrieb gesperrt, wenn der Snapshot älter als `ODDS_API_LIVE_MAX_AGE_SECONDS` ist.
+- `SportsGameOddsProvider` – echte Daten aus SportsGameOdds v2 (abgerechnet pro Event-Objekt). Ein
+  Snapshot aller Ligen (`finalized=false`, Zeitfenster `SGO_HORIZON_HOURS`) und – kürzer getaktet – eine
+  Nachabfrage nur der laufenden, noch nicht finalisierten Spiele per `eventIDs`; unbekannte IDs (z. B. nach
+  Neustart) werden gesammelt nachgeschlagen. Amerikanische Quoten werden in Dezimalquoten umgerechnet;
+  ohne feste Buchmacher gilt der Konsens-Preis, Märkte ohne Buchmacher-Marge entfallen. Fußball wird auf
+  die reguläre Spielzeit abgerechnet (`reg`); nach Verlängerung bleibt das Ergebnis unbestätigt (manuell).
+- Gemeinsam (`providers/shared.ts`): Validierung (Linien, Marge), Markt-Freigabe (Kontingent, Live-Alter),
+  Score-Statistiken ohne erfundene Details.
+- `OddsSyncService` sperrt Märkte, die der Feed nicht mehr anbietet (z. B. verschobene Linie), statt sie mit
+  altem Preis offen zu lassen; sie öffnen wieder, sobald der Feed sie erneut liefert.
 - `ResilientOddsProvider` – Timeout, Retries mit Jitter, Circuit Breaker, gemeinsames Rate-Limit (Redis),
   Antwort-Cache und Health-Metriken für das Admin-Panel.
 - `OddsSyncService` – schreibt nur Unterschiede (Batch-Updates), erhöht `oddsVersion`, veröffentlicht

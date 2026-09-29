@@ -24,7 +24,8 @@ async function main(): Promise<void> {
 
   const provider = createProvider(env, redis);
   const sync = new OddsSyncService(db, redis, provider, {
-    horizonHours: 36,
+    // Real fixtures are days apart; the simulator fills every hour.
+    horizonHours: env.ODDS_PROVIDER === 'mock' ? 36 : 7 * 24,
     lookbackHours: 6,
     logger,
   });
@@ -108,7 +109,9 @@ async function main(): Promise<void> {
       simulated: provider.isSimulated,
       ...(env.ODDS_PROVIDER === 'mock'
         ? { timeScale: env.MOCK_TIME_SCALE }
-        : { sports: env.ODDS_API_SPORTS }),
+        : env.ODDS_PROVIDER === 'sportsgameodds'
+          ? { leagues: env.SGO_LEAGUES }
+          : { sports: env.ODDS_API_SPORTS }),
     },
     'worker started',
   );

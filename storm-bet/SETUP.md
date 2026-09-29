@@ -40,11 +40,15 @@ bricht den Start mit einer klaren Meldung ab.
 | `ODDS_ACCEPT_HIGHER_MAX_PCT`                                                                   | –       | größte automatisch akzeptierte Quotenerhöhung (nur mit Opt-in)                                    |
 | `DEMO_STARTING_BALANCE`, `DEMO_TOPUP_*`                                                        | –       | Demo-Startguthaben und Aufladung                                                                  |
 | `MOCK_SEED`, `MOCK_TIME_SCALE`                                                                 | –       | Simulator: Seed und Spielzeit-Faktor (3 = 90 Min. Fußball in 30 Min.)                             |
-| `ODDS_PROVIDER`                                                                                | –       | `mock` (Simulator, Standard) oder `theoddsapi` (echte Daten, siehe unten)                         |
+| `ODDS_PROVIDER`                                                                                | –       | `mock` (Simulator, Standard), `theoddsapi` oder `sportsgameodds` (echte Daten, siehe unten)       |
 | `ODDS_API_KEY`                                                                                 | Feed    | API-Key von The Odds API; Pflicht bei `ODDS_PROVIDER=theoddsapi`                                  |
 | `ODDS_API_SPORTS`, `ODDS_API_REGIONS`, `ODDS_API_BOOKMAKERS`                                   | –       | Wettbewerbe (`*` am Ende = Präfix), Buchmacher-Region bzw. feste Buchmacher                       |
 | `ODDS_API_ODDS_TTL_SECONDS`, `ODDS_API_SCORES_TTL_SECONDS`, `ODDS_API_MIN_REMAINING`           | –       | Abruftakt pro Wettbewerb und Credit-Reserve                                                       |
 | `ODDS_API_LIVE_BETTING`, `ODDS_API_LIVE_MAX_AGE_SECONDS`                                       | –       | Live-Wetten auf echte Spiele (Standard aus) und maximales Quotenalter                             |
+| `SGO_API_KEY`                                                                                  | Feed    | API-Key von SportsGameOdds; Pflicht bei `ODDS_PROVIDER=sportsgameodds`                            |
+| `SGO_LEAGUES`, `SGO_BOOKMAKERS`, `SGO_HORIZON_HOURS`                                           | –       | Ligen (leagueIDs), feste Buchmacher (leer = Konsens), Zeitfenster                                 |
+| `SGO_ODDS_TTL_SECONDS`, `SGO_LIVE_TTL_SECONDS`, `SGO_MIN_REMAINING`                            | –       | Snapshot- und Live-Takt, Reserve an Event-Objekten                                                |
+| `SGO_LIVE_BETTING`, `SGO_LIVE_MAX_AGE_SECONDS`                                                 | –       | Live-Wetten (Standard aus) und maximales Quotenalter                                              |
 | `PROVIDER_*`                                                                                   | –       | Timeout, Retries, Rate-Limit, Cache des Odds-Providers                                            |
 | `*_INTERVAL_MS`                                                                                | –       | Takt der Worker-Jobs                                                                              |
 | `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD`, `SEED_DEMO_EMAIL`, `SEED_DEMO_PASSWORD`             | –       | Seed-Konten; leere Passwörter werden generiert und einmalig ausgegeben                            |
@@ -112,6 +116,30 @@ abgesagt), bleiben offen und müssen im Admin-Bereich abgerechnet oder storniert
 **Netzwerk:** Der Worker braucht ausgehend HTTPS zu `api.the-odds-api.com`. Hinter einem HTTP-Proxy
 zusätzlich `NODE_USE_ENV_PROXY=1` setzen (Node ≥ 22.15), damit `fetch` `HTTPS_PROXY` verwendet.
 
+## Echte Quoten (SportsGameOdds)
+
+Alternativ liefert [SportsGameOdds](https://sportsgameodds.com) (API v2) Quoten, Live-Spielstände und
+offizielle Ergebnisse in einem Event-Objekt. Gewettet wird weiterhin **nur mit Demo-Guthaben**.
+
+```bash
+ODDS_PROVIDER=sportsgameodds
+SGO_API_KEY=dein-key
+pnpm odds:check              # Ligen + Monatskontingent (kostet keine Event-Objekte)
+```
+
+**Abrechnung pro Event-Objekt:** Jeder Snapshot kostet ein Objekt pro Spiel im Zeitfenster
+(`SGO_HORIZON_HOURS`), jede Live-Nachabfrage eines pro laufendem Spiel. Märkte und Buchmacher kosten nichts
+extra. Beispiel: 5 Ligen, 48 h, Snapshot alle 30 Min. ⇒ etwa 30 Spiele × 48 = rund 1.500 Objekte pro Tag.
+Der Gratis-Plan (2.500 Objekte/Monat, 10 Anfragen/Min.) reicht nur für eine Liga mit Snapshots im
+Stundenbereich. Unter `SGO_MIN_REMAINING` stoppt der Worker und suspendiert die Märkte.
+
+**Angebot:** wie bei The Odds API nur 1X2/Sieger, Handicap und Über/Unter (Fußball auf die reguläre
+Spielzeit). Ohne `SGO_BOOKMAKERS` wird der Konsens-Preis aller Buchmacher verwendet; ein Markt, dessen
+Preise dem Buchmacher keine Marge lassen, wird nicht angeboten. Endet ein Fußballspiel mit
+Verlängerung/Elfmeterschießen, wird das Ergebnis nicht automatisch bestätigt, sondern im Admin-Bereich
+erfasst. Abgesagte Spiele werden mit Quote 1,00 abgerechnet. Netzwerk: ausgehend HTTPS zu
+`api.sportsgameodds.com`.
+
 ## Tests
 
 ```bash
@@ -125,17 +153,18 @@ Migrationen an und legen eigene Datensätze an – es wird nie etwas zurückgese
 
 Besonders abgesichert:
 
-| Test                                                    | Datei                                                                                         |
-| ------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| Wette darf nicht doppelt platziert werden               | `packages/betting-engine/test/betting.int.test.ts`                                            |
-| Quote wird während des Place-Vorgangs geändert          | ebenda (paralleler Row-Lock)                                                                  |
-| Wallet darf niemals negativ werden                      | ebenda (parallele Wetten + DB-Constraint)                                                     |
-| Settlement darf nicht doppelt auszahlen                 | ebenda (parallele Läufe + Ledger-Trigger)                                                     |
-| Login, Registrierung, Brute-Force, CSRF, Passwort-Reset | `apps/api/test/api.int.test.ts`                                                               |
-| Rollen/Berechtigungen, Admin-APIs                       | ebenda                                                                                        |
-| Quoten-, Wettschein- und Abrechnungsregeln              | `packages/betting-engine/test/domain.test.ts`                                                 |
-| Simulator, Resilience, Sync                             | `packages/odds-engine/test/*`                                                                 |
-| The-Odds-API-Mapping, Kontingent, Sync → Abrechnung     | `packages/odds-engine/test/the-odds-api.test.ts`, `apps/worker/test/the-odds-api.int.test.ts` |
+| Test                                                    | Datei                                                                                             |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Wette darf nicht doppelt platziert werden               | `packages/betting-engine/test/betting.int.test.ts`                                                |
+| Quote wird während des Place-Vorgangs geändert          | ebenda (paralleler Row-Lock)                                                                      |
+| Wallet darf niemals negativ werden                      | ebenda (parallele Wetten + DB-Constraint)                                                         |
+| Settlement darf nicht doppelt auszahlen                 | ebenda (parallele Läufe + Ledger-Trigger)                                                         |
+| Login, Registrierung, Brute-Force, CSRF, Passwort-Reset | `apps/api/test/api.int.test.ts`                                                                   |
+| Rollen/Berechtigungen, Admin-APIs                       | ebenda                                                                                            |
+| Quoten-, Wettschein- und Abrechnungsregeln              | `packages/betting-engine/test/domain.test.ts`                                                     |
+| Simulator, Resilience, Sync                             | `packages/odds-engine/test/*`                                                                     |
+| The-Odds-API-Mapping, Kontingent, Sync → Abrechnung     | `packages/odds-engine/test/the-odds-api.test.ts`, `apps/worker/test/the-odds-api.int.test.ts`     |
+| SportsGameOdds-Mapping, Kontingent, Sync → Abrechnung   | `packages/odds-engine/test/sportsgameodds.test.ts`, `apps/worker/test/sportsgameodds.int.test.ts` |
 
 ## Docker
 

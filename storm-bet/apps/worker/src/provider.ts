@@ -2,6 +2,7 @@ import type { WorkerEnv } from '@storm-bet/config';
 import {
   MockOddsProvider,
   ResilientOddsProvider,
+  SportsGameOddsProvider,
   TheOddsApiProvider,
   type OddsProvider,
 } from '@storm-bet/odds-engine';
@@ -27,6 +28,20 @@ export function createInnerProvider(env: WorkerEnv): OddsProvider {
       liveMaxAgeMs: env.ODDS_API_LIVE_MAX_AGE_SECONDS * 1000,
     });
   }
+  if (env.ODDS_PROVIDER === 'sportsgameodds') {
+    return new SportsGameOddsProvider({
+      apiKey: env.SGO_API_KEY ?? '',
+      baseUrl: env.SGO_BASE_URL,
+      leagues: env.SGO_LEAGUES,
+      bookmakers: env.SGO_BOOKMAKERS,
+      horizonHours: env.SGO_HORIZON_HOURS,
+      oddsTtlMs: env.SGO_ODDS_TTL_SECONDS * 1000,
+      liveTtlMs: env.SGO_LIVE_TTL_SECONDS * 1000,
+      minRemainingObjects: env.SGO_MIN_REMAINING,
+      liveBetting: env.SGO_LIVE_BETTING,
+      liveMaxAgeMs: env.SGO_LIVE_MAX_AGE_SECONDS * 1000,
+    });
+  }
   return new MockOddsProvider({ seed: env.MOCK_SEED, timeScale: env.MOCK_TIME_SCALE });
 }
 
@@ -37,7 +52,7 @@ export function createProvider(env: WorkerEnv, redis: Redis): ResilientOddsProvi
     timeoutMs: real ? Math.max(env.PROVIDER_TIMEOUT_MS, 10_000) : env.PROVIDER_TIMEOUT_MS,
     maxRetries: env.PROVIDER_MAX_RETRIES,
     rateLimitPerMinute: env.PROVIDER_RATE_LIMIT_PER_MINUTE,
-    // The Odds API provider keeps its own credit-aware snapshots.
+    // The real-feed providers keep their own quota-aware snapshots.
     cacheTtlSeconds: env.PROVIDER_CACHE_TTL_SECONDS,
   });
 }

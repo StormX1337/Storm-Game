@@ -53,8 +53,8 @@ const sharedServerEnv = {
   DEMO_TOPUP_THRESHOLD: int(50_00, 0),
   DEMO_TOPUP_COOLDOWN_HOURS: int(24, 0),
 
-  /** Odds feed: the built-in simulator or The Odds API (real prices and scores). */
-  ODDS_PROVIDER: z.enum(['mock', 'theoddsapi']).default('mock'),
+  /** Odds feed: the built-in simulator, The Odds API or SportsGameOdds (real prices and results). */
+  ODDS_PROVIDER: z.enum(['mock', 'theoddsapi', 'sportsgameodds']).default('mock'),
 };
 
 const list = (fallback: string) =>
@@ -119,6 +119,18 @@ export const workerEnvSchema = z
     ODDS_API_MIN_REMAINING: int(25, 0),
     ODDS_API_LIVE_BETTING: bool(false),
     ODDS_API_LIVE_MAX_AGE_SECONDS: int(60, 5),
+
+    /** SportsGameOdds — billed per event object returned, see SETUP.md. */
+    SGO_API_KEY: z.string().min(10).optional(),
+    SGO_BASE_URL: z.string().url().default('https://api.sportsgameodds.com/v2'),
+    SGO_LEAGUES: list('BUNDESLIGA,EPL,LA_LIGA,UEFA_CHAMPIONS_LEAGUE,NBA'),
+    SGO_BOOKMAKERS: list(''),
+    SGO_HORIZON_HOURS: int(48, 1, 24 * 14),
+    SGO_ODDS_TTL_SECONDS: int(1800, 60),
+    SGO_LIVE_TTL_SECONDS: int(120, 15),
+    SGO_MIN_REMAINING: int(50, 0),
+    SGO_LIVE_BETTING: bool(false),
+    SGO_LIVE_MAX_AGE_SECONDS: int(60, 5),
   })
   .superRefine((env, ctx) => {
     if (env.ODDS_PROVIDER === 'theoddsapi' && !env.ODDS_API_KEY) {
@@ -126,6 +138,13 @@ export const workerEnvSchema = z
         code: z.ZodIssueCode.custom,
         path: ['ODDS_API_KEY'],
         message: 'ODDS_PROVIDER=theoddsapi benötigt ODDS_API_KEY',
+      });
+    }
+    if (env.ODDS_PROVIDER === 'sportsgameodds' && !env.SGO_API_KEY) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['SGO_API_KEY'],
+        message: 'ODDS_PROVIDER=sportsgameodds benötigt SGO_API_KEY',
       });
     }
   });

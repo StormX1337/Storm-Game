@@ -6,6 +6,7 @@ export const PROVIDER_INFO: Record<string, { name: string; isSimulated: boolean 
   mock: { name: 'STORM Simulator', isSimulated: true },
   manual: { name: 'Manuell (Staff)', isSimulated: true },
   theoddsapi: { name: 'The Odds API', isSimulated: false },
+  sportsgameodds: { name: 'SportsGameOdds', isSimulated: false },
 };
 
 export function isSimulatedProvider(key: string): boolean {

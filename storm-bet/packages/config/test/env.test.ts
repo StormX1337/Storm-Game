@@ -38,6 +38,18 @@ describe('parseEnv', () => {
     });
     expect(env.ODDS_API_BOOKMAKERS).toEqual(['pinnacle', 'unibet_eu']);
     expect(env.ODDS_API_LIVE_BETTING).toBe(false);
+
+    expect(() => parseEnv(workerEnvSchema, { ...base, ODDS_PROVIDER: 'sportsgameodds' })).toThrow(
+      /SGO_API_KEY/,
+    );
+    const sgo = parseEnv(workerEnvSchema, {
+      ...base,
+      ODDS_PROVIDER: 'sportsgameodds',
+      SGO_API_KEY: 'k'.repeat(32),
+      SGO_LEAGUES: 'BUNDESLIGA, NBA',
+    });
+    expect(sgo.SGO_LEAGUES).toEqual(['BUNDESLIGA', 'NBA']);
+    expect(sgo.SGO_LIVE_BETTING).toBe(false);
   });
 
   it('rejects short secrets', () => {

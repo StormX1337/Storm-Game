@@ -1,12 +1,12 @@
 import { parseEnv, workerEnvSchema } from '@storm-bet/config';
-import { TheOddsApiProvider } from '@storm-bet/odds-engine';
+import { SportsGameOddsProvider, TheOddsApiProvider } from '@storm-bet/odds-engine';
 import { createInnerProvider } from './provider';
 
 /**
  * `pnpm --filter @storm-bet/worker odds:check` — verifies the configured feed:
- * reachable, key accepted, which competitions would be imported and how many
- * request credits remain. The sports list itself costs no credits; pass
- * --with-odds to also fetch one competition's odds (costs credits).
+ * reachable, key accepted, which competitions would be imported and how much
+ * quota remains. Listing competitions costs nothing; pass --with-odds to also
+ * fetch odds (costs credits / event objects).
  */
 async function main(): Promise<void> {
   const env = parseEnv(workerEnvSchema);
@@ -32,9 +32,11 @@ async function main(): Promise<void> {
       );
     }
   }
-  if (provider instanceof TheOddsApiProvider) {
-    const q = provider.getQuota();
-    console.log(`\nCredits: verbleibend ${q.remaining ?? '?'}, verbraucht ${q.used ?? '?'}`);
+  if (provider instanceof TheOddsApiProvider || provider instanceof SportsGameOddsProvider) {
+    const q =
+      provider instanceof SportsGameOddsProvider ? await provider.loadQuota() : provider.getQuota();
+    const unit = provider instanceof TheOddsApiProvider ? 'Credits' : 'Event-Objekte (Monat)';
+    console.log(`\n${unit}: verbleibend ${q.remaining ?? '?'}, verbraucht ${q.used ?? '?'}`);
   }
 }
 

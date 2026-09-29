@@ -1,17 +1,4 @@
-import {
-  isSupportedLine,
-  marketKey,
-  MARKET_DEFINITIONS,
-  type BasketballStatistics,
-  type EventStatistics,
-  type FootballStatistics,
-  type MarketStatus,
-  type MarketType,
-  type Outcome,
-  type Pair,
-  type SportKey,
-  type TennisStatistics,
-} from '@storm-bet/types';
+import { type MarketType, type Pair, type SportKey } from '@storm-bet/types';
 import { shortName } from '../mock/catalog';
 import {
   ProviderError,
@@ -21,10 +8,20 @@ import {
   type ProviderEvent,
   type ProviderLeague,
   type ProviderMarket,
-  type ProviderSelection,
   type ProviderSport,
   type ProviderTeam,
 } from '../provider';
+import {
+  buildMarket,
+  errorDetail,
+  marketGate,
+  numberHeader,
+  scoreStatistics,
+  slug,
+  SPORT_NAMES,
+  type ProviderQuota,
+  type RawMarket,
+} from './shared';
 
 /**
  * The Odds API (https://the-odds-api.com), v4 — a licensed aggregator of
@@ -64,13 +61,6 @@ export interface TheOddsApiOptions {
   liveMaxAgeMs: number;
   fetch?: typeof fetch;
   now?: () => number;
-}
-
-export interface ProviderQuota {
-  remaining: number | null;
-  used: number | null;
-  lastCost: number | null;
-  exhausted: boolean;
 }
 
 interface ApiSport {
@@ -133,12 +123,6 @@ const GROUP_TO_SPORT: Record<string, SportKey> = {
   Basketball: 'basketball',
 };
 
-const SPORT_NAMES: Record<SportKey, string> = {
-  football: 'Fußball',
-  tennis: 'Tennis',
-  basketball: 'Basketball',
-};
-
 /** Markets requested per sport. Tennis handicaps/totals count games, which the scores feed cannot settle. */
 const API_MARKETS: Record<SportKey, string[]> = {
   football: ['h2h', 'spreads', 'totals'],
@@ -151,45 +135,6 @@ const MARKET_FOR: Record<SportKey, Partial<Record<string, MarketType>>> = {
   basketball: { h2h: 'MATCH_WINNER', spreads: 'POINT_SPREAD', totals: 'TOTAL_POINTS' },
   tennis: { h2h: 'MATCH_WINNER' },
 };
-
-function slug(value: string): string {
-  return value
-    .normalize('NFKD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/(^-|-$)/g, '');
-}
-
-/** Three decimals at most — the precision the book stores and compares. */
-function price(value: number): number | null {
-  if (!Number.isFinite(value) || value <= 1) return null;
-  return Math.round(value * 1000) / 1000;
-}
-
-function numberHeader(headers: Headers, name: string): number | null {
-  const raw = headers.get(name);
-  if (raw === null || raw.trim() === '') return null;
-  const n = Number(raw);
-  return Number.isFinite(n) ? n : null;
-}
-
-/** A short, log-safe reason from an error response (API JSON `message` or plain text). */
-async function errorDetail(response: Response): Promise<string> {
-  let text: string;
-  try {
-    text = await response.text();
-  } catch {
-    return '';
-  }
-  try {
-    const body = JSON.parse(text) as { message?: unknown };
-    if (typeof body.message === 'string') text = body.message;
-  } catch {
-    // plain text
-  }
-  return text.replace(/\s+/g, ' ').trim().slice(0, 200);
-}
 
 export class TheOddsApiProvider implements OddsProvider {
   readonly key = 'theoddsapi';
@@ -431,7 +376,7 @@ export class TheOddsApiProvider implements OddsProvider {
         status === 'SCHEDULED'
           ? { period: 'PRE', clock: null }
           : { period: completed ? 'FT' : 'LIVE', clock: null },
-      statistics: pair ? this.statistics(sport, pair) : null,
+      statistics: pair ? scoreStatistics(sport, pair) : null,
       resultFinal: completed,
     };
   }
@@ -442,26 +387,6 @@ export class TheOddsApiProvider implements OddsProvider {
     const a = Number(find(away));
     if (!Number.isInteger(h) || !Number.isInteger(a) || h < 0 || a < 0) return null;
     return { home: h, away: a };
-  }
-
-  /** Only what the feed reports: the score. Details stay absent, not zero. */
-  private statistics(sport: SportKey, pair: Pair): EventStatistics {
-    if (sport === 'football') {
-      const stats: FootballStatistics = { sport: 'football', goals: pair };
-      return stats;
-    }
-    if (sport === 'tennis') {
-      const stats: TennisStatistics = {
-        sport: 'tennis',
-        sets: [],
-        setsWon: pair,
-        currentGame: null,
-        server: null,
-      };
-      return stats;
-    }
-    const stats: BasketballStatistics = { sport: 'basketball', points: pair, periods: [] };
-    return stats;
   }
 
   private pickBookmaker(event: ApiOddsEvent): ApiBookmaker | null {
@@ -481,105 +406,49 @@ export class TheOddsApiProvider implements OddsProvider {
   ): ProviderMarket[] {
     const bookmaker = this.pickBookmaker(event);
     if (!bookmaker) return [];
-    const age = this.now() - fetchedAt;
-    let marketStatus: MarketStatus = 'OPEN';
-    let reason: string | null = null;
-    if (status === 'FINISHED') marketStatus = 'CLOSED';
-    else if (this.quotaState.exhausted) {
-      marketStatus = 'SUSPENDED';
-      reason = 'Datenkontingent erschöpft';
-    } else if (
-      status === 'LIVE' &&
-      (!this.options.liveBetting || age > this.options.liveMaxAgeMs)
-    ) {
-      marketStatus = 'SUSPENDED';
-      reason = 'Live-Quoten nicht aktuell genug';
-    }
-
+    const gate = marketGate({
+      eventStatus: status,
+      exhausted: this.quotaState.exhausted,
+      liveBetting: this.options.liveBetting,
+      ageMs: this.now() - fetchedAt,
+      liveMaxAgeMs: this.options.liveMaxAgeMs,
+    });
+    const names = { home: event.home_team, away: event.away_team };
     const markets: ProviderMarket[] = [];
     for (const apiMarket of bookmaker.markets) {
       const type = MARKET_FOR[sport][apiMarket.key];
-      if (!type) continue;
-      const built = this.mapMarket(type, apiMarket, event);
-      if (!built) continue;
-      const definition = MARKET_DEFINITIONS[type];
-      markets.push({
-        key: marketKey(type, built.line),
-        type,
-        name:
-          built.line == null
-            ? definition.label
-            : `${definition.label} ${this.lineLabel(built.line, definition.kind === 'HANDICAP')}`,
-        line: built.line,
-        status: marketStatus,
-        suspensionReason: marketStatus === 'SUSPENDED' ? reason : null,
-        selections: built.selections.map((s) => ({
-          ...s,
-          status:
-            marketStatus === 'OPEN' ? 'OPEN' : marketStatus === 'CLOSED' ? 'CLOSED' : 'SUSPENDED',
-        })),
-      });
+      const raw = type ? this.rawMarket(apiMarket, event) : null;
+      const market = type && raw ? buildMarket(type, raw, names, gate) : null;
+      if (market) markets.push(market);
     }
     return markets;
   }
 
-  private lineLabel(line: number, signed: boolean): string {
-    const text = Number.isInteger(line) ? line.toFixed(1) : String(line);
-    return signed && line > 0 ? `+${text}` : text;
-  }
-
-  private mapMarket(
-    type: MarketType,
-    market: ApiMarket,
-    event: ApiOddsEvent,
-  ): { line: number | null; selections: Omit<ProviderSelection, 'status'>[] } | null {
+  private rawMarket(market: ApiMarket, event: ApiOddsEvent): RawMarket | null {
     const byName = (name: string) => market.outcomes.find((o) => o.name === name);
-    const selection = (outcome: Outcome, name: string, o: ApiOutcome | undefined) => {
-      const odds = o ? price(o.price) : null;
-      return odds === null ? null : { key: outcome, name, outcome, odds, playerExternalId: null };
-    };
-    const all = <T>(items: (T | null)[]): T[] | null =>
-      items.every((i) => i !== null) ? (items as T[]) : null;
-
-    const kind = MARKET_DEFINITIONS[type].kind;
-    if (kind === 'THREE_WAY') {
-      const items = all([
-        selection('HOME', event.home_team, byName(event.home_team)),
-        selection('DRAW', 'Unentschieden', byName('Draw')),
-        selection('AWAY', event.away_team, byName(event.away_team)),
-      ]);
-      return items ? { line: null, selections: items } : null;
+    const home = byName(event.home_team);
+    const away = byName(event.away_team);
+    if (market.key === 'h2h') {
+      const draw = byName('Draw');
+      return draw
+        ? {
+            kind: 'THREE_WAY',
+            home: home?.price ?? null,
+            draw: draw.price,
+            away: away?.price ?? null,
+          }
+        : { kind: 'TWO_WAY', home: home?.price ?? null, away: away?.price ?? null };
     }
-    if (kind === 'TWO_WAY') {
-      const items = all([
-        selection('HOME', event.home_team, byName(event.home_team)),
-        selection('AWAY', event.away_team, byName(event.away_team)),
-      ]);
-      return items ? { line: null, selections: items } : null;
-    }
-    if (kind === 'TOTAL') {
+    if (market.key === 'totals') {
       const over = byName('Over');
       const under = byName('Under');
-      const line = over?.point;
-      if (line === undefined || under?.point !== line || !isSupportedLine(line)) return null;
-      const items = all([
-        selection('OVER', `Über ${line}`, over),
-        selection('UNDER', `Unter ${line}`, under),
-      ]);
-      return items ? { line, selections: items } : null;
+      if (over?.point === undefined || under?.point !== over.point) return null;
+      return { kind: 'TOTAL', line: over.point, over: over.price, under: under.price };
     }
-    if (kind === 'HANDICAP') {
-      const home = byName(event.home_team);
-      const away = byName(event.away_team);
+    if (market.key === 'spreads') {
       const line = home?.point;
-      // Quarter lines (±0.25, ±0.75) split the stake and are not offered.
-      if (line === undefined || away?.point !== -line || !isSupportedLine(line)) return null;
-      const fmt = (v: number) => (v > 0 ? `+${v}` : `${v}`);
-      const items = all([
-        selection('HOME', `${event.home_team} ${fmt(line)}`, home),
-        selection('AWAY', `${event.away_team} ${fmt(-line)}`, away),
-      ]);
-      return items ? { line, selections: items } : null;
+      if (line === undefined || away?.point !== -line) return null;
+      return { kind: 'HANDICAP', line, home: home?.price ?? null, away: away?.price ?? null };
     }
     return null;
   }

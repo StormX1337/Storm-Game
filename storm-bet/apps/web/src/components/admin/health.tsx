@@ -128,7 +128,7 @@ export function ProviderCard({ provider }: { provider: ProviderHealthDto }) {
               : 'bg-surface-2 text-fg-muted',
           )}
         >
-          API-Kontingent: {provider.quota.remaining ?? '—'} Credits übrig ·{' '}
+          API-Kontingent (Credits bzw. Event-Objekte): {provider.quota.remaining ?? '—'} übrig ·{' '}
           {provider.quota.used ?? '—'} verbraucht
           {provider.quota.exhausted
             ? ' · Reserve erreicht: keine neuen Abrufe, Märkte suspendiert'

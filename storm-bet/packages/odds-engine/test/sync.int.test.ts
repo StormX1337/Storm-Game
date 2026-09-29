@@ -90,6 +90,42 @@ describe('OddsSyncService', () => {
   });
 });
 
+describe('OddsSyncService markets', () => {
+  it('suspends markets the feed no longer offers and reopens them when it does again', async () => {
+    const now = Date.parse('2026-10-03T10:00:00Z');
+    const provider = isolated(() => now);
+    const sync = new OddsSyncService(db, redis, provider, {
+      horizonHours: 3,
+      lookbackHours: 1,
+      now: () => now,
+    });
+    await sync.syncCatalog();
+    const event = await db.event.findFirstOrThrow({
+      where: { provider: provider.key, status: 'SCHEDULED', startTime: { gt: new Date(now) } },
+      orderBy: { startTime: 'asc' },
+    });
+    const open = (await provider.getMarkets(event.externalId)).filter((m) => m.status === 'OPEN');
+    expect(open.length).toBeGreaterThan(1);
+    const [dropped, ...kept] = open;
+    const status = async (key: string) =>
+      (await db.market.findFirstOrThrow({ where: { eventId: event.id, key } })).status;
+
+    // The feed moved a line: the old market disappears from its list.
+    const report = await sync.syncMarkets(event.id, kept);
+    expect(report.updatedMarkets).toBe(1);
+    expect(await status(dropped!.key)).toBe('SUSPENDED');
+    expect(await status(kept[0]!.key)).toBe('OPEN');
+
+    await sync.syncMarkets(event.id, open);
+    expect(await status(dropped!.key)).toBe('OPEN');
+
+    // Nothing offered at all: nothing stays open.
+    await sync.syncMarkets(event.id, []);
+    const stillOpen = await db.market.count({ where: { eventId: event.id, status: 'OPEN' } });
+    expect(stillOpen).toBe(0);
+  });
+});
+
 describe('stableStringify', () => {
   it('ignores key order', async () => {
     const { stableStringify } = await import('../src/util');

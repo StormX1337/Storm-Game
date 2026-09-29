@@ -438,7 +438,6 @@ export class OddsSyncService {
 
   async syncMarkets(eventId: string, markets: ProviderMarket[]): Promise<SyncReport> {
     const report = emptyReport();
-    if (markets.length === 0) return report;
     const existing = await this.db.market.findMany({
       where: { eventId },
       include: { selections: true },
@@ -516,6 +515,19 @@ export class OddsSyncService {
           });
         }
       });
+    }
+
+    // A market the feed no longer offers (moved line, withdrawn price) must not
+    // stay open at its last price. It reopens if the feed offers it again.
+    const offered = new Set(markets.map((m) => m.key));
+    for (const current of existing) {
+      if (current.status === 'OPEN' && !offered.has(current.key)) {
+        marketUpdates.push({
+          id: current.id,
+          status: 'SUSPENDED',
+          reason: 'Nicht mehr im Angebot',
+        });
+      }
     }
 
     if (newMarkets.length) {

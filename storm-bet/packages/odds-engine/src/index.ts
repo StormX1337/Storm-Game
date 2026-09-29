@@ -4,9 +4,7 @@ export { MockOddsProvider, type MockProviderOptions } from './mock/mock-provider
 export { MOCK_LEAGUES, MOCK_SPORTS } from './mock/catalog';
 export { roundToLadder, priceOutcomes, MARGINS } from './mock/pricing';
 export * from './sync/sync-service';
-export {
-  TheOddsApiProvider,
-  type TheOddsApiOptions,
-  type ProviderQuota,
-} from './providers/the-odds-api';
+export { TheOddsApiProvider, type TheOddsApiOptions } from './providers/the-odds-api';
+export { SportsGameOddsProvider, type SportsGameOddsOptions } from './providers/sportsgameodds';
+export { americanToDecimal, type ProviderQuota } from './providers/shared';
 export { PROVIDER_INFO, isSimulatedProvider } from './provider-info';
