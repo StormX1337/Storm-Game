@@ -9,6 +9,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ApiError, api } from '@/lib/api-client';
 import { formatMoney, formatOdds, parseStake } from '@/lib/format';
 import { effectiveMode, useBetSlip, type SlipItem } from '@/stores/bet-slip';
+import { useLive } from '@/stores/live';
 import { announceWalletChange, useSession } from '../providers/session';
 import { useRealtimeTopics } from '../providers/realtime';
 
@@ -102,13 +103,29 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
         const result = await api<ValidateSlipResponse>('/bets/validate', { body: payload });
         if (id !== requestId.current) return;
         setQuote(result);
-        const observe = useBetSlip.getState().observe;
-        for (const s of result.selections)
-          observe(
-            s.selectionId,
-            s.currentOdds,
-            s.bettable ? 'OPEN' : s.status === 'OPEN' ? 'SUSPENDED' : s.status,
-          );
+        const { observe, items } = useBetSlip.getState();
+        const applyLive = useLive.getState().apply;
+        for (const s of result.selections) {
+          const status = s.bettable ? 'OPEN' : s.status === 'OPEN' ? 'SUSPENDED' : s.status;
+          observe(s.selectionId, s.currentOdds, status);
+          // The server's answer is also the freshest price for the odds buttons on the page.
+          const marketId = items.find((i) => i.selectionId === s.selectionId)?.marketId;
+          if (marketId) {
+            applyLive({
+              type: 'odds',
+              eventId: s.eventId,
+              selections: [
+                {
+                  id: s.selectionId,
+                  marketId,
+                  odds: s.currentOdds,
+                  status,
+                  oddsVersion: s.oddsVersion,
+                },
+              ],
+            });
+          }
+        }
       } catch {
         if (id === requestId.current) setQuote(null);
       }
@@ -187,10 +204,18 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
                 <span className="font-mono text-xs text-fg-muted">{bet.reference}</span>
                 <span className="tabular font-semibold">{formatOdds(bet.totalOdds)}</span>
               </div>
-              <div className="mt-2 flex justify-between text-xs text-fg-muted">
-                <span>Einsatz {formatMoney(bet.stake)}</span>
-                <span>Möglicher Gewinn {formatMoney(bet.potentialReturn)}</span>
-              </div>
+              <dl className="mt-2 space-y-1 text-xs">
+                <div className="flex justify-between text-fg-muted">
+                  <dt>Einsatz</dt>
+                  <dd className="tabular">{formatMoney(bet.stake)}</dd>
+                </div>
+                <div className="flex justify-between text-fg-muted">
+                  <dt>Möglicher Gewinn</dt>
+                  <dd className="tabular font-semibold text-up">
+                    {formatMoney(bet.potentialReturn)}
+                  </dd>
+                </div>
+              </dl>
             </div>
           ))}
           <div className="grid grid-cols-2 gap-2">

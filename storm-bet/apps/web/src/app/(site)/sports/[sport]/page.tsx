@@ -12,10 +12,6 @@ import { tryServerApi } from '@/lib/server-api';
 
 export const dynamic = 'force-dynamic';
 
-export function generateStaticParams() {
-  return SPORT_KEYS.map((sport) => ({ sport }));
-}
-
 export async function generateMetadata({
   params,
 }: {

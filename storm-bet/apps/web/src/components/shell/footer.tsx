@@ -15,7 +15,7 @@ export function Footer() {
     <footer className="mt-16 border-t border-border bg-surface/60">
       <div className="mx-auto grid max-w-[1600px] gap-8 px-4 py-10 md:grid-cols-[1.2fr_1fr] lg:px-6">
         <div className="space-y-4">
-          <Brand />
+          <Brand alwaysShowName />
           <p className="max-w-md text-sm leading-relaxed text-fg-muted">
             STORM BET ist eine Demonstrationsplattform. Alle Spiele, Teams und Quoten sind
             simuliert, gewettet wird ausschließlich mit Demo-Guthaben ohne Geldwert. Es gibt keine

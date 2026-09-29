@@ -21,7 +21,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const user = await getSessionUser();
   return (
     <html lang="de" className={`${GeistSans.variable} ${GeistMono.variable}`}>
-      <body className="min-h-dvh">
+      <body className="min-h-dvh overflow-x-clip">
         <Providers user={user}>{children}</Providers>
       </body>
     </html>

@@ -32,7 +32,7 @@ export function DemoDataBadge({ className }: { className?: string }) {
       )}
       title="Simulierte Daten – keine echten Spiele oder Quoten"
     >
-      Demo-Daten
+      Demo
     </span>
   );
 }

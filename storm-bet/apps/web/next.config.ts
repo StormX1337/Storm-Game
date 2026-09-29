@@ -29,6 +29,8 @@ const config: NextConfig = {
     '@storm-bet/validation',
     '@storm-bet/config',
   ],
+  // `pnpm lint` runs the workspace's ESLint config in CI; no second pass here.
+  eslint: { ignoreDuringBuilds: true },
   experimental: {
     optimizePackageImports: ['lucide-react'],
   },

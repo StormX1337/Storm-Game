@@ -10,7 +10,13 @@ export function BrandMark({ className }: { className?: string }) {
   );
 }
 
-export function Brand({ className }: { className?: string }) {
+export function Brand({
+  className,
+  alwaysShowName = false,
+}: {
+  className?: string;
+  alwaysShowName?: boolean;
+}) {
   return (
     <Link
       href="/"
@@ -18,7 +24,12 @@ export function Brand({ className }: { className?: string }) {
       aria-label="STORM BET Startseite"
     >
       <BrandMark />
-      <span className="text-[15px] font-semibold tracking-[0.08em] text-fg">
+      <span
+        className={cn(
+          'text-[15px] font-semibold tracking-[0.08em] text-fg',
+          !alwaysShowName && 'hidden sm:inline',
+        )}
+      >
         STORM<span className="text-accent"> BET</span>
       </span>
     </Link>

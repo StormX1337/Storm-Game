@@ -10,7 +10,8 @@ export function DemoBanner() {
           <strong className="font-semibold">Demo-Modus:</strong> ausschließlich Spielgeld,
           simulierte Spiele und Quoten. Keine Einzahlungen, keine Auszahlungen.{' '}
           <Link href="/responsible-gaming" className="underline underline-offset-2 hover:text-fg">
-            Verantwortungsvolles Spielen
+            <span className="hidden sm:inline">Verantwortungsvolles Spielen</span>
+            <span className="sm:hidden">Mehr</span>
           </Link>
         </span>
       </div>

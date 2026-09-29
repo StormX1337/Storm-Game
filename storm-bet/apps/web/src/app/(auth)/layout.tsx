@@ -13,7 +13,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         />
         <div className="relative w-full max-w-sm space-y-6">
           <div className="flex justify-center">
-            <Brand />
+            <Brand alwaysShowName />
           </div>
           {children}
           <p className="text-center text-xs text-fg-subtle">

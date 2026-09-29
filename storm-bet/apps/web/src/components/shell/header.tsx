@@ -16,7 +16,7 @@ export function Header({ liveCount }: { liveCount?: number }) {
   const pathname = usePathname();
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-bg/85 backdrop-blur supports-[backdrop-filter]:bg-bg/70">
-      <div className="mx-auto flex h-14 max-w-[1600px] items-center gap-4 px-4 lg:px-6">
+      <div className="mx-auto flex h-14 max-w-[1600px] items-center gap-2 px-4 sm:gap-4 lg:px-6">
         <Brand />
         <nav aria-label="Hauptnavigation" className="flex items-center gap-1">
           {NAV.map((item) => {
@@ -26,7 +26,7 @@ export function Header({ liveCount }: { liveCount?: number }) {
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  'flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors',
+                  'flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm font-medium transition-colors sm:px-2.5',
                   active ? 'bg-surface-3 text-fg' : 'text-fg-muted hover:text-fg',
                 )}
               >
