@@ -8,6 +8,7 @@ import {
   pgCode,
   recordAudit,
   withTransaction,
+  type DbOrTx,
   type PrismaClient,
   type Tx,
 } from '@storm-bet/database';
@@ -23,14 +24,17 @@ import {
 } from '@storm-bet/types';
 import type { PlaceBetInput, ValidateSlipInput } from '@storm-bet/validation';
 import { fromMilli, toMilli } from '../domain/odds';
+import type { BuilderPrice } from '../domain/football-model';
 import {
   bettability,
   evaluateSlip,
   formatMoney,
+  type BookSelection,
   type SlipIssue,
   type SlipRequest,
 } from '../domain/slip';
 import { loadBook, lockAndLoadBook } from './book';
+import { builderPriceFor } from './builder';
 import { BET_INCLUDE, toBetDto } from './mappers';
 import { lockWallet, reserveStake, toWalletDto } from './wallet';
 
@@ -68,6 +72,15 @@ function slipError(issues: SlipIssue[]): AppError {
 }
 
 function toRequest(input: ValidateSlipInput | PlaceBetInput): SlipRequest {
+  if (input.mode === 'BUILDER') {
+    return {
+      mode: 'BUILDER',
+      stake: BigInt(input.stake),
+      policy: input.oddsChangePolicy,
+      requestedOddsMilli: input.odds === undefined ? undefined : toMilli(input.odds),
+      legs: input.selections.map((s) => ({ selectionId: s.selectionId, requestedOddsMilli: 0 })),
+    };
+  }
   if (input.mode === 'COMBO') {
     return {
       mode: 'COMBO',
@@ -95,7 +108,9 @@ function fingerprint(request: SlipRequest): string {
   const legs = [...request.legs]
     .sort((a, b) => a.selectionId.localeCompare(b.selectionId))
     .map((l) => `${l.selectionId}@${l.requestedOddsMilli}x${l.stake ?? ''}`);
-  return sha256(`${request.mode}|${request.stake ?? ''}|${request.policy}|${legs.join(',')}`);
+  return sha256(
+    `${request.mode}|${request.stake ?? ''}|${request.requestedOddsMilli ?? ''}|${request.policy}|${legs.join(',')}`,
+  );
 }
 
 const RETRYABLE_SQLSTATES = new Set(['40P01', '40001']);
@@ -127,6 +142,7 @@ export class BetPlacementService {
       now,
       limits: this.deps.limits,
       requireStake: false,
+      builder: await this.builderPrice(this.deps.db, request, book),
     });
     const issues = [...evaluation.issues];
 
@@ -270,6 +286,7 @@ export class BetPlacementService {
       now,
       limits: this.deps.limits,
       requireStake: true,
+      builder: await this.builderPrice(tx, request, book),
     });
     if (evaluation.issues.length) throw slipError(evaluation.issues);
 
@@ -388,6 +405,16 @@ export class BetPlacementService {
       );
     }
     return slip.id;
+  }
+
+  private async builderPrice(
+    db: DbOrTx,
+    request: SlipRequest,
+    book: Map<string, BookSelection>,
+  ): Promise<BuilderPrice | undefined> {
+    if (request.mode !== 'BUILDER') return undefined;
+    const legs = request.legs.flatMap((l) => book.get(l.selectionId) ?? []);
+    return builderPriceFor(db, legs);
   }
 
   private limitIssue(type: keyof typeof LIMIT_LABELS, limit: bigint, used: bigint): SlipIssue {

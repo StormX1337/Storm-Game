@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { decimalOdds, positiveMoneyMinor, uuid } from './common';
 
 const MAX_SELECTIONS = 20;
+const BUILDER_MAX_SELECTIONS = 8;
 
 export const slipSelectionSchema = z.object({
   selectionId: uuid,
@@ -36,7 +37,26 @@ export const singlesSlipSchema = z.object({
   oddsChangePolicy,
 });
 
-export const slipSchema = z.discriminatedUnion('mode', [comboSlipSchema, singlesSlipSchema]);
+const builderSelections = z
+  .array(z.object({ selectionId: uuid }))
+  .max(BUILDER_MAX_SELECTIONS, `Höchstens ${BUILDER_MAX_SELECTIONS} Auswahlen im Bet Builder`)
+  .refine(uniqueSelections, 'Jede Auswahl darf nur einmal vorkommen');
+
+/** Bet Builder: selections on one match, one price for all of them. */
+export const builderSlipSchema = z.object({
+  mode: z.literal('BUILDER'),
+  stake: positiveMoneyMinor,
+  selections: builderSelections.refine((s) => s.length >= 2, 'Mindestens zwei Auswahlen'),
+  /** The Bet Builder price the player saw. The server prices again and compares. */
+  odds: decimalOdds,
+  oddsChangePolicy,
+});
+
+export const slipSchema = z.discriminatedUnion('mode', [
+  comboSlipSchema,
+  singlesSlipSchema,
+  builderSlipSchema,
+]);
 export type SlipInput = z.infer<typeof slipSchema>;
 
 export const placeBetSchema = z.intersection(slipSchema, z.object({ idempotencyKey: uuid }));
@@ -51,6 +71,11 @@ export const validateSlipSchema = z.discriminatedUnion('mode', [
       .min(1)
       .max(MAX_SELECTIONS)
       .refine(uniqueSelections, 'Jede Auswahl darf nur einmal vorkommen'),
+  }),
+  builderSlipSchema.extend({
+    stake: z.number().int().nonnegative().default(0),
+    selections: builderSelections.refine((s) => s.length >= 1, 'Mindestens eine Auswahl'),
+    odds: decimalOdds.optional(),
   }),
 ]);
 export type ValidateSlipInput = z.infer<typeof validateSlipSchema>;

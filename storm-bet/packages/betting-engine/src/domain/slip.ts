@@ -11,6 +11,12 @@ import {
   type SelectionStatus,
   type SlipMode,
 } from '@storm-bet/types';
+import {
+  BUILDER_MAX_LEGS,
+  BUILDER_MIN_LEGS,
+  MODEL_MARKETS,
+  type BuilderPrice,
+} from './football-model';
 import { betTypeFor, combineOdds, fromMilli, maxStakeForPayout, potentialReturn } from './odds';
 
 /** The book's current view of one selection, as loaded (and locked) from the database. */
@@ -40,6 +46,7 @@ export interface BookSelection {
 
 export interface SlipLegRequest {
   selectionId: string;
+  /** Not used for BUILDER legs: only the Bet Builder price counts there. */
   requestedOddsMilli: number;
   /** SINGLES only. */
   stake?: bigint;
@@ -48,8 +55,10 @@ export interface SlipLegRequest {
 export interface SlipRequest {
   mode: SlipMode;
   legs: SlipLegRequest[];
-  /** COMBO only. */
+  /** COMBO and BUILDER only. */
   stake?: bigint;
+  /** BUILDER only: the Bet Builder price the player saw (absent in a first quote). */
+  requestedOddsMilli?: number;
   policy: OddsChangePolicy;
 }
 
@@ -89,6 +98,8 @@ export interface EvaluateOptions {
   limits: BettingLimits;
   /** Quotes (validate) may omit stakes; placement may not. */
   requireStake: boolean;
+  /** BUILDER only: the model price of the legs, computed from the book. */
+  builder?: BuilderPrice;
 }
 
 const issue = (code: ErrorCode, message?: string, extra: Partial<SlipIssue> = {}): SlipIssue => ({
@@ -159,7 +170,7 @@ function formatMoney(minor: bigint): string {
 export function evaluateSlip(
   request: SlipRequest,
   book: Map<string, BookSelection>,
-  { now, limits, requireStake }: EvaluateOptions,
+  { now, limits, requireStake, builder }: EvaluateOptions,
 ): SlipEvaluation {
   const issues: SlipIssue[] = [];
   const legs: PlannedLeg[] = [];
@@ -185,6 +196,7 @@ export function evaluateSlip(
       continue;
     }
     if (
+      request.mode !== 'BUILDER' &&
       !acceptOdds(
         leg.requestedOddsMilli,
         current.oddsMilli,
@@ -211,7 +223,7 @@ export function evaluateSlip(
         issues.push(
           issue(
             'VALIDATION_ERROR',
-            'Auswahlen aus demselben Event können nicht kombiniert werden.',
+            'Auswahlen aus demselben Spiel können nicht mit anderen Spielen kombiniert werden. Mehrere Tipps auf ein Spiel: Bet Builder (nur dieses Spiel im Wettschein).',
             {
               selectionId: leg.book.selectionId,
             },
@@ -231,6 +243,9 @@ export function evaluateSlip(
         potentialReturn: potentialReturn(stake, totalOddsMilli),
       });
     }
+  } else if (request.mode === 'BUILDER') {
+    const planned = builderBet(request, legs, builder, limits, issues);
+    if (planned) bets.push(planned);
   } else {
     for (const leg of legs) {
       const stake = request.legs.find((l) => l.selectionId === leg.book.selectionId)?.stake ?? 0n;
@@ -285,7 +300,7 @@ export function evaluateSlip(
     }
   }
 
-  const combo = request.mode === 'COMBO' ? bets[0] : undefined;
+  const combo = request.mode === 'SINGLES' ? undefined : bets[0];
   return {
     issues,
     bets,
@@ -297,6 +312,95 @@ export function evaluateSlip(
         : 0n,
     totalStake: bets.reduce((sum, b) => sum + b.stake, 0n),
     potentialReturn: bets.reduce((sum, b) => sum + b.potentialReturn, 0n),
+  };
+}
+
+/**
+ * The Bet Builder bet, if the legs form one: two or more pre-match selections
+ * of one football match, one per market, all of a market the model prices.
+ * Its price is the model's, checked against the price the player saw.
+ */
+function builderBet(
+  request: SlipRequest,
+  legs: PlannedLeg[],
+  price: BuilderPrice | undefined,
+  limits: BettingLimits,
+  issues: SlipIssue[],
+): PlannedBet | null {
+  const before = issues.length;
+  if (request.legs.length < BUILDER_MIN_LEGS) {
+    issues.push(
+      issue(
+        'VALIDATION_ERROR',
+        'Der Bet Builder braucht mindestens zwei Auswahlen aus einem Spiel.',
+      ),
+    );
+  }
+  if (request.legs.length > BUILDER_MAX_LEGS) {
+    issues.push(
+      issue('BET_LIMIT_EXCEEDED', `Höchstens ${BUILDER_MAX_LEGS} Auswahlen im Bet Builder.`),
+    );
+  }
+  if (new Set(legs.map((l) => l.book.eventId)).size > 1) {
+    issues.push(
+      issue('VALIDATION_ERROR', 'Im Bet Builder müssen alle Auswahlen aus demselben Spiel sein.'),
+    );
+  }
+  const markets = new Set<string>();
+  for (const leg of legs) {
+    const at = { selectionId: leg.book.selectionId };
+    if (markets.has(leg.book.marketId)) {
+      issues.push(issue('VALIDATION_ERROR', 'Pro Markt ist nur eine Auswahl möglich.', at));
+    }
+    markets.add(leg.book.marketId);
+    if (!MODEL_MARKETS.has(leg.book.marketType)) {
+      issues.push(
+        issue(
+          'VALIDATION_ERROR',
+          `„${leg.book.marketName}“ ist im Bet Builder nicht verfügbar.`,
+          at,
+        ),
+      );
+    } else if (leg.book.eventStatus !== 'SCHEDULED') {
+      issues.push(issue('VALIDATION_ERROR', 'Bet Builder gibt es nur vor Spielbeginn.', at));
+    }
+  }
+  // Missing or blocked legs were reported above; no price for an incomplete slip.
+  if (issues.length > before || legs.length !== request.legs.length) return null;
+  if (!price) {
+    issues.push(
+      issue('VALIDATION_ERROR', 'Für dieses Spiel ist gerade kein Bet Builder verfügbar.'),
+    );
+    return null;
+  }
+  if (!price.ok) {
+    issues.push(issue('VALIDATION_ERROR', price.message));
+    return null;
+  }
+  if (
+    request.requestedOddsMilli !== undefined &&
+    !acceptOdds(
+      request.requestedOddsMilli,
+      price.oddsMilli,
+      request.policy,
+      limits.acceptHigherMaxPct,
+    )
+  ) {
+    issues.push(
+      issue('ODDS_CHANGED', 'Die Bet-Builder-Quote hat sich geändert.', {
+        currentOdds: fromMilli(price.oddsMilli),
+        requestedOdds: fromMilli(request.requestedOddsMilli),
+      }),
+    );
+  }
+  const stake = request.stake ?? 0n;
+  const totalOddsMilli = BigInt(price.oddsMilli);
+  return {
+    type: 'BET_BUILDER',
+    legs,
+    stake,
+    totalOddsMilli,
+    potentialReturn: potentialReturn(stake, totalOddsMilli),
   };
 }
 

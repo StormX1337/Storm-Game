@@ -22,6 +22,7 @@ import {
   type ProviderQuota,
   type RawMarket,
 } from './shared';
+import { deriveFootballMarkets } from './derived';
 
 /**
  * The Odds API (https://the-odds-api.com), v4 — a licensed aggregator of
@@ -421,6 +422,8 @@ export class TheOddsApiProvider implements OddsProvider {
       const market = type && raw ? buildMarket(type, raw, names, gate) : null;
       if (market) markets.push(market);
     }
+    if (sport === 'football' && status === 'SCHEDULED')
+      markets.push(...deriveFootballMarkets(markets, names, gate, { halves: false }));
     return markets;
   }
 

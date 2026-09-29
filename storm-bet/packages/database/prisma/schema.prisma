@@ -134,11 +134,13 @@ enum BetType {
   DOUBLE
   TRIPLE
   ACCUMULATOR
+  BET_BUILDER
 }
 
 enum SlipMode {
   SINGLES
   COMBO
+  BUILDER
 }
 
 enum OddsChangePolicy {

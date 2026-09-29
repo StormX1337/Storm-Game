@@ -359,3 +359,121 @@ describe('settlement', () => {
     ).rejects.toThrow(/append-only/);
   });
 });
+
+describe('Bet Builder', () => {
+  /** A match with 1X2 and over/under 2.5 — enough for the model. */
+  async function match() {
+    const created = await createEvent({ odds: [1.7, 3.9, 4.8] });
+    const totals = await db.market.create({
+      data: {
+        eventId: created.event.id,
+        key: 'TOTAL_GOALS:2.5',
+        type: 'TOTAL_GOALS',
+        name: 'Tore Über/Unter 2.5',
+        line: new Prisma.Decimal(2.5),
+        selections: {
+          create: (['OVER', 'UNDER'] as const).map((outcome, i) => ({
+            key: outcome,
+            name: outcome,
+            outcome,
+            odds: new Prisma.Decimal(i === 0 ? 1.8 : 2.0),
+            sortOrder: i,
+          })),
+        },
+      },
+      include: { selections: { orderBy: { sortOrder: 'asc' } } },
+    });
+    return { ...created, over: totals.selections[0]!, under: totals.selections[1]! };
+  }
+
+  const builder = (selections: string[], stake: number, odds: number) => ({
+    idempotencyKey: randomUUID(),
+    mode: 'BUILDER' as const,
+    stake,
+    odds,
+    oddsChangePolicy: 'REJECT' as const,
+    selections: selections.map((selectionId) => ({ selectionId })),
+  });
+
+  it('quotes, places and settles legs of one match at one price', async () => {
+    const user = await createUser(100_000n);
+    const m = await match();
+    const quote = await placement.validate(user.id, {
+      mode: 'BUILDER',
+      stake: 1_000,
+      oddsChangePolicy: 'REJECT',
+      selections: [{ selectionId: m.home.id }, { selectionId: m.over.id }],
+    });
+    expect(quote.issues).toEqual([]);
+    expect(quote.quote.betType).toBe('BET_BUILDER');
+    const odds = quote.quote.totalOdds;
+    // Correlated legs: shorter than the legs multiplied, still a real price.
+    expect(odds).toBeGreaterThan(1.8);
+    expect(odds).toBeLessThanOrEqual(3.06);
+
+    const placed = await placement.place(user.id, builder([m.home.id, m.over.id], 1_000, odds));
+    const bet = placed.bets[0]!;
+    expect(bet).toMatchObject({ type: 'BET_BUILDER', totalOdds: odds, stake: 1_000 });
+    expect(bet.selections).toHaveLength(2);
+
+    await finishEvent(m.event.id, 3, 1);
+    await settlement.settleEvent(m.event.id);
+    const settled = await db.bet.findUniqueOrThrow({ where: { id: bet.id } });
+    expect(settled.status).toBe('WON');
+    expect(settled.payout).toBe(BigInt(Math.round(odds * 1_000)));
+  });
+
+  it('rejects a moved price and legs from different matches', async () => {
+    const user = await createUser(100_000n);
+    const m = await match();
+    const other = await createEvent();
+    await expectCode(
+      placement.place(user.id, builder([m.home.id, m.over.id], 1_000, 9.99)),
+      'ODDS_CHANGED',
+    );
+    const error = await expectCode(
+      placement.place(user.id, builder([m.home.id, other.home.id], 1_000, 3)),
+      'VALIDATION_ERROR',
+    );
+    expect(error.message).toContain('demselben Spiel');
+    expect((await wallet(user.id)).reserved).toBe(0n);
+  });
+
+  it('voids the whole bet when one leg is void', async () => {
+    const user = await createUser(100_000n);
+    const m = await match();
+    const dnb = await db.market.create({
+      data: {
+        eventId: m.event.id,
+        key: 'DRAW_NO_BET',
+        type: 'DRAW_NO_BET',
+        name: 'Unentschieden, keine Wette',
+        selections: {
+          create: (['HOME', 'AWAY'] as const).map((outcome, i) => ({
+            key: outcome,
+            name: outcome,
+            outcome,
+            odds: new Prisma.Decimal(i === 0 ? 1.3 : 3.4),
+            sortOrder: i,
+          })),
+        },
+      },
+      include: { selections: { orderBy: { sortOrder: 'asc' } } },
+    });
+    const quote = await placement.validate(user.id, {
+      mode: 'BUILDER',
+      stake: 500,
+      oddsChangePolicy: 'REJECT',
+      selections: [{ selectionId: dnb.selections[0]!.id }, { selectionId: m.over.id }],
+    });
+    const placed = await placement.place(
+      user.id,
+      builder([dnb.selections[0]!.id, m.over.id], 500, quote.quote.totalOdds),
+    );
+    await finishEvent(m.event.id, 2, 2);
+    await settlement.settleEvent(m.event.id);
+    const bet = await db.bet.findUniqueOrThrow({ where: { id: placed.bets[0]!.id } });
+    expect(bet).toMatchObject({ status: 'VOID', payout: 500n });
+    expect((await wallet(user.id)).balance).toBe(100_000n);
+  });
+});

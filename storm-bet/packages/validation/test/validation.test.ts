@@ -4,6 +4,7 @@ import {
   eventStatisticsSchema,
   placeBetSchema,
   registerSchema,
+  validateSlipSchema,
   streamQuery,
 } from '../src';
 
@@ -71,6 +72,25 @@ describe('odds and slips', () => {
         mode: 'SINGLES',
         selections: [{ selectionId: id(1), odds: 1.5, stake: 100 }],
       }).success,
+    ).toBe(true);
+  });
+
+  it('needs two selections and the seen price for a Bet Builder, but not for its quote', () => {
+    const builder = {
+      idempotencyKey: id(9),
+      mode: 'BUILDER' as const,
+      stake: 1000,
+      odds: 3.4,
+      selections: [{ selectionId: id(1) }, { selectionId: id(2) }],
+    };
+    expect(placeBetSchema.safeParse(builder).success).toBe(true);
+    expect(placeBetSchema.safeParse({ ...builder, odds: undefined }).success).toBe(false);
+    expect(
+      placeBetSchema.safeParse({ ...builder, selections: [{ selectionId: id(1) }] }).success,
+    ).toBe(false);
+    expect(
+      validateSlipSchema.safeParse({ mode: 'BUILDER', selections: [{ selectionId: id(1) }] })
+        .success,
     ).toBe(true);
   });
 

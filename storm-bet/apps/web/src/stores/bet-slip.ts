@@ -134,6 +134,18 @@ export const useBetSlip = create<SlipState>()(
   ),
 );
 
+/** Two or more selections, all from one match: a Bet Builder candidate. */
+export function sameEvent(items: SlipItem[]): boolean {
+  return items.length > 1 && items.every((i) => i.eventId === items[0]!.eventId);
+}
+
+/**
+ * The mode actually used: one selection is always a plain bet; several
+ * selections of one match combine as a Bet Builder, never as a Kombi (which
+ * the book refuses for one match), and a Bet Builder needs one match.
+ */
 export function effectiveMode(items: SlipItem[], mode: SlipMode): SlipMode {
-  return items.length <= 1 ? 'COMBO' : mode;
+  if (items.length <= 1) return 'COMBO';
+  if (mode === 'SINGLES') return mode;
+  return sameEvent(items) ? 'BUILDER' : 'COMBO';
 }

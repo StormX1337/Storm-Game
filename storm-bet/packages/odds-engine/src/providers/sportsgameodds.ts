@@ -36,6 +36,7 @@ import {
   type ProviderQuota,
   type RawMarket,
 } from './shared';
+import { deriveFootballMarkets } from './derived';
 
 /**
  * SportsGameOdds (https://sportsgameodds.com), API v2 — bookmaker odds,
@@ -774,6 +775,8 @@ export class SportsGameOddsProvider implements OddsProvider {
         }
       }
     }
+    if (sport === 'football' && event.status === 'SCHEDULED')
+      markets.push(...deriveFootballMarkets(markets, names, gate, { halves: true }));
     markets.push(...this.playerMarkets(sport, stored.event, open, bookmaker, gate));
     return markets;
   }

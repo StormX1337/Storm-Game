@@ -74,8 +74,14 @@ describe('The Odds API → sync → settlement', () => {
     // Running game: live betting is off by default, so its markets are suspended.
     expect(byId.get('bl-live')!.status).toBe('LIVE');
     expect(byId.get('bl-live')!.markets.every((m) => m.status === 'SUSPENDED')).toBe(true);
-    // Quarter lines are not offered.
-    expect(byId.get('bl-quarter')!.markets.map((m) => m.type)).toEqual(['MATCH_RESULT']);
+    // Quarter lines are not offered; the model adds its own half lines instead.
+    const quarter = byId.get('bl-quarter')!.markets;
+    expect(quarter.filter((m) => m.type === 'ASIAN_HANDICAP').map((m) => m.key)).not.toContain(
+      'ASIAN_HANDICAP:-0.25',
+    );
+    expect(quarter.every((m) => m.line === null || Number.isInteger(Number(m.line) * 2))).toBe(
+      true,
+    );
 
     const upcoming = byId.get('bl-upcoming')!;
     expect(upcoming.status).toBe('SCHEDULED');

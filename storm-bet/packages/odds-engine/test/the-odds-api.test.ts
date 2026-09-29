@@ -28,6 +28,9 @@ function provider(overrides: Partial<TheOddsApiOptions> = {}, api = fakeApi(), n
   };
 }
 
+/** Markets the bookmaker quotes itself; derived ones are tested with SportsGameOdds. */
+const quoted = <T extends { derived?: boolean }>(markets: T[]) => markets.filter((m) => !m.derived);
+
 const window = {
   from: new Date(T0 - 6 * 3_600_000).toISOString(),
   to: new Date(T0 + 48 * 3_600_000).toISOString(),
@@ -54,7 +57,7 @@ describe('TheOddsApiProvider', () => {
   it('maps match result, handicap and totals from one bookmaker', async () => {
     const { provider: p } = provider({ bookmakers: ['pinnacle'] });
     await p.getEvents({ ...window });
-    const markets = await p.getMarkets('bl-upcoming');
+    const markets = quoted(await p.getMarkets('bl-upcoming'));
     expect(markets.map((m) => m.key)).toEqual([
       'MATCH_RESULT',
       'ASIAN_HANDICAP:-1.5',
@@ -76,7 +79,7 @@ describe('TheOddsApiProvider', () => {
   it('falls back to the first bookmaker with a match market', async () => {
     const { provider: p } = provider({ bookmakers: [] });
     await p.getEvents({ ...window });
-    const markets = await p.getMarkets('bl-upcoming');
+    const markets = quoted(await p.getMarkets('bl-upcoming'));
     expect(markets.map((m) => m.key)).toEqual(['MATCH_RESULT']);
     expect(markets[0]!.selections[0]!.odds).toBe(1.55);
   });
@@ -84,7 +87,7 @@ describe('TheOddsApiProvider', () => {
   it('skips quarter lines instead of settling them wrongly', async () => {
     const { provider: p } = provider();
     await p.getEvents({ ...window });
-    expect((await p.getMarkets('bl-quarter')).map((m) => m.key)).toEqual(['MATCH_RESULT']);
+    expect(quoted(await p.getMarkets('bl-quarter')).map((m) => m.key)).toEqual(['MATCH_RESULT']);
   });
 
   it('maps two-way sports and restricts tennis to the winner market', async () => {

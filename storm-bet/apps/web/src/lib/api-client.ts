@@ -27,12 +27,19 @@ function readCookie(name: string): string | null {
   return match ? decodeURIComponent(match.slice(name.length + 1)) : null;
 }
 
+/** A request the server has not answered by then is reported, never left spinning. */
+const REQUEST_TIMEOUT_MS = 30_000;
+
 let csrfRequest: Promise<string> | null = null;
 
 async function csrfToken(refresh = false): Promise<string> {
   const existing = refresh ? null : readCookie(CSRF_COOKIE);
   if (existing) return existing;
-  csrfRequest ??= fetch('/api/auth/csrf', { credentials: 'same-origin', cache: 'no-store' })
+  csrfRequest ??= fetch('/api/auth/csrf', {
+    credentials: 'same-origin',
+    cache: 'no-store',
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  })
     .then((r) => r.json() as Promise<{ token: string }>)
     .then((b) => b.token)
     .finally(() => {
@@ -80,6 +87,7 @@ export async function api<T>(
       credentials: 'same-origin',
       cache: 'no-store',
       body: method === 'GET' ? undefined : JSON.stringify(options.body ?? {}),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
   };
   let response: Response;
@@ -92,10 +100,13 @@ export async function api<T>(
       const body = (await clone.json().catch(() => null)) as ApiErrorBody | null;
       if (body?.error?.details?.reason === 'csrf') response = await send(true);
     }
-  } catch {
+  } catch (error) {
+    const timedOut = error instanceof DOMException && error.name === 'TimeoutError';
     throw new ApiError(
       'SERVICE_UNAVAILABLE',
-      'Keine Verbindung zum Server. Bitte prüfe deine Internetverbindung.',
+      timedOut
+        ? 'Der Server antwortet nicht. Bitte versuche es gleich noch einmal.'
+        : 'Keine Verbindung zum Server. Bitte prüfe deine Internetverbindung.',
       0,
       undefined,
     );

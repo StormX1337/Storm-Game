@@ -65,6 +65,16 @@ export default async function TermsPage() {
           Es gelten Mindest- und Höchsteinsätze sowie ein maximaler Gewinn pro Wette; sie werden im
           Wettschein angezeigt.
         </li>
+        <li>
+          Bet Builder: mehrere Tipps auf ein Fußballspiel (vor Anpfiff) zu einer Quote. Sie wird aus
+          einem Tor-Modell berechnet, das an die Quoten des Datendienstes angepasst ist (Marge 8 %),
+          und ist nie höher als das Produkt der Einzelquoten. Alle Tipps müssen gewinnen; ist einer
+          ungültig, wird die ganze Wette storniert (Einsatz zurück).
+        </li>
+        <li>
+          Zusätzliche Fußball-Märkte (z. B. Doppelte Chance, Beide treffen, weitere Tor-Linien)
+          werden vor Anpfiff mit demselben Modell aus den Quoten des Datendienstes berechnet.
+        </li>
       </ul>
       <h2>4. Haftung</h2>
       <p>

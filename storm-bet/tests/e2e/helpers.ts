@@ -41,6 +41,11 @@ export async function openUpcomingEvent(page: Page, sport = 'football') {
 export async function placeFirstOpenSelection(page: Page, stake: string) {
   await page.locator('[data-testid=odds-button]:not([disabled])').first().click();
   await expect(page.getByTestId('slip-item')).toHaveCount(1);
+  await placeSlip(page, stake);
+}
+
+/** Places what is on the slip, accepting moved prices explicitly as a player would. */
+export async function placeSlip(page: Page, stake: string) {
   await page.getByTestId('stake-input').fill(stake);
   const receipt = page.getByTestId('bet-receipt');
   for (let attempt = 0; attempt < 4; attempt += 1) {

@@ -77,14 +77,20 @@ export const BetType = {
   DOUBLE: 'DOUBLE',
   TRIPLE: 'TRIPLE',
   ACCUMULATOR: 'ACCUMULATOR',
+  /** Several selections on one match at one model price. */
+  BET_BUILDER: 'BET_BUILDER',
 } as const;
 export type BetType = (typeof BetType)[keyof typeof BetType];
 export const BET_TYPES = values(BetType);
 
-/** How the slip was submitted: one bet per selection, or one combined bet. */
+/**
+ * How the slip was submitted: one bet per selection, one combined bet across
+ * matches, or a Bet Builder (several selections on one match).
+ */
 export const SlipMode = {
   SINGLES: 'SINGLES',
   COMBO: 'COMBO',
+  BUILDER: 'BUILDER',
 } as const;
 export type SlipMode = (typeof SlipMode)[keyof typeof SlipMode];
 export const SLIP_MODES = values(SlipMode);

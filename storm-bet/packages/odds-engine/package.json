@@ -11,10 +11,11 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@storm-bet/types": "workspace:*",
+    "@storm-bet/betting-engine": "workspace:*",
     "@storm-bet/config": "workspace:*",
     "@storm-bet/database": "workspace:*",
     "@storm-bet/redis": "workspace:*",
+    "@storm-bet/types": "workspace:*",
     "@storm-bet/validation": "workspace:*"
   },
   "devDependencies": {

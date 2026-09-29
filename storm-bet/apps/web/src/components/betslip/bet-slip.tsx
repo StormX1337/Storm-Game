@@ -1,6 +1,12 @@
 'use client';
 
-import type { PlaceBetResponse, SlipIssueDto, ValidateSlipResponse } from '@storm-bet/types';
+import type {
+  ErrorCode,
+  PlaceBetResponse,
+  SlipIssueDto,
+  SlipMode,
+  ValidateSlipResponse,
+} from '@storm-bet/types';
 import { Button, Checkbox, cn, EmptyState, toast } from '@storm-bet/ui';
 import { AlertTriangle, Lock, Ticket, Trash2, X } from 'lucide-react';
 import Link from 'next/link';
@@ -8,21 +14,48 @@ import { usePathname } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ApiError, api } from '@/lib/api-client';
 import { formatMoney, formatOdds, parseStake } from '@/lib/format';
-import { effectiveMode, useBetSlip, type SlipItem } from '@/stores/bet-slip';
+import { effectiveMode, sameEvent, useBetSlip, type SlipItem } from '@/stores/bet-slip';
 import { useLive } from '@/stores/live';
 import { announceWalletChange, useSession } from '../providers/session';
 import { useRealtimeTopics } from '../providers/realtime';
 
 const QUICK_STAKES = [500, 1000, 2500, 5000];
+const MODE_LABELS: Record<SlipMode, string> = {
+  COMBO: 'Kombi',
+  BUILDER: 'Bet Builder',
+  SINGLES: 'Einzelwetten',
+};
+/**
+ * Issues that make placing pointless until the slip changes. Suspensions and
+ * price moves are not listed: they follow the live status of each selection.
+ */
+const BLOCKING: ErrorCode[] = [
+  'VALIDATION_ERROR',
+  'BET_LIMIT_EXCEEDED',
+  'NOT_FOUND',
+  'INSUFFICIENT_BALANCE',
+  'FORBIDDEN',
+];
 
+/** `builderOdds`: the Bet Builder price the player accepted; left out of quotes. */
 function slipPayload(
   items: SlipItem[],
-  mode: 'SINGLES' | 'COMBO',
+  mode: SlipMode,
   comboStake: string,
   singleStakes: Record<string, string>,
   acceptHigher: boolean,
+  builderOdds: number | null = null,
 ) {
   const policy = acceptHigher ? 'ACCEPT_HIGHER' : 'REJECT';
+  if (mode === 'BUILDER') {
+    return {
+      mode,
+      stake: parseStake(comboStake) ?? 0,
+      oddsChangePolicy: policy,
+      selections: items.map((i) => ({ selectionId: i.selectionId })),
+      ...(builderOdds ? { odds: builderOdds } : {}),
+    } as const;
+  }
   if (mode === 'COMBO') {
     return {
       mode,
@@ -45,10 +78,13 @@ function slipPayload(
 /** Local estimate while the server quote is in flight; the server figure replaces it. */
 function localQuote(
   items: SlipItem[],
-  mode: 'SINGLES' | 'COMBO',
+  mode: SlipMode,
   comboStake: string,
   singleStakes: Record<string, string>,
 ) {
+  // The Bet Builder price comes from the server's model only.
+  if (mode === 'BUILDER')
+    return { totalOdds: 0, stake: parseStake(comboStake) ?? 0, potentialReturn: 0 };
   if (mode === 'COMBO') {
     const milli = items.reduce(
       (acc, i) => (acc * BigInt(Math.round(i.odds * 1000))) / 1000n,
@@ -80,6 +116,12 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
   const [placing, setPlacing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<PlaceBetResponse | null>(null);
+  /** The payload the current quote answers. */
+  const [quotedKey, setQuotedKey] = useState('');
+  /** Bumped to ask for a fresh quote with an unchanged slip. */
+  const [refresh, setRefresh] = useState(0);
+  /** The Bet Builder price the player has seen for these legs. */
+  const [builderSeen, setBuilderSeen] = useState<{ legs: string; odds: number } | null>(null);
   const requestId = useRef(0);
 
   useRealtimeTopics(slip.items.map((i) => `event:${i.eventId}`));
@@ -90,6 +132,13 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
   );
   // Status updates change `items` without changing what is sent; key on content.
   const payloadKey = JSON.stringify(payload);
+  // A Bet Builder price depends on the legs' prices: re-quote when they move.
+  const priceKey =
+    mode === 'BUILDER' ? slip.items.map((i) => i.pendingOdds ?? i.odds).join(',') : '';
+  const legsKey = slip.items
+    .map((i) => i.selectionId)
+    .sort()
+    .join(',');
 
   // Server-side quote: current prices, statuses, limits — debounced.
   useEffect(() => {
@@ -103,6 +152,7 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
         const result = await api<ValidateSlipResponse>('/bets/validate', { body: payload });
         if (id !== requestId.current) return;
         setQuote(result);
+        setQuotedKey(payloadKey);
         const { observe, items } = useBetSlip.getState();
         const applyLive = useLive.getState().apply;
         for (const s of result.selections) {
@@ -132,30 +182,68 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
     }, 300);
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- payloadKey captures payload
-  }, [payloadKey]);
+  }, [payloadKey, priceKey, refresh]);
+
+  const quoteCurrent = quote !== null && quotedKey === payloadKey;
+  const builderQuote =
+    mode === 'BUILDER' && quoteCurrent && quote.quote.betType === 'BET_BUILDER'
+      ? quote.quote.totalOdds
+      : null;
+  // The first price for a set of legs is what the player sees; later moves need a look.
+  useEffect(() => {
+    if (builderQuote === null) return;
+    setBuilderSeen((seen) =>
+      seen && seen.legs === legsKey ? seen : { legs: legsKey, odds: builderQuote },
+    );
+  }, [builderQuote, legsKey]);
+  const seenOdds = mode === 'BUILDER' && builderSeen?.legs === legsKey ? builderSeen.odds : null;
 
   const estimate = localQuote(slip.items, mode, slip.comboStake, slip.singleStakes);
   const totalOdds =
-    quote?.quote.mode === mode && mode === 'COMBO' ? quote.quote.totalOdds : estimate.totalOdds;
+    mode === 'BUILDER'
+      ? (builderQuote ?? 0)
+      : quote?.quote.mode === mode && mode === 'COMBO'
+        ? quote.quote.totalOdds
+        : estimate.totalOdds;
   const potentialReturn =
     quote?.quote.mode === mode ? quote.quote.potentialReturn : estimate.potentialReturn;
   const totalStake = estimate.stake;
-  const changed = slip.items.filter((i) => i.pendingOdds != null);
   // With the opt-in, a higher price is taken by the server (bounded there);
-  // only a lower one needs the player's explicit acceptance.
-  const lowered = changed.filter((i) => !(slip.acceptHigher && i.pendingOdds! > i.odds));
-  const raised = changed.length - lowered.length;
+  // only a lower one needs the player's explicit acceptance. A Bet Builder
+  // has one price: only that one counts, not the legs'.
+  const takesHigher = (from: number, to: number) => slip.acceptHigher && to > from;
+  const changed = mode === 'BUILDER' ? [] : slip.items.filter((i) => i.pendingOdds != null);
+  const lowered = changed.filter((i) => !takesHigher(i.odds, i.pendingOdds!));
+  const builderChanged = builderQuote !== null && seenOdds !== null && builderQuote !== seenOdds;
+  const builderToAccept = builderChanged && !takesHigher(seenOdds, builderQuote);
+  const toAccept = mode === 'BUILDER' ? (builderToAccept ? 1 : 0) : lowered.length;
+  const raised =
+    mode === 'BUILDER'
+      ? builderChanged && !builderToAccept
+        ? 1
+        : 0
+      : changed.length - lowered.length;
   const blocked = slip.items.filter((i) => i.status !== 'OPEN');
-  const issues: SlipIssueDto[] = (quote?.issues ?? []).filter((i) => i.code !== 'ODDS_CHANGED');
+  const issues: SlipIssueDto[] = (quoteCurrent ? quote.issues : []).filter(
+    (i) => i.code !== 'ODDS_CHANGED',
+  );
+  const blocking = issues.some((i) => BLOCKING.includes(i.code));
   const insufficient = wallet ? totalStake > wallet.available : false;
   const ready =
     !!user &&
     slip.items.length > 0 &&
     totalStake > 0 &&
     blocked.length === 0 &&
+    !blocking &&
+    (mode !== 'BUILDER' || builderQuote !== null) &&
     !placing &&
     !insufficient;
-  const canPlace = ready && lowered.length === 0;
+  const canPlace = ready && toAccept === 0;
+
+  const acceptChanges = () => {
+    slip.acceptChanges();
+    if (builderQuote !== null) setBuilderSeen({ legs: legsKey, odds: builderQuote });
+  };
 
   /**
    * `acceptFirst`: the player confirmed the changed prices with this click —
@@ -163,7 +251,7 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
    */
   const place = async (acceptFirst = false) => {
     if (!(acceptFirst ? ready : canPlace)) return;
-    if (acceptFirst) slip.acceptChanges();
+    if (acceptFirst) acceptChanges();
     setPlacing(true);
     setError(null);
     // Read the store directly: after accepting, this render's payload is stale.
@@ -174,6 +262,7 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
       s.comboStake,
       s.singleStakes,
       s.acceptHigher,
+      acceptFirst ? builderQuote : seenOdds,
     );
     const idempotencyKey = s.ensureKey();
     try {
@@ -196,6 +285,8 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
         for (const i of list) {
           if (i.selectionId && i.currentOdds) slip.observe(i.selectionId, i.currentOdds, 'OPEN');
         }
+        // A moved Bet Builder price arrives with the next quote.
+        setRefresh((n) => n + 1);
       }
       // A definitive answer ends this submission; the next attempt is a new slip.
       if (err && err.code !== 'SERVICE_UNAVAILABLE' && err.code !== 'INTERNAL_ERROR')
@@ -269,7 +360,7 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
           role="tablist"
           aria-label="Wettart"
         >
-          {(['COMBO', 'SINGLES'] as const).map((m) => (
+          {([sameEvent(slip.items) ? 'BUILDER' : 'COMBO', 'SINGLES'] as const).map((m) => (
             <button
               key={m}
               role="tab"
@@ -280,10 +371,21 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
                 mode === m ? 'bg-surface-3 text-fg' : 'text-fg-muted hover:text-fg',
               )}
             >
-              {m === 'COMBO' ? 'Kombi' : 'Einzelwetten'}
+              {MODE_LABELS[m]}
             </button>
           ))}
         </div>
+      ) : null}
+
+      {mode === 'BUILDER' ? (
+        <p
+          className="border-b border-border px-3 py-2 text-xs text-fg-muted"
+          data-testid="builder-info"
+        >
+          <span className="font-semibold text-fg">Bet Builder:</span> eine Quote für mehrere Tipps
+          auf dieses Spiel. Alle Tipps müssen gewinnen; ist einer ungültig, wird die Wette storniert
+          (Einsatz zurück).
+        </p>
       ) : null}
 
       <ul className="min-h-0 flex-1 divide-y divide-border overflow-y-auto">
@@ -303,7 +405,7 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
                   <span className="inline-flex items-center gap-1 text-xs text-warning">
                     <Lock className="size-3" /> Gesperrt
                   </span>
-                ) : item.pendingOdds != null ? (
+                ) : item.pendingOdds != null && mode !== 'BUILDER' ? (
                   <span className="flex flex-col items-end">
                     <span className="tabular text-xs text-fg-subtle line-through">
                       {formatOdds(item.odds)}
@@ -318,7 +420,14 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
                     </span>
                   </span>
                 ) : (
-                  <span className="tabular text-sm font-semibold">{formatOdds(item.odds)}</span>
+                  <span
+                    className={cn(
+                      'tabular text-sm font-semibold',
+                      mode === 'BUILDER' && 'text-fg-muted',
+                    )}
+                  >
+                    {formatOdds(item.pendingOdds ?? item.odds)}
+                  </span>
                 )}
               </div>
               <button
@@ -341,7 +450,7 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
       </ul>
 
       <div className="space-y-3 border-t border-border p-3">
-        {lowered.length > 0 ? (
+        {toAccept > 0 ? (
           <div
             className="rounded-md border border-warning/30 bg-warning-soft p-3"
             role="alert"
@@ -351,8 +460,10 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
               <AlertTriangle className="size-4" /> Quote wurde aktualisiert.
             </p>
             <p className="mt-1 text-xs text-fg-muted">
-              {lowered.length === 1 ? 'Eine Quote ist' : `${lowered.length} Quoten sind`} gesunken.
-              Bitte prüfe und bestätige die neuen Quoten.
+              {mode === 'BUILDER'
+                ? `Bet-Builder-Quote: ${formatOdds(seenOdds ?? 0)} → ${formatOdds(builderQuote ?? 0)}.`
+                : `${lowered.length === 1 ? 'Eine Quote hat' : `${lowered.length} Quoten haben`} sich geändert.`}{' '}
+              Bitte prüfe und bestätige.
             </p>
             {ready ? (
               <Button
@@ -364,12 +475,7 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
                 Neue Quoten übernehmen & platzieren
               </Button>
             ) : (
-              <Button
-                size="sm"
-                variant="secondary"
-                className="mt-2 w-full"
-                onClick={() => slip.acceptChanges()}
-              >
+              <Button size="sm" variant="secondary" className="mt-2 w-full" onClick={acceptChanges}>
                 Neue Quoten übernehmen
               </Button>
             )}
@@ -386,7 +492,7 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
           </p>
         ) : null}
 
-        {mode === 'COMBO' ? (
+        {mode !== 'SINGLES' ? (
           <StakeInput value={slip.comboStake} onChange={slip.setComboStake} label="Einsatz" quick />
         ) : null}
 
@@ -395,11 +501,11 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
             <dt>Auswahlen</dt>
             <dd className="tabular">{slip.items.length}</dd>
           </div>
-          {mode === 'COMBO' ? (
+          {mode !== 'SINGLES' ? (
             <div className="flex justify-between text-fg-muted">
-              <dt>Gesamtquote</dt>
+              <dt>{mode === 'BUILDER' ? 'Bet-Builder-Quote' : 'Gesamtquote'}</dt>
               <dd className="tabular font-semibold text-fg" data-testid="total-odds">
-                {formatOdds(totalOdds)}
+                {totalOdds > 0 ? formatOdds(totalOdds) : '–'}
               </dd>
             </div>
           ) : null}

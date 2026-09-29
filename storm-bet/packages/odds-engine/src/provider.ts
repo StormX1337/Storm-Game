@@ -79,6 +79,8 @@ export interface ProviderMarket {
   /** Why a SUSPENDED market is closed right now (e.g. "Tor"), if the feed says. */
   suspensionReason: string | null;
   selections: ProviderSelection[];
+  /** Priced by the book's own goal model from the feed's prices, not quoted by the feed. */
+  derived?: boolean;
 }
 
 export interface EventQuery {

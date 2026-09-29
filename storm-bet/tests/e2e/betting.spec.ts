@@ -6,6 +6,7 @@ import {
   login,
   openUpcomingEvent,
   placeFirstOpenSelection,
+  placeSlip,
   register,
 } from './helpers';
 
@@ -64,6 +65,31 @@ test.describe('player journey', () => {
     );
     expect(Math.abs(shown - Math.floor(10 * total * 100) / 100)).toBeLessThan(0.02);
     await expect(page.getByRole('link', { name: 'Anmelden, um zu wetten' })).toBeVisible();
+  });
+
+  test('two picks on one match become a Bet Builder with one price', async ({ page }) => {
+    await login(page, ADMIN_EMAIL, ADMIN_PASSWORD);
+    await openUpcomingEvent(page);
+    const pick = (market: string) =>
+      page
+        .getByTestId('market-card')
+        .filter({ hasText: market })
+        .first()
+        .locator('[data-testid=odds-button]:not([disabled])')
+        .first();
+    await pick('Ergebnis (1X2)').click();
+    await pick('Beide Teams treffen').click();
+    await expect(page.getByTestId('slip-item')).toHaveCount(2);
+    await expect(page.getByRole('tab', { name: 'Bet Builder' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    await expect(page.getByTestId('builder-info')).toBeVisible();
+    await expect(page.getByTestId('total-odds')).not.toHaveText('–');
+    await placeSlip(page, '5');
+    await expect(page.getByTestId('bet-receipt')).toBeVisible();
+    await page.goto('/dashboard/bets');
+    await expect(page.getByTestId('bet-card').first()).toContainText('Bet Builder');
   });
 
   test('a live bet goes through although live prices keep moving', async ({ page }) => {

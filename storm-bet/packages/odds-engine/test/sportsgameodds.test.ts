@@ -48,8 +48,10 @@ const FULL_GAME = new Set([
   'POINT_SPREAD',
   'TOTAL_POINTS',
 ]);
-const fullGame = <T extends { type: string }>(markets: T[]) =>
-  markets.filter((m) => FULL_GAME.has(m.type));
+/** Markets the feed quotes itself (derived ones are covered separately). */
+const quoted = <T extends { derived?: boolean }>(markets: T[]) => markets.filter((m) => !m.derived);
+const fullGame = <T extends { type: string; derived?: boolean }>(markets: T[]) =>
+  quoted(markets).filter((m) => FULL_GAME.has(m.type));
 
 const prices = (market: { selections: { outcome: string; odds: number }[] } | undefined) =>
   Object.fromEntries((market?.selections ?? []).map((s) => [s.outcome, s.odds]));
@@ -157,10 +159,44 @@ describe('SportsGameOddsProvider', () => {
     });
   });
 
+  it('adds model-priced football markets before kick-off, never replacing quoted ones', async () => {
+    const { provider: p } = provider();
+    await p.getEvents(window);
+    const markets = await p.getMarkets('sgo-upcoming');
+    const derived = markets.filter((m) => m.derived);
+    const keys = derived.map((m) => m.key);
+    expect(keys).toEqual(
+      expect.arrayContaining([
+        'DOUBLE_CHANCE',
+        'DRAW_NO_BET',
+        'BOTH_TEAMS_TO_SCORE',
+        'TOTAL_GOALS:1.5',
+        'TOTAL_GOALS:4.5',
+        'ASIAN_HANDICAP:-0.5',
+      ]),
+    );
+    // One market per key: the feed's own lines stay the feed's.
+    expect(new Set(markets.map((m) => m.key)).size).toBe(markets.length);
+    for (const market of derived) {
+      expect(market.status).toBe('OPEN');
+      const book = market.selections.reduce((sum, s) => sum + 1 / s.odds, 0);
+      expect(book).toBeGreaterThan(market.type === 'DOUBLE_CHANCE' ? 2 : 1);
+    }
+    // The feed's own 3.5 line stays; over 1.5 is shorter than over 4.5.
+    expect(markets.find((m) => m.key === 'TOTAL_GOALS:3.5')!.derived).toBeUndefined();
+    const over = (line: number) =>
+      markets
+        .find((m) => m.key === `TOTAL_GOALS:${line}`)!
+        .selections.find((s) => s.outcome === 'OVER')!.odds;
+    expect(over(1.5)).toBeLessThan(over(4.5));
+    // Nothing derived for running games.
+    expect((await p.getMarkets('sgo-live')).some((m) => m.derived)).toBe(false);
+  });
+
   it('skips quarter lines and markets without bookmaker margin', async () => {
     const { provider: p } = provider();
     await p.getEvents(window);
-    expect((await p.getMarkets('sgo-quarter')).map((m) => m.key)).toEqual(['MATCH_RESULT']);
+    expect(quoted(await p.getMarkets('sgo-quarter')).map((m) => m.key)).toEqual(['MATCH_RESULT']);
     expect(await p.getMarkets('sgo-no-margin')).toEqual([]);
   });
 

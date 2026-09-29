@@ -250,3 +250,28 @@ export function decideBet(stake: bigint, legs: readonly LegResult[]): BetOutcome
     settledOddsMilli,
   };
 }
+
+/**
+ * Outcome of a Bet Builder: one price for legs on one match. A lost leg loses
+ * it; otherwise every leg must be resulted. Its price holds only for all legs
+ * together, so a void leg voids the whole bet (stake returned) instead of
+ * being counted at 1.00 as in a multiple.
+ */
+export function decideBuilder(
+  stake: bigint,
+  oddsMilli: bigint,
+  legs: readonly LegResult[],
+): BetOutcome {
+  if (legs.some((l) => l.result === 'LOST')) {
+    return { decided: true, status: 'LOST', payout: 0n, settledOddsMilli: null };
+  }
+  if (legs.some((l) => l.result === 'PENDING')) return { decided: false };
+  if (legs.length === 0 || legs.some((l) => l.result === 'VOID'))
+    return { decided: true, status: 'VOID', payout: stake, settledOddsMilli: null };
+  return {
+    decided: true,
+    status: 'WON',
+    payout: (stake * oddsMilli) / 1000n,
+    settledOddsMilli: oddsMilli,
+  };
+}

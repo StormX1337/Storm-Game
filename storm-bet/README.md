@@ -18,6 +18,8 @@ keinen Echtgeldbetrieb; der entsprechende Schalter ist technisch gesperrt.
 - Märkte: 1X2, Doppelte Chance, Draw No Bet, Über/Unter, Asiatisches Handicap, Beide treffen, Ecken, Karten,
   Torschützen, Sieger, Satzwetten, Spiele-/Punkte-Handicaps und -Totals; mit SportsGameOdds zusätzlich
   Halbzeit-Wetten und Spieler-Wetten (Basketball-Punkte/-Rebounds/-Assists)
+- Bet Builder: mehrere Tipps auf ein Fußballspiel zu einer Modell-Quote; mit echten Feeds zusätzliche,
+  aus den Feed-Quoten berechnete Märkte (Doppelte Chance, Draw No Bet, Beide treffen, weitere Linien)
 - Wettschein mit Einzel-, Zweier-, Dreier- und Kombiwetten, serverseitiger Quote, sichtbarer Quotenänderung
   („Quote wurde aktualisiert.“) und ausdrücklicher Annahme; Sticky-Wettschein auf Mobile
 - Live-Updates per Server-Sent Events (Quoten, Marktstatus, Spielstand)

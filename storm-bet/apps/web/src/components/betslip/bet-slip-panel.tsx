@@ -39,6 +39,7 @@ export function MobileBetSlipBar() {
   useEffect(() => setMounted(true), []);
   if (!mounted) return null;
 
+  // A Bet Builder has its own (model) price; only a Kombi shows the product here.
   const combo = effectiveMode(items, mode) === 'COMBO';
   const total = items.reduce((acc, i) => (acc * Math.round(i.odds * 1000)) / 1000, 1);
 

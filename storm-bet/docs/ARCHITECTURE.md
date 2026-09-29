@@ -42,6 +42,19 @@
      `AuditLog`
 5. Deadlock/Serialisierungsfehler ⇒ bis zu zwei Wiederholungen
 
+**Bet Builder** (`mode: BUILDER`, Wetttyp `BET_BUILDER`): 2–8 Auswahlen eines Fußballspiels vor Anpfiff, je
+Markt eine. Der Preis kommt aus `football-model.ts`: je Team und Halbzeit unabhängige Poisson-Tore, deren Raten
+an die margenfreien 1X2- und Über/Unter-Quoten (und, falls vorhanden, Halbzeit-Quoten) des Spiels angepasst
+werden. Jede Kombination wird über alle Halbzeit-Spielstände mit derselben `resolveSelection`-Regel bewertet,
+die später abrechnet; Quote = fair ÷ 1,08, höchstens das Produkt der Einzelquoten, abgerundet auf 0,01. Weicht
+das Modell zu stark von den Feed-Quoten ab, gibt es keinen Bet Builder. Der Server berechnet den Preis in der
+Platzierungs-Transaktion neu und vergleicht ihn wie jede Quote mit dem gesehenen. Abrechnung
+(`decideBuilder`): eine verlorene Auswahl verliert, eine ungültige storniert die ganze Wette.
+
+Mit echten Feeds ergänzt dasselbe Modell vor Anpfiff fehlende Fußball-Märkte (`providers/derived.ts`: Doppelte
+Chance, Draw No Bet, Beide treffen, Tor- und Handicap-Linien; Halbzeit-Märkte nur, wenn der Feed Halbzeitstände
+liefert). Feed-eigene Märkte werden nie ersetzt.
+
 Ein Quoten-Update wartet auf die Share-Locks und wird direkt nach der Wette wirksam; eine Wette kann also nie
 mit einer Quote angenommen werden, die zum Commit-Zeitpunkt nicht mehr galt. Sync, Admin und Placement sperren
 in derselben Reihenfolge (Märkte vor Auswahlen, sortiert), damit keine Deadlocks entstehen.
@@ -129,7 +142,7 @@ nur Wallet, Hauptbuch, Limits/Selbstsperre, RBAC und Audit-Log.
 Ein Event mit bestätigtem Ergebnis (oder abgesagt) wird unter einem Redis-Lock abgerechnet: jede Auswahl wird
 über den Marktkatalog (`MARKET_DEFINITIONS`) aus der offiziellen Statistik entschieden (Push ⇒ VOID), danach
 jede betroffene Wette in einer eigenen Transaktion. Eine verlorene Auswahl entscheidet eine Kombi sofort, VOID
-zählt als Quote 1,00. Idempotenz auf drei Ebenen: nur `PENDING` ändert sich, Wetten werden gesperrt und bedingt
+zählt als Quote 1,00 (beim Bet Builder storniert VOID die ganze Wette). Idempotenz auf drei Ebenen: nur `PENDING` ändert sich, Wetten werden gesperrt und bedingt
 aktualisiert, das Hauptbuch akzeptiert genau eine Abrechnungsbuchung pro Wette.
 
 ## Realtime

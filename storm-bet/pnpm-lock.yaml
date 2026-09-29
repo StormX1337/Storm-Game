@@ -355,6 +355,9 @@ importers:
 
   packages/odds-engine:
     dependencies:
+      '@storm-bet/betting-engine':
+        specifier: workspace:*
+        version: link:../betting-engine
       '@storm-bet/config':
         specifier: workspace:*
         version: link:../config

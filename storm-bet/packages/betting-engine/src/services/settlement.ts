@@ -11,7 +11,12 @@ import {
 import { acquireLock, publishRealtime, type Redis } from '@storm-bet/redis';
 import { AppError, type SelectionResult } from '@storm-bet/types';
 import { parseStatistics } from '@storm-bet/validation';
-import { decideBet, resolveSelection, SettlementDataError } from '../domain/settlement-rules';
+import {
+  decideBet,
+  decideBuilder,
+  resolveSelection,
+  SettlementDataError,
+} from '../domain/settlement-rules';
 import { settleStake, type SettlementTransactionType } from './wallet';
 
 export interface SettlementLogger {
@@ -228,9 +233,18 @@ export class SettlementService {
   ): Promise<'WON' | 'LOST' | 'VOID' | null> {
     return withTransaction(this.deps.db, async (tx) => {
       const locked = await tx.$queryRaw<
-        { id: string; status: string; stake: bigint; user_id: string; reference: string }[]
+        {
+          id: string;
+          status: string;
+          type: string;
+          total_odds: string;
+          stake: bigint;
+          user_id: string;
+          reference: string;
+        }[]
       >`
-        SELECT "id", "status"::text AS "status", "stake", "user_id", "reference"
+        SELECT "id", "status"::text AS "status", "type"::text AS "type",
+               "total_odds"::text AS "total_odds", "stake", "user_id", "reference"
         FROM "bets" WHERE "id" = ${betId}::uuid FOR UPDATE`;
       const bet = locked[0];
       if (!bet || bet.status !== 'PENDING') return null;
@@ -239,10 +253,11 @@ export class SettlementService {
         where: { betId },
         select: { odds: true, result: true },
       });
-      const outcome = decideBet(
-        bet.stake,
-        legs.map((l) => ({ odds: oddsToMilli(l.odds), result: l.result })),
-      );
+      const results = legs.map((l) => ({ odds: oddsToMilli(l.odds), result: l.result }));
+      const outcome =
+        bet.type === 'BET_BUILDER'
+          ? decideBuilder(bet.stake, BigInt(oddsToMilli(bet.total_odds)), results)
+          : decideBet(bet.stake, results);
       if (!outcome.decided) return null;
 
       const now = this.now();
