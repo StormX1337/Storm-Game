@@ -66,6 +66,12 @@ test.describe('player journey', () => {
     await expect(page.getByRole('link', { name: 'Anmelden, um zu wetten' })).toBeVisible();
   });
 
+  test('a live bet goes through although live prices keep moving', async ({ page }) => {
+    await login(page, ADMIN_EMAIL, ADMIN_PASSWORD, '/live');
+    await placeFirstOpenSelection(page, '2');
+    await expect(page.getByTestId('bet-receipt')).toBeVisible();
+  });
+
   test('protected pages redirect to the login', async ({ page }) => {
     await page.goto('/dashboard/bets');
     await expect(page).toHaveURL(/\/login\?next=/);

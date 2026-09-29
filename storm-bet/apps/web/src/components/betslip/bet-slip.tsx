@@ -141,26 +141,44 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
     quote?.quote.mode === mode ? quote.quote.potentialReturn : estimate.potentialReturn;
   const totalStake = estimate.stake;
   const changed = slip.items.filter((i) => i.pendingOdds != null);
+  // With the opt-in, a higher price is taken by the server (bounded there);
+  // only a lower one needs the player's explicit acceptance.
+  const lowered = changed.filter((i) => !(slip.acceptHigher && i.pendingOdds! > i.odds));
+  const raised = changed.length - lowered.length;
   const blocked = slip.items.filter((i) => i.status !== 'OPEN');
   const issues: SlipIssueDto[] = (quote?.issues ?? []).filter((i) => i.code !== 'ODDS_CHANGED');
   const insufficient = wallet ? totalStake > wallet.available : false;
-  const canPlace =
+  const ready =
     !!user &&
     slip.items.length > 0 &&
     totalStake > 0 &&
-    changed.length === 0 &&
     blocked.length === 0 &&
     !placing &&
     !insufficient;
+  const canPlace = ready && lowered.length === 0;
 
-  const place = async () => {
-    if (!canPlace) return;
+  /**
+   * `acceptFirst`: the player confirmed the changed prices with this click —
+   * live prices move every few seconds, so accepting and placing is one step.
+   */
+  const place = async (acceptFirst = false) => {
+    if (!(acceptFirst ? ready : canPlace)) return;
+    if (acceptFirst) slip.acceptChanges();
     setPlacing(true);
     setError(null);
-    const idempotencyKey = slip.ensureKey();
+    // Read the store directly: after accepting, this render's payload is stale.
+    const s = useBetSlip.getState();
+    const body = slipPayload(
+      s.items,
+      effectiveMode(s.items, s.mode),
+      s.comboStake,
+      s.singleStakes,
+      s.acceptHigher,
+    );
+    const idempotencyKey = s.ensureKey();
     try {
       const result = await api<PlaceBetResponse>('/bets/place', {
-        body: { ...payload, idempotencyKey },
+        body: { ...body, idempotencyKey },
       });
       setReceipt(result);
       slip.clear();
@@ -323,7 +341,7 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
       </ul>
 
       <div className="space-y-3 border-t border-border p-3">
-        {changed.length > 0 ? (
+        {lowered.length > 0 ? (
           <div
             className="rounded-md border border-warning/30 bg-warning-soft p-3"
             role="alert"
@@ -333,18 +351,33 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
               <AlertTriangle className="size-4" /> Quote wurde aktualisiert.
             </p>
             <p className="mt-1 text-xs text-fg-muted">
-              {changed.length === 1 ? 'Eine Quote hat sich' : `${changed.length} Quoten haben sich`}{' '}
-              geändert. Bitte prüfe und bestätige die neuen Quoten.
+              {lowered.length === 1 ? 'Eine Quote ist' : `${lowered.length} Quoten sind`} gesunken.
+              Bitte prüfe und bestätige die neuen Quoten.
             </p>
-            <Button
-              size="sm"
-              variant="secondary"
-              className="mt-2 w-full"
-              onClick={() => slip.acceptChanges()}
-            >
-              Neue Quoten übernehmen
-            </Button>
+            {ready ? (
+              <Button
+                size="sm"
+                className="mt-2 w-full"
+                onClick={() => void place(true)}
+                data-testid="accept-and-place"
+              >
+                Neue Quoten übernehmen & platzieren
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant="secondary"
+                className="mt-2 w-full"
+                onClick={() => slip.acceptChanges()}
+              >
+                Neue Quoten übernehmen
+              </Button>
+            )}
           </div>
+        ) : raised > 0 ? (
+          <p className="rounded-md bg-up-soft p-2.5 text-xs text-up" data-testid="odds-raised">
+            Quote gestiegen – wird bei Annahme automatisch übernommen.
+          </p>
         ) : null}
         {blocked.length > 0 ? (
           <p className="rounded-md bg-surface-2 p-2.5 text-xs text-fg-muted">
