@@ -8,7 +8,7 @@ import { EventList } from '@/components/sportsbook/event-list';
 import { LiveDot } from '@/components/sportsbook/live-indicator';
 import { PageHeader, SectionTitle } from '@/components/sportsbook/page-header';
 import { SPORT_LABELS } from '@/lib/labels';
-import { tryServerApi } from '@/lib/server-api';
+import { getPlatformMeta, tryServerApi } from '@/lib/server-api';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,13 +33,15 @@ export default async function SportPage({
   if (!(SPORT_KEYS as readonly string[]).includes(sport)) notFound();
   const leagueFilter = league && /^[0-9a-f-]{36}$/i.test(league) ? `&league=${league}` : '';
 
+  const { odds } = await getPlatformMeta();
+  const within = odds.isSimulated ? 36 : 7 * 24;
   const [detail, live, upcoming] = await Promise.all([
     tryServerApi<{ sport: SportDto; leagues: LeagueDto[] }>(`/sports/${sport}`),
     tryServerApi<Paginated<EventSummaryDto>>(
       `/events?sport=${sport}&status=live&limit=50${leagueFilter}`,
     ),
     tryServerApi<Paginated<EventSummaryDto>>(
-      `/events?sport=${sport}&status=upcoming&withinHours=36&limit=60${leagueFilter}`,
+      `/events?sport=${sport}&status=upcoming&withinHours=${within}&limit=60${leagueFilter}`,
     ),
   ]);
   if (!detail) notFound();
@@ -56,7 +58,9 @@ export default async function SportPage({
     <div className="space-y-6">
       <PageHeader
         title={detail.sport.name}
-        description={`${detail.sport.eventCount} Events · ${detail.sport.liveCount} live · simulierte Demo-Daten`}
+        description={`${detail.sport.eventCount} Events · ${detail.sport.liveCount} live · ${
+          odds.isSimulated ? 'simulierte Demo-Daten' : `Quoten: ${odds.name}`
+        }`}
       />
       {detail.leagues.length > 1 ? (
         <div

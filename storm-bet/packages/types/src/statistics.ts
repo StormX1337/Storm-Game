@@ -14,16 +14,21 @@ export interface GoalEvent {
   playerName: string | null;
 }
 
+/**
+ * Detailed figures are optional: a feed that only reports the score leaves
+ * them out rather than claiming zero. Markets that need a missing figure are
+ * never priced from that feed and cannot be settled automatically.
+ */
 export interface FootballStatistics {
   sport: 'football';
   goals: Pair;
-  corners: Pair;
-  yellowCards: Pair;
-  redCards: Pair;
-  shotsOnTarget: Pair;
+  corners?: Pair;
+  yellowCards?: Pair;
+  redCards?: Pair;
+  shotsOnTarget?: Pair;
   /** Percentages, summing to 100. */
-  possession: Pair;
-  goalEvents: GoalEvent[];
+  possession?: Pair;
+  goalEvents?: GoalEvent[];
 }
 
 export interface TennisStatistics {
@@ -34,15 +39,15 @@ export interface TennisStatistics {
   /** Points in the game in progress ("0", "15", "30", "40", "AD"). */
   currentGame: { home: string; away: string } | null;
   server: Side | null;
-  aces: Pair;
+  aces?: Pair;
 }
 
 export interface BasketballStatistics {
   sport: 'basketball';
   points: Pair;
-  /** Points per quarter (overtime periods appended). */
+  /** Points per quarter (overtime periods appended); empty when the feed only reports totals. */
   periods: Pair[];
-  fouls: Pair;
+  fouls?: Pair;
 }
 
 export type EventStatistics = FootballStatistics | TennisStatistics | BasketballStatistics;
@@ -60,6 +65,7 @@ export const PERIOD_LABELS: Record<string, string> = {
   HT: 'Halbzeit',
   '2H': '2. Halbzeit',
   FT: 'Beendet',
+  LIVE: 'Läuft',
   Q1: '1. Viertel',
   Q2: '2. Viertel',
   Q3: '3. Viertel',

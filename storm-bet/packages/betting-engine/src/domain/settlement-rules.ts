@@ -26,8 +26,8 @@ function metric(stats: EventStatistics, which: 'score' | 'corners' | 'cards' | '
   switch (stats.sport) {
     case 'football':
       if (which === 'score') return stats.goals;
-      if (which === 'corners') return stats.corners;
-      if (which === 'cards') {
+      if (which === 'corners' && stats.corners) return stats.corners;
+      if (which === 'cards' && stats.yellowCards && stats.redCards) {
         return {
           home: stats.yellowCards.home + stats.redCards.home,
           away: stats.yellowCards.away + stats.redCards.away,
@@ -36,7 +36,7 @@ function metric(stats: EventStatistics, which: 'score' | 'corners' | 'cards' | '
       break;
     case 'tennis':
       if (which === 'score') return stats.setsWon;
-      if (which === 'games') {
+      if (which === 'games' && stats.sets.length > 0) {
         return stats.sets.reduce(
           (acc, set) => ({ home: acc.home + set.home, away: acc.away + set.away }),
           { home: 0, away: 0 },
@@ -120,6 +120,7 @@ export function resolveSelection(
     case 'PLAYER_SCORES': {
       if (stats.sport !== 'football') break;
       if (!selection.playerId) throw new SettlementDataError('player market without a player');
+      if (!stats.goalEvents) throw new SettlementDataError('goal scorers were not recorded');
       return won(stats.goalEvents.some((g) => g.playerId === selection.playerId));
     }
     case 'FIRST_SET': {

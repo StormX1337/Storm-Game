@@ -11,7 +11,7 @@
                                   Cache · Queues · Events          Wartung · Heartbeat
                                                                          │
                                                                    OddsProvider
-                                                         (MockOddsProvider → Resilient)
+                                           (MockOddsProvider | TheOddsApiProvider → Resilient)
 ```
 
 ## Prinzipien
@@ -64,13 +64,22 @@ Jede Buchung speichert den Stand danach; die Tabelle ist append-only.
 ## Odds Engine
 
 - `OddsProvider` – providerneutrale Schnittstelle (`getSports`, `getLeagues`, `getEvents`, `getEvent`,
-  `getMarkets`, `getLiveEvents`). Ein lizenzierter Anbieter wird durch eine weitere Implementierung
-  angebunden (`apps/worker/src/provider.ts`).
+  `getMarkets`, `getLiveEvents`). Die Auswahl trifft `ODDS_PROVIDER` (`apps/worker/src/provider.ts`);
+  `PROVIDER_INFO` legt fest, welche Quellen als simuliert gekennzeichnet werden (unbekannt ⇒ simuliert).
 - `MockOddsProvider` – zustandslos und deterministisch: jedes Spiel ergibt sich aus Seed + ID + Zeit.
   Fußball über Poisson-Modelle (inkl. In-Play-Neubewertung, Rote Karten, kurze Sperren nach Toren), Tennis
   über eine Markov-Kette auf Spiel-/Satzebene, Basketball über Normalverteilungen. Marge offen und
   proportional, Quoten auf eine übliche Leiter gerundet. Alle Namen sind erfunden, alle Daten als simuliert
   markiert. Rund 2 % der Spiele werden kurz vor Beginn abgesagt (Storno-Abrechnung).
+- `TheOddsApiProvider` – echte Daten aus The Odds API v4. Pro Wettbewerb ein Quoten-Snapshot (`/odds`,
+  erneuert nach `ODDS_API_ODDS_TTL_SECONDS`) und – nur solange dort ein Spiel läuft – ein Ergebnis-Snapshot
+  (`/scores`); `getEvent`/`getMarkets` lesen aus den Snapshots und kosten keine Credits. Übernommen werden nur
+  Märkte, die sich aus dem Endergebnis abrechnen lassen (1X2/Sieger, Handicap ohne Viertel-Linien,
+  Über/Unter), jeweils von genau einem Buchmacher. Statistiken werden nicht erfunden: fehlt eine Kennzahl,
+  bleibt der betroffene Markt offen (`SettlementDataError`, Log „market needs a manual result“) statt zu raten. Kontingentwächter:
+  unter `ODDS_API_MIN_REMAINING` keine kostenpflichtigen Abrufe mehr, Märkte suspendiert, Provider-Status
+  `DEGRADED`. Live-Märkte sind standardmäßig suspendiert (`ODDS_API_LIVE_BETTING=false`) und werden auch bei
+  aktivem Live-Betrieb gesperrt, wenn der Snapshot älter als `ODDS_API_LIVE_MAX_AGE_SECONDS` ist.
 - `ResilientOddsProvider` – Timeout, Retries mit Jitter, Circuit Breaker, gemeinsames Rate-Limit (Redis),
   Antwort-Cache und Health-Metriken für das Admin-Panel.
 - `OddsSyncService` – schreibt nur Unterschiede (Batch-Updates), erhöht `oddsVersion`, veröffentlicht

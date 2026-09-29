@@ -85,6 +85,7 @@ export async function buildApp(
     ctx.settlement,
     ctx.queues,
     ctx.now,
+    ctx.env.ODDS_PROVIDER,
   );
   const tracker = new LiveEventTracker(ctx.db);
 

@@ -25,7 +25,7 @@ export default async function AdminEventsPage({
     <>
       <PageHeader
         title="Events & Märkte"
-        description="Feed-Events (simuliert) und manuell angelegte Events."
+        description="Events aus dem Quoten-Feed und manuell angelegte Events."
         actions={
           <Button asChild>
             <Link href="/admin/events/new">

@@ -14,11 +14,11 @@ const side = z.enum(['HOME', 'AWAY']);
 export const footballStatisticsSchema = z.object({
   sport: z.literal('football'),
   goals: pair,
-  corners: pair,
-  yellowCards: pair,
-  redCards: pair,
-  shotsOnTarget: pair,
-  possession: pair,
+  corners: pair.optional(),
+  yellowCards: pair.optional(),
+  redCards: pair.optional(),
+  shotsOnTarget: pair.optional(),
+  possession: pair.optional(),
   goalEvents: z
     .array(
       z.object({
@@ -28,7 +28,8 @@ export const footballStatisticsSchema = z.object({
         playerName: z.string().max(80).nullable(),
       }),
     )
-    .max(60),
+    .max(60)
+    .optional(),
 });
 
 export const tennisStatisticsSchema = z.object({
@@ -37,14 +38,14 @@ export const tennisStatisticsSchema = z.object({
   setsWon: pair,
   currentGame: z.object({ home: z.string().max(3), away: z.string().max(3) }).nullable(),
   server: side.nullable(),
-  aces: pair,
+  aces: pair.optional(),
 });
 
 export const basketballStatisticsSchema = z.object({
   sport: z.literal('basketball'),
   points: pair,
   periods: z.array(pair).max(10),
-  fouls: pair,
+  fouls: pair.optional(),
 });
 
 export const eventStatisticsSchema = z.discriminatedUnion('sport', [

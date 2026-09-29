@@ -398,10 +398,10 @@ export function ResultForm({ event }: { event: AdminEventDto }) {
       {event.sport.key === 'football' &&
       players.length > 0 &&
       statistics.sport === 'football' &&
-      statistics.goalEvents.length > 0 ? (
+      (statistics.goalEvents?.length ?? 0) > 0 ? (
         <div className="mt-4 grid gap-2 sm:grid-cols-2">
-          {statistics.goalEvents.map((g, i) => {
-            const key = `${g.side === 'HOME' ? 'H' : 'A'}${statistics.sport === 'football' ? statistics.goalEvents.slice(0, i).filter((x) => x.side === g.side).length : 0}`;
+          {(statistics.goalEvents ?? []).map((g, i) => {
+            const key = `${g.side === 'HOME' ? 'H' : 'A'}${statistics.sport === 'football' ? (statistics.goalEvents ?? []).slice(0, i).filter((x) => x.side === g.side).length : 0}`;
             return (
               <Field
                 key={key}

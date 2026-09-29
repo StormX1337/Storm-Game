@@ -303,6 +303,8 @@ export interface ProviderHealthDto {
   requests: number;
   failures: number;
   lastSyncAt: string | null;
+  /** Metered feeds only: request credits as reported by the provider. */
+  quota: { remaining: number | null; used: number | null; exhausted: boolean } | null;
 }
 
 export interface ComponentHealthDto {
@@ -397,4 +399,10 @@ export interface AdminUserDetailDto extends AdminUserDto {
   limits: LimitDto[];
   selfExclusion: SelfExclusionDto;
   activeSessions: number;
+}
+
+export interface PlatformMetaDto {
+  /** Always false in this build. */
+  realMoney: false;
+  odds: { provider: string; name: string; isSimulated: boolean };
 }

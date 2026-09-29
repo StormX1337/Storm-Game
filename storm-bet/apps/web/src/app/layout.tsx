@@ -8,7 +8,7 @@ import './globals.css';
 export const metadata: Metadata = {
   title: { default: 'STORM BET – Sportwetten Demo', template: '%s · STORM BET' },
   description:
-    'STORM BET ist eine Sportwetten-Plattform im Demo-Modus: simulierte Quoten, Demo-Guthaben, kein Echtgeld.',
+    'STORM BET ist eine Sportwetten-Plattform im Demo-Modus: Demo-Guthaben, kein Echtgeld.',
   robots: { index: false, follow: false },
 };
 

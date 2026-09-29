@@ -21,7 +21,7 @@ export function Scoreboard({ event }: { event: EventDetailDto }) {
         <span className="text-fg-subtle">/</span>
         <span className="truncate">{event.league.name}</span>
         <span className="ml-auto flex items-center gap-2">
-          <DemoDataBadge />
+          {event.dataSource.isSimulated ? <DemoDataBadge /> : null}
           {live.isLive ? <LiveBadge /> : <span>{EVENT_STATUS_LABELS[live.status]}</span>}
         </span>
       </div>
@@ -128,47 +128,61 @@ function StatisticsPanel({
   away: string;
 }) {
   if (stats.sport === 'football') {
+    const cards =
+      stats.yellowCards && stats.redCards
+        ? {
+            home: stats.yellowCards.home + stats.redCards.home,
+            away: stats.yellowCards.away + stats.redCards.away,
+          }
+        : null;
+    const bars: [string, Pair | null | undefined, boolean][] = [
+      ['Ballbesitz', stats.possession, true],
+      ['Schüsse aufs Tor', stats.shotsOnTarget, false],
+      ['Ecken', stats.corners, false],
+      ['Karten (Gelb/Rot)', cards, false],
+    ];
+    const available = bars.filter((b): b is [string, Pair, boolean] => !!b[1]);
+    // A feed that reports only the score gets no statistics panel at all.
+    if (available.length === 0 && !stats.goalEvents) return null;
     return (
       <div className="grid gap-5 border-t border-border px-4 py-4 md:grid-cols-2">
-        <div className="space-y-3">
-          <StatBar label="Ballbesitz" value={stats.possession} percent />
-          <StatBar label="Schüsse aufs Tor" value={stats.shotsOnTarget} />
-          <StatBar label="Ecken" value={stats.corners} />
-          <StatBar
-            label="Karten (Gelb/Rot)"
-            value={{
-              home: stats.yellowCards.home + stats.redCards.home,
-              away: stats.yellowCards.away + stats.redCards.away,
-            }}
-          />
-        </div>
-        <div>
-          <p className="mb-2 text-xs font-medium text-fg-muted">Tore</p>
-          {stats.goalEvents.length === 0 ? (
-            <p className="text-xs text-fg-subtle">Noch keine Tore.</p>
-          ) : (
-            <ol className="space-y-1.5 text-sm">
-              {stats.goalEvents.map((g, i) => (
-                <li
-                  key={i}
-                  className={cn(
-                    'flex items-center gap-2',
-                    g.side === 'AWAY' && 'flex-row-reverse text-right',
-                  )}
-                >
-                  <span className="tabular w-9 text-xs text-fg-subtle">{g.minute}&apos;</span>
-                  <span className="truncate">
-                    {g.playerName ?? (g.side === 'HOME' ? home : away)}
-                  </span>
-                </li>
-              ))}
-            </ol>
-          )}
-        </div>
+        {available.length > 0 ? (
+          <div className="space-y-3">
+            {available.map(([label, value, percent]) => (
+              <StatBar key={label} label={label} value={value} percent={percent} />
+            ))}
+          </div>
+        ) : null}
+        {stats.goalEvents ? (
+          <div>
+            <p className="mb-2 text-xs font-medium text-fg-muted">Tore</p>
+            {stats.goalEvents.length === 0 ? (
+              <p className="text-xs text-fg-subtle">Noch keine Tore.</p>
+            ) : (
+              <ol className="space-y-1.5 text-sm">
+                {stats.goalEvents.map((g, i) => (
+                  <li
+                    key={i}
+                    className={cn(
+                      'flex items-center gap-2',
+                      g.side === 'AWAY' && 'flex-row-reverse text-right',
+                    )}
+                  >
+                    <span className="tabular w-9 text-xs text-fg-subtle">{g.minute}&apos;</span>
+                    <span className="truncate">
+                      {g.playerName ?? (g.side === 'HOME' ? home : away)}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </div>
+        ) : null}
       </div>
     );
   }
   if (stats.sport === 'tennis') {
+    if (stats.sets.length === 0) return null;
     return (
       <div className="overflow-x-auto border-t border-border px-4 py-4">
         <table className="w-full text-sm">
@@ -210,6 +224,7 @@ function StatisticsPanel({
       </div>
     );
   }
+  if (stats.periods.length === 0) return null;
   return (
     <div className="overflow-x-auto border-t border-border px-4 py-4">
       <table className="w-full text-sm">
@@ -233,7 +248,9 @@ function StatisticsPanel({
                   {p[side]}
                 </td>
               ))}
-              <td className="tabular py-1.5 text-center text-fg-muted">{stats.fouls[side]}</td>
+              <td className="tabular py-1.5 text-center text-fg-muted">
+                {stats.fouls?.[side] ?? '–'}
+              </td>
             </tr>
           ))}
         </tbody>

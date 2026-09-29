@@ -15,7 +15,7 @@ import { EventList } from '@/components/sportsbook/event-list';
 import { LiveDot } from '@/components/sportsbook/live-indicator';
 import { SectionTitle } from '@/components/sportsbook/page-header';
 import { SportIcon } from '@/components/sportsbook/sport-icon';
-import { getSessionUser, tryServerApi } from '@/lib/server-api';
+import { getPlatformMeta, getSessionUser, tryServerApi } from '@/lib/server-api';
 
 export const dynamic = 'force-dynamic';
 
@@ -43,11 +43,16 @@ const FEATURES = [
 ];
 
 export default async function HomePage() {
+  const { odds } = await getPlatformMeta();
+  // Real fixtures are days apart; the simulator fills every hour.
+  const within = odds.isSimulated ? 24 : 72;
   const [user, sports, live, upcoming] = await Promise.all([
     getSessionUser(),
     tryServerApi<SportDto[]>('/sports'),
     tryServerApi<Paginated<EventSummaryDto>>('/events?status=live&limit=6'),
-    tryServerApi<Paginated<EventSummaryDto>>('/events?status=upcoming&withinHours=24&limit=8'),
+    tryServerApi<Paginated<EventSummaryDto>>(
+      `/events?status=upcoming&withinHours=${within}&limit=8`,
+    ),
   ]);
 
   return (
@@ -71,7 +76,11 @@ export default async function HomePage() {
           </h1>
           <p className="max-w-xl text-base leading-relaxed text-fg-muted">
             Fußball, Tennis und Basketball mit Live-Quoten, schnellem Wettschein und
-            nachvollziehbarer Abrechnung – vollständig mit Demo-Guthaben und simulierten Spielen.
+            nachvollziehbarer Abrechnung – vollständig mit Demo-Guthaben
+            {odds.isSimulated
+              ? ' und simulierten Spielen'
+              : ` auf echte Spiele (Quoten: ${odds.name})`}
+            .
           </p>
           <div className="flex flex-wrap gap-3">
             {user ? (

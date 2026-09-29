@@ -1,9 +1,11 @@
 import type { Metadata } from 'next';
 import { Prose, Updated } from '@/components/prose';
+import { getPlatformMeta } from '@/lib/server-api';
 
 export const metadata: Metadata = { title: 'Nutzungsbedingungen' };
 
-export default function TermsPage() {
+export default async function TermsPage() {
+  const { odds } = await getPlatformMeta();
   return (
     <Prose>
       <h1>Nutzungsbedingungen</h1>
@@ -18,10 +20,17 @@ export default function TermsPage() {
           STORM BET ist eine Software-Demonstration. Es werden <strong>keine echten Wetten</strong>{' '}
           angeboten.
         </li>
-        <li>
-          Alle Wettbewerbe, Teams, Spieler, Spielverläufe und Quoten sind <strong>simuliert</strong>{' '}
-          und frei erfunden.
-        </li>
+        {odds.isSimulated ? (
+          <li>
+            Alle Wettbewerbe, Teams, Spieler, Spielverläufe und Quoten sind{' '}
+            <strong>simuliert</strong> und frei erfunden.
+          </li>
+        ) : (
+          <li>
+            Spielpläne, Quoten und Ergebnisse stammen vom Datendienst <strong>{odds.name}</strong>.
+            Sie werden ohne Gewähr übernommen und können verzögert oder fehlerhaft sein.
+          </li>
+        )}
         <li>
           Gewettet wird ausschließlich mit <strong>Demo-Guthaben (DEMO)</strong>. Es hat keinen
           Geldwert, ist nicht übertragbar und kann weder eingezahlt noch ausgezahlt werden.
@@ -48,8 +57,9 @@ export default function TermsPage() {
           nicht ohne deine ausdrückliche Zustimmung zu einer schlechteren Quote angenommen.
         </li>
         <li>
-          Die Abrechnung erfolgt nach dem offiziellen (simulierten) Ergebnis. Bei abgesagten Events
-          werden betroffene Auswahlen mit Quote 1,00 gewertet.
+          Die Abrechnung erfolgt nach dem{' '}
+          {odds.isSimulated ? 'simulierten' : 'vom Datendienst gemeldeten'} Endergebnis. Bei
+          abgesagten Events werden betroffene Auswahlen mit Quote 1,00 gewertet.
         </li>
         <li>
           Es gelten Mindest- und Höchsteinsätze sowie ein maximaler Gewinn pro Wette; sie werden im

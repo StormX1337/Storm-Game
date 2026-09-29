@@ -30,19 +30,23 @@ export function LeagueHeader({
   country,
   sport,
   count,
+  simulated,
 }: {
   name: string;
   country: string | null;
   sport: string;
   count: number;
+  simulated: boolean;
 }) {
   return (
     <div className="flex items-center gap-2.5 border-b border-border bg-surface-2/60 px-3 py-2.5 md:px-4">
       <SportIcon sport={sport} className="text-fg-muted" />
       <h3 className="truncate text-sm font-semibold text-fg">{name}</h3>
       {country ? <span className="truncate text-xs text-fg-subtle">{country}</span> : null}
-      <DemoDataBadge className="ml-auto" />
-      <span className="tabular text-xs text-fg-subtle">{count}</span>
+      <span className="ml-auto flex items-center gap-2.5">
+        {simulated ? <DemoDataBadge /> : null}
+        <span className="tabular text-xs text-fg-subtle">{count}</span>
+      </span>
     </div>
   );
 }
@@ -79,6 +83,7 @@ export function EventList({
             country={group.league.country}
             sport={group.sport.key}
             count={group.events.length}
+            simulated={group.events.some((e) => e.dataSource.isSimulated)}
           />
           <div>
             {group.events.map((e) => (

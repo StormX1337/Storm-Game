@@ -18,7 +18,7 @@ import {
   type AuditActor,
   type PrismaClient,
 } from '@storm-bet/database';
-import { readProviderHealth } from '@storm-bet/odds-engine';
+import { isSimulatedProvider, PROVIDER_INFO, readProviderHealth } from '@storm-bet/odds-engine';
 import { publishRealtime, type JsonCache, type Redis } from '@storm-bet/redis';
 import { verifyPassword } from '@storm-bet/security';
 import {
@@ -65,8 +65,6 @@ import type { AccountService } from './account';
 import { toSessionUser } from './auth';
 import { effectiveEventStatus, toMarketDto } from './catalog';
 import type { SessionService } from './sessions';
-
-const KNOWN_PROVIDERS = ['mock'];
 
 const userRef = (u: { id: string; email: string; displayName: string }) => ({
   id: u.id,
@@ -159,6 +157,7 @@ export class AdminService {
     private readonly settlement: SettlementService,
     private readonly queues: Queue[],
     private readonly now: () => Date,
+    private readonly oddsProvider: string,
   ) {}
 
   // ─── overview & health ────────────────────────────────────────────────────
@@ -221,12 +220,12 @@ export class AdminService {
 
   async providers(): Promise<ProviderHealthDto[]> {
     const out: ProviderHealthDto[] = [];
-    for (const key of KNOWN_PROVIDERS) {
+    for (const key of [this.oddsProvider]) {
       out.push(
         (await readProviderHealth(this.redis, key).catch(() => null)) ?? {
           key,
-          name: key,
-          isSimulated: true,
+          name: PROVIDER_INFO[key]?.name ?? key,
+          isSimulated: isSimulatedProvider(key),
           state: 'UNKNOWN',
           circuit: 'CLOSED',
           lastSuccessAt: null,
@@ -236,6 +235,7 @@ export class AdminService {
           requests: 0,
           failures: 0,
           lastSyncAt: null,
+          quota: null,
         },
       );
     }
@@ -501,7 +501,7 @@ export class AdminService {
       isLive: e.status === 'LIVE',
       score: e.homeScore == null ? null : { home: e.homeScore, away: e.awayScore ?? 0 },
       liveState: parseLiveState(e.liveState),
-      dataSource: { provider: e.provider, isSimulated: true },
+      dataSource: { provider: e.provider, isSimulated: isSimulatedProvider(e.provider) },
       mainMarket: e.markets[0] ? toMarketDto(e.markets[0], e, now) : null,
       marketCount: e._count.markets,
       provider: e.provider,
@@ -563,7 +563,7 @@ export class AdminService {
       score: e.homeScore == null ? null : { home: e.homeScore, away: e.awayScore ?? 0 },
       liveState: parseLiveState(e.liveState),
       statistics: parseStatistics(e.statistics),
-      dataSource: { provider: e.provider, isSimulated: true },
+      dataSource: { provider: e.provider, isSimulated: isSimulatedProvider(e.provider) },
       mainMarket:
         markets.find((m) => m.type === 'MATCH_RESULT' || m.type === 'MATCH_WINNER') ?? null,
       marketCount: markets.length,

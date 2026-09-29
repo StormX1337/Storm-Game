@@ -64,7 +64,12 @@ export default tseslint.config(
 
   // Console output is the point of CLIs, seeds and build scripts.
   {
-    files: ['apps/worker/src/seed.ts', 'scripts/**/*.{ts,mjs,js}', '**/*.config.{ts,mts,mjs,js}'],
+    files: [
+      'apps/worker/src/seed.ts',
+      'apps/worker/src/odds-check.ts',
+      'scripts/**/*.{ts,mjs,js}',
+      '**/*.config.{ts,mts,mjs,js}',
+    ],
     rules: { 'no-console': 'off' },
   },
 

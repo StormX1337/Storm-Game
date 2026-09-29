@@ -26,7 +26,8 @@
     "db:migrate:dev": "pnpm --filter @storm-bet/database migrate:dev",
     "db:reset": "pnpm --filter @storm-bet/database reset",
     "db:seed": "pnpm --filter @storm-bet/worker seed",
-    "db:studio": "pnpm --filter @storm-bet/database studio"
+    "db:studio": "pnpm --filter @storm-bet/database studio",
+    "odds:check": "pnpm --filter @storm-bet/worker odds:check"
   },
   "devDependencies": {
     "@eslint/js": "9.39.5",

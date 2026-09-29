@@ -87,9 +87,16 @@ async function main(): Promise<void> {
       console.log(`  ${label}  ${email}  ${pw}`);
     }
 
-    console.log('\nImportiere simulierten Katalog (Demo-Daten) …');
     const provider = createProvider(env, redis);
-    const sync = new OddsSyncService(db, redis, provider, { horizonHours: 36, lookbackHours: 6 });
+    console.log(
+      provider.isSimulated
+        ? '\nImportiere simulierten Katalog (Demo-Daten) …'
+        : `\nImportiere Katalog von ${provider.name} …`,
+    );
+    const sync = new OddsSyncService(db, redis, provider, {
+      horizonHours: env.ODDS_PROVIDER === 'mock' ? 36 : 7 * 24,
+      lookbackHours: 6,
+    });
     const catalog = await sync.syncCatalog();
     const live = await sync.syncLive();
     console.log(
@@ -142,7 +149,11 @@ async function main(): Promise<void> {
         console.log('  Beispielwetten für das Demo-Konto platziert');
       }
     }
-    console.log('\nFertig. Alle Sportdaten sind simuliert und als Demo gekennzeichnet.\n');
+    console.log(
+      provider.isSimulated
+        ? '\nFertig. Alle Sportdaten sind simuliert und als Demo gekennzeichnet.\n'
+        : `\nFertig. Quoten und Ergebnisse stammen von ${provider.name}; gewettet wird mit Demo-Guthaben.\n`,
+    );
   } finally {
     await redis.quit();
     await db.$disconnect();

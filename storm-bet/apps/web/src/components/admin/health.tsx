@@ -119,6 +119,22 @@ export function ProviderCard({ provider }: { provider: ProviderHealthDto }) {
           </dd>
         </div>
       </dl>
+      {provider.quota ? (
+        <p
+          className={cn(
+            'mt-3 rounded-md px-3 py-2 text-xs',
+            provider.quota.exhausted
+              ? 'bg-warning-soft text-warning'
+              : 'bg-surface-2 text-fg-muted',
+          )}
+        >
+          API-Kontingent: {provider.quota.remaining ?? '—'} Credits übrig ·{' '}
+          {provider.quota.used ?? '—'} verbraucht
+          {provider.quota.exhausted
+            ? ' · Reserve erreicht: keine neuen Abrufe, Märkte suspendiert'
+            : ''}
+        </p>
+      ) : null}
       {provider.lastError ? (
         <p className="mt-3 rounded-md bg-down-soft px-3 py-2 text-xs text-down">
           Letzter Fehler {provider.lastErrorAt ? formatDateTime(provider.lastErrorAt) : ''}:{' '}

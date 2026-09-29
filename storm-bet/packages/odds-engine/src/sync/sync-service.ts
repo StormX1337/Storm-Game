@@ -394,7 +394,7 @@ export class OddsSyncService {
 
   private eventValues(event: ProviderEvent, players: Map<string, string>) {
     let statistics = event.statistics;
-    if (statistics?.sport === 'football') {
+    if (statistics?.sport === 'football' && statistics.goalEvents) {
       statistics = {
         ...statistics,
         goalEvents: statistics.goalEvents.map((g) => ({

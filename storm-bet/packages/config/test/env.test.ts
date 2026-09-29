@@ -26,6 +26,20 @@ describe('parseEnv', () => {
     expect(() => parseEnv(workerEnvSchema, { ...base, REAL_MONEY_ENABLED: '1' })).toThrow(EnvError);
   });
 
+  it('requires an API key for the real odds feed', () => {
+    expect(() => parseEnv(workerEnvSchema, { ...base, ODDS_PROVIDER: 'theoddsapi' })).toThrow(
+      /ODDS_API_KEY/,
+    );
+    const env = parseEnv(workerEnvSchema, {
+      ...base,
+      ODDS_PROVIDER: 'theoddsapi',
+      ODDS_API_KEY: 'k'.repeat(32),
+      ODDS_API_BOOKMAKERS: 'pinnacle, unibet_eu',
+    });
+    expect(env.ODDS_API_BOOKMAKERS).toEqual(['pinnacle', 'unibet_eu']);
+    expect(env.ODDS_API_LIVE_BETTING).toBe(false);
+  });
+
   it('rejects short secrets', () => {
     expect(() => parseEnv(apiEnvSchema, { ...base, AUTH_SECRET: 'short' })).toThrow(/AUTH_SECRET/);
   });

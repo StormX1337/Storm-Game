@@ -5,21 +5,27 @@ import { EventList } from '@/components/sportsbook/event-list';
 import { LiveDot } from '@/components/sportsbook/live-indicator';
 import { PageHeader, SectionTitle } from '@/components/sportsbook/page-header';
 import { SportIcon } from '@/components/sportsbook/sport-icon';
-import { tryServerApi } from '@/lib/server-api';
+import { getPlatformMeta, tryServerApi } from '@/lib/server-api';
 
 export const metadata: Metadata = { title: 'Sportarten' };
 export const dynamic = 'force-dynamic';
 
 export default async function SportsPage() {
+  const { odds } = await getPlatformMeta();
+  const within = odds.isSimulated ? 12 : 72;
   const [sports, upcoming] = await Promise.all([
     tryServerApi<SportDto[]>('/sports'),
-    tryServerApi<Paginated<EventSummaryDto>>('/events?status=upcoming&withinHours=12&limit=30'),
+    tryServerApi<Paginated<EventSummaryDto>>(
+      `/events?status=upcoming&withinHours=${within}&limit=30`,
+    ),
   ]);
   return (
     <div className="space-y-6">
       <PageHeader
         title="Sportarten"
-        description="Alle verfügbaren Sportarten und die nächsten Events. Sämtliche Daten sind simuliert."
+        description={`Alle verfügbaren Sportarten und die nächsten Events. ${
+          odds.isSimulated ? 'Sämtliche Daten sind simuliert.' : `Quoten: ${odds.name}.`
+        }`}
       />
       <div className="grid gap-3 sm:grid-cols-3">
         {(sports ?? []).map((s) => (

@@ -54,7 +54,7 @@ export default async function AdminEventPage({ params }: { params: Promise<{ id:
                 'Quelle',
                 event.provider === 'manual'
                   ? 'Manuell (Staff)'
-                  : `Feed: ${event.provider} (simuliert)`,
+                  : `Feed: ${event.provider}${event.dataSource.isSimulated ? ' (simuliert)' : ''}`,
               ],
               ['Spielstand', event.score ? `${event.score.home}:${event.score.away}` : '—'],
               [

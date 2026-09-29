@@ -116,6 +116,16 @@ export class ResilientOddsProvider implements OddsProvider {
     );
   }
 
+  /** Request credits of a metered feed, if the wrapped provider reports them. */
+  private quota(): ProviderHealthDto['quota'] {
+    const inner = this.inner as OddsProvider & {
+      getQuota?: () => { remaining: number | null; used: number | null; exhausted: boolean };
+    };
+    if (typeof inner.getQuota !== 'function') return null;
+    const q = inner.getQuota();
+    return { remaining: q.remaining, used: q.used, exhausted: q.exhausted };
+  }
+
   getLiveEvents(sportKey?: SportKey): Promise<ProviderEvent[]> {
     return this.cached(`live:${sportKey ?? 'all'}`, this.options.cacheTtlSeconds, () =>
       this.inner.getLiveEvents(sportKey),
@@ -264,11 +274,15 @@ function buildHealth(
   circuit: CircuitState,
   h: HealthRecord,
   lastSyncAt: string | null,
+  quota: ProviderHealthDto['quota'] = null,
 ): ProviderHealthDto {
   let state: ProviderState = 'UNKNOWN';
   if (circuit === 'OPEN') state = 'DOWN';
   else if (h.requests > 0) {
-    state = h.consecutiveFailures > 0 || circuit === 'HALF_OPEN' ? 'DEGRADED' : 'HEALTHY';
+    state =
+      h.consecutiveFailures > 0 || circuit === 'HALF_OPEN' || quota?.exhausted
+        ? 'DEGRADED'
+        : 'HEALTHY';
   }
   return {
     key,
@@ -283,6 +297,7 @@ function buildHealth(
     requests: h.requests,
     failures: h.failures,
     lastSyncAt,
+    quota,
   };
 }
 
@@ -303,6 +318,15 @@ export async function readProviderHealth(
     circuit: CircuitState;
     name: string;
     isSimulated: boolean;
+    quota?: ProviderHealthDto['quota'];
   };
-  return buildHealth(key, parsed.name, parsed.isSimulated, parsed.circuit, parsed, lastSync);
+  return buildHealth(
+    key,
+    parsed.name,
+    parsed.isSimulated,
+    parsed.circuit,
+    parsed,
+    lastSync,
+    parsed.quota ?? null,
+  );
 }

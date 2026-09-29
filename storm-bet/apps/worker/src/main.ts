@@ -103,7 +103,13 @@ async function main(): Promise<void> {
   });
   health.listen(env.WORKER_HEALTH_PORT, '0.0.0.0');
   logger.info(
-    { provider: provider.key, simulated: provider.isSimulated, timeScale: env.MOCK_TIME_SCALE },
+    {
+      provider: provider.key,
+      simulated: provider.isSimulated,
+      ...(env.ODDS_PROVIDER === 'mock'
+        ? { timeScale: env.MOCK_TIME_SCALE }
+        : { sports: env.ODDS_API_SPORTS }),
+    },
     'worker started',
   );
 

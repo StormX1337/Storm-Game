@@ -40,6 +40,11 @@ bricht den Start mit einer klaren Meldung ab.
 | `ODDS_ACCEPT_HIGHER_MAX_PCT`                                                                   | –       | größte automatisch akzeptierte Quotenerhöhung (nur mit Opt-in)                                    |
 | `DEMO_STARTING_BALANCE`, `DEMO_TOPUP_*`                                                        | –       | Demo-Startguthaben und Aufladung                                                                  |
 | `MOCK_SEED`, `MOCK_TIME_SCALE`                                                                 | –       | Simulator: Seed und Spielzeit-Faktor (3 = 90 Min. Fußball in 30 Min.)                             |
+| `ODDS_PROVIDER`                                                                                | –       | `mock` (Simulator, Standard) oder `theoddsapi` (echte Daten, siehe unten)                         |
+| `ODDS_API_KEY`                                                                                 | Feed    | API-Key von The Odds API; Pflicht bei `ODDS_PROVIDER=theoddsapi`                                  |
+| `ODDS_API_SPORTS`, `ODDS_API_REGIONS`, `ODDS_API_BOOKMAKERS`                                   | –       | Wettbewerbe (`*` am Ende = Präfix), Buchmacher-Region bzw. feste Buchmacher                       |
+| `ODDS_API_ODDS_TTL_SECONDS`, `ODDS_API_SCORES_TTL_SECONDS`, `ODDS_API_MIN_REMAINING`           | –       | Abruftakt pro Wettbewerb und Credit-Reserve                                                       |
+| `ODDS_API_LIVE_BETTING`, `ODDS_API_LIVE_MAX_AGE_SECONDS`                                       | –       | Live-Wetten auf echte Spiele (Standard aus) und maximales Quotenalter                             |
 | `PROVIDER_*`                                                                                   | –       | Timeout, Retries, Rate-Limit, Cache des Odds-Providers                                            |
 | `*_INTERVAL_MS`                                                                                | –       | Takt der Worker-Jobs                                                                              |
 | `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD`, `SEED_DEMO_EMAIL`, `SEED_DEMO_PASSWORD`             | –       | Seed-Konten; leere Passwörter werden generiert und einmalig ausgegeben                            |
@@ -73,6 +78,40 @@ pnpm dev
 
 Mails (Verifizierung, Passwort-Reset) erscheinen ohne `SMTP_URL` im API-Log.
 
+## Echte Quoten (The Odds API)
+
+Statt des Simulators kann der Worker echte Spielpläne, Quoten und Ergebnisse von
+[The Odds API](https://the-odds-api.com) (v4) laden. Gewettet wird weiterhin **nur mit Demo-Guthaben**.
+
+1. API-Key registrieren und in `.env` eintragen:
+   ```bash
+   ODDS_PROVIDER=theoddsapi
+   ODDS_API_KEY=dein-key
+   ```
+2. Verbindung und Kontingent prüfen (kostet nur mit `--with-odds` Credits):
+   ```bash
+   pnpm odds:check              # Wettbewerbe + verbleibende Credits
+   pnpm odds:check --with-odds  # zusätzlich Quoten des ersten Wettbewerbs
+   ```
+3. Worker und API neu starten. `pnpm db:seed` importiert die nächsten 7 Tage.
+
+**Credits:** Ein Quotenabruf kostet _Märkte × Regionen_ pro Wettbewerb (Fußball/Basketball 3, Tennis 1),
+ein Ergebnisabruf 2 – letzterer nur, solange in dem Wettbewerb ein Spiel läuft. Mit den Standardwerten
+(8 Wettbewerbe, Quoten alle 15 Min.) fallen über 2.000 Credits pro Tag an; der kostenlose Plan
+(500/Monat) reicht dafür nicht – dort `ODDS_API_SPORTS` auf 1–2 Wettbewerbe und
+`ODDS_API_ODDS_TTL_SECONDS` auf mehrere Stunden setzen. Unterhalb von `ODDS_API_MIN_REMAINING` stoppt der
+Worker alle kostenpflichtigen Abrufe und suspendiert die Märkte; der Admin-Bereich (System) zeigt das
+Kontingent.
+
+**Angebot:** Nur Märkte, die sich aus dem Endergebnis sicher abrechnen lassen: Ergebnis (1X2/Sieger),
+Handicap (ohne Viertel-Linien) und Über/Unter. Statistiken (Ecken, Karten, Torschützen) liefert der Feed
+nicht; sie werden nicht erfunden. Live-Wetten sind standardmäßig aus (`ODDS_API_LIVE_BETTING`), weil
+Snapshot-Quoten schnell veralten. Events, zu denen der Feed kein Ergebnis mehr liefert (älter als 3 Tage,
+abgesagt), bleiben offen und müssen im Admin-Bereich abgerechnet oder storniert werden.
+
+**Netzwerk:** Der Worker braucht ausgehend HTTPS zu `api.the-odds-api.com`. Hinter einem HTTP-Proxy
+zusätzlich `NODE_USE_ENV_PROXY=1` setzen (Node ≥ 22.15), damit `fetch` `HTTPS_PROXY` verwendet.
+
 ## Tests
 
 ```bash
@@ -86,16 +125,17 @@ Migrationen an und legen eigene Datensätze an – es wird nie etwas zurückgese
 
 Besonders abgesichert:
 
-| Test                                                    | Datei                                              |
-| ------------------------------------------------------- | -------------------------------------------------- |
-| Wette darf nicht doppelt platziert werden               | `packages/betting-engine/test/betting.int.test.ts` |
-| Quote wird während des Place-Vorgangs geändert          | ebenda (paralleler Row-Lock)                       |
-| Wallet darf niemals negativ werden                      | ebenda (parallele Wetten + DB-Constraint)          |
-| Settlement darf nicht doppelt auszahlen                 | ebenda (parallele Läufe + Ledger-Trigger)          |
-| Login, Registrierung, Brute-Force, CSRF, Passwort-Reset | `apps/api/test/api.int.test.ts`                    |
-| Rollen/Berechtigungen, Admin-APIs                       | ebenda                                             |
-| Quoten-, Wettschein- und Abrechnungsregeln              | `packages/betting-engine/test/domain.test.ts`      |
-| Simulator, Resilience, Sync                             | `packages/odds-engine/test/*`                      |
+| Test                                                    | Datei                                                                                         |
+| ------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Wette darf nicht doppelt platziert werden               | `packages/betting-engine/test/betting.int.test.ts`                                            |
+| Quote wird während des Place-Vorgangs geändert          | ebenda (paralleler Row-Lock)                                                                  |
+| Wallet darf niemals negativ werden                      | ebenda (parallele Wetten + DB-Constraint)                                                     |
+| Settlement darf nicht doppelt auszahlen                 | ebenda (parallele Läufe + Ledger-Trigger)                                                     |
+| Login, Registrierung, Brute-Force, CSRF, Passwort-Reset | `apps/api/test/api.int.test.ts`                                                               |
+| Rollen/Berechtigungen, Admin-APIs                       | ebenda                                                                                        |
+| Quoten-, Wettschein- und Abrechnungsregeln              | `packages/betting-engine/test/domain.test.ts`                                                 |
+| Simulator, Resilience, Sync                             | `packages/odds-engine/test/*`                                                                 |
+| The-Odds-API-Mapping, Kontingent, Sync → Abrechnung     | `packages/odds-engine/test/the-odds-api.test.ts`, `apps/worker/test/the-odds-api.int.test.ts` |
 
 ## Docker
 

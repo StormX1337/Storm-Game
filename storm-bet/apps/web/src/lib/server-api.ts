@@ -1,5 +1,5 @@
 import 'server-only';
-import type { SessionUserDto } from '@storm-bet/types';
+import type { PlatformMetaDto, SessionUserDto } from '@storm-bet/types';
 import { cookies, headers } from 'next/headers';
 import { cache } from 'react';
 
@@ -61,3 +61,14 @@ export const getSessionUser = cache(async (): Promise<SessionUserDto | null> => 
   const result = await tryServerApi<{ user: SessionUserDto | null }>('/auth/session');
   return result?.user ?? null;
 });
+
+const UNKNOWN_FEED: PlatformMetaDto = {
+  realMoney: false,
+  odds: { provider: 'unknown', name: 'unbekannt', isSimulated: true },
+};
+
+/** Which odds feed the platform runs on. If it cannot be determined, data is labelled simulated. */
+export const getPlatformMeta = cache(
+  async (): Promise<PlatformMetaDto> =>
+    (await tryServerApi<PlatformMetaDto>('/meta')) ?? UNKNOWN_FEED,
+);

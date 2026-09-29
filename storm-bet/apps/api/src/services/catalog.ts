@@ -1,4 +1,5 @@
 import { decimalToNumber, oddsToMilli, type Prisma, type PrismaClient } from '@storm-bet/database';
+import { isSimulatedProvider } from '@storm-bet/odds-engine';
 import type { JsonCache } from '@storm-bet/redis';
 import {
   AppError,
@@ -16,11 +17,6 @@ import {
 import { parseLiveState, parseStatistics, type EventListQuery } from '@storm-bet/validation';
 import { cursorArgs, page } from '../lib/pagination';
 
-/**
- * Feeds whose data is observed and licensed. Anything else — the simulator,
- * staff-entered events — is labelled as demo data. This build has none.
- */
-const LICENSED_PROVIDERS = new Set<string>();
 const MAIN_MARKETS = ['MATCH_RESULT', 'MATCH_WINNER'] as const;
 const VISIBLE_MARKET_STATUSES: MarketStatus[] = ['OPEN', 'SUSPENDED'];
 
@@ -124,7 +120,7 @@ function toSummary(
     isLive: event.status === 'LIVE',
     score: event.homeScore == null ? null : { home: event.homeScore, away: event.awayScore ?? 0 },
     liveState: parseLiveState(event.liveState),
-    dataSource: { provider: event.provider, isSimulated: !LICENSED_PROVIDERS.has(event.provider) },
+    dataSource: { provider: event.provider, isSimulated: isSimulatedProvider(event.provider) },
     mainMarket: mainMarket ? toMarketDto(mainMarket, event, now) : null,
     marketCount,
   };

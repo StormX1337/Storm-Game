@@ -1,8 +1,10 @@
 # STORM BET
 
-Moderne Sportwetten-Plattform – **ausschließlich im Demo-Modus**. Gewettet wird mit Spielgeld (DEMO), alle
-Wettbewerbe, Teams, Spielverläufe und Quoten sind **simuliert** und als Demo gekennzeichnet. Es gibt keine
-Einzahlungen, keine Auszahlungen und keinen Echtgeldbetrieb; der entsprechende Schalter ist technisch gesperrt.
+Moderne Sportwetten-Plattform – **ausschließlich im Demo-Modus**. Gewettet wird mit Spielgeld (DEMO). Die
+Daten kommen wahlweise aus dem eingebauten Simulator (Standard, als Demo gekennzeichnet) oder als **echte
+Spielpläne, Quoten und Ergebnisse** von [The Odds API](https://the-odds-api.com) (`ODDS_PROVIDER=theoddsapi`,
+siehe [SETUP.md](SETUP.md#echte-quoten-the-odds-api)). Es gibt keine Einzahlungen, keine Auszahlungen und
+keinen Echtgeldbetrieb; der entsprechende Schalter ist technisch gesperrt.
 
 ![Stack](https://img.shields.io/badge/Next.js-15-black) ![Stack](https://img.shields.io/badge/Fastify-5-black)
 ![Stack](https://img.shields.io/badge/PostgreSQL-16-336791) ![Stack](https://img.shields.io/badge/Redis-7-d82c20)
@@ -45,7 +47,7 @@ docker compose up -d --build
 
 Danach: <http://localhost:3000>. Der `migrate`-Job migriert die Datenbank, legt Admin- und Demo-Konto an
 (Passwörter aus `.env` oder einmalig generiert – siehe `docker compose logs migrate`) und importiert den
-simulierten Katalog.
+Katalog (Simulator oder – mit `ODDS_PROVIDER=theoddsapi` – echte Daten).
 
 ## Lokale Entwicklung
 
@@ -85,7 +87,7 @@ packages/
   database/       Prisma-Schema, Migrationen mit DB-Guards, Client, Audit
   redis/          Locks, Rate-Limiter, Cache, Pub/Sub
   security/       Argon2id, Tokens, CSRF, CIDR
-  odds-engine/    OddsProvider-Interface, MockOddsProvider, Resilience, Sync
+  odds-engine/    OddsProvider-Interface, MockOddsProvider, TheOddsApiProvider, Resilience, Sync
   betting-engine/ Quoten-Mathematik, Wettschein-Regeln, Placement, Wallet, Settlement
   compliance/     Limits, Selbstsperre, Jurisdiktion, KYC-/Zahlungs-Schnittstellen
   ui/             Design-System (Tailwind v4, shadcn-Stil auf Radix)

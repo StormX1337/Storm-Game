@@ -228,8 +228,8 @@ export const footballModel: SportModel<FootballPlan> = {
     const bucket = Math.floor(now / (inPlay ? 20_000 : 300_000));
     const drift = createRng(ctx.seed, ctx.externalId, 'drift', bucket);
     const spread = inPlay ? 0.04 : 0.03;
-    const redFactor = (side: Side) =>
-      Math.pow(0.78, stats ? (side === 'HOME' ? stats.redCards.home : stats.redCards.away) : 0);
+    const reds = stats?.redCards ?? { home: 0, away: 0 };
+    const redFactor = (side: Side) => Math.pow(0.78, side === 'HOME' ? reds.home : reds.away);
     const lambda = {
       home: plan.lambda.home * remaining * driftFactor(drift.next(), spread) * redFactor('HOME'),
       away: plan.lambda.away * remaining * driftFactor(drift.next(), spread) * redFactor('AWAY'),
@@ -408,9 +408,8 @@ export const footballModel: SportModel<FootballPlan> = {
       );
     }
 
-    const cards = stats
-      ? stats.yellowCards.home + stats.yellowCards.away + stats.redCards.home + stats.redCards.away
-      : 0;
+    const yellows = stats?.yellowCards ?? { home: 0, away: 0 };
+    const cards = yellows.home + yellows.away + reds.home + reds.away;
     const cardLambda = (plan.cardRate.home + plan.cardRate.away + 0.12) * remaining;
     for (const line of CARD_LINES) {
       const over = poissonOver(cards, cardLambda, line);
@@ -432,7 +431,7 @@ export const footballModel: SportModel<FootballPlan> = {
     }
 
     // Anytime goalscorer: attackers and midfielders of both sides.
-    const scored = new Set(stats?.goalEvents.map((g) => g.playerId) ?? []);
+    const scored = new Set(stats?.goalEvents?.map((g) => g.playerId) ?? []);
     const playerQuotes: Quote[] = [];
     for (const [team, rate] of [
       [ctx.home, lambda.home],
