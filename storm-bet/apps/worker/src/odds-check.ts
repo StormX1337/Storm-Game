@@ -32,6 +32,9 @@ async function main(): Promise<void> {
       );
     }
   }
+  if (provider instanceof SportsGameOddsProvider && process.argv.includes('--with-odds')) {
+    console.log('\nDiagnose:', JSON.stringify(await provider.diagnostics(), null, 2));
+  }
   if (provider instanceof SportsGameOddsProvider) {
     const available = await provider.availableLeagues();
     const more = available.filter((l) => l.supported && !l.active);

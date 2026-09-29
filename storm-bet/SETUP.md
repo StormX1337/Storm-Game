@@ -116,6 +116,10 @@ abgesagt), bleiben offen und müssen im Admin-Bereich abgerechnet oder storniert
 **Netzwerk:** Der Worker braucht ausgehend HTTPS zu `api.the-odds-api.com`. Hinter einem HTTP-Proxy
 zusätzlich `NODE_USE_ENV_PROXY=1` setzen (Node ≥ 22.15), damit `fetch` `HTTPS_PROXY` verwendet.
 
+**Feed wechseln:** Beim Start sagt der Worker offene Events des vorherigen Feeds ab (z. B. die simulierten
+Spiele nach dem Umstieg auf echte Daten); ihre offenen Wetten werden mit Quote 1,00 abgerechnet (Einsatz
+zurück). Das steht im Audit-Log (`events.provider_retired`). Manuell angelegte Events bleiben unberührt.
+
 ## Echte Quoten (SportsGameOdds)
 
 Alternativ liefert [SportsGameOdds](https://sportsgameodds.com) (API v2) Quoten, Live-Spielstände und
@@ -125,6 +129,7 @@ offizielle Ergebnisse in einem Event-Objekt. Gewettet wird weiterhin **nur mit D
 ODDS_PROVIDER=sportsgameodds
 SGO_API_KEY=dein-key
 pnpm odds:check              # Ligen + Monatskontingent (kostet keine Event-Objekte)
+pnpm odds:check --with-odds  # lädt Events und zeigt eine Diagnose (übersprungene Events, Märkte)
 ```
 
 **Abrechnung pro Event-Objekt:** Jeder Snapshot kostet ein Objekt pro Spiel im Zeitfenster

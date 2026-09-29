@@ -390,6 +390,47 @@ export class SportsGameOddsProvider implements OddsProvider {
     return out.sort((a, b) => a.startTime.localeCompare(b.startTime));
   }
 
+  /**
+   * What the last snapshot contained and why events were left out — for
+   * `odds:check --with-odds` when a feed shows fewer events than expected.
+   */
+  async diagnostics() {
+    await this.refresh();
+    const leagues = await this.leagueMap();
+    let mapped = 0;
+    let markets = 0;
+    const skipped: Record<string, number> = {};
+    for (const stored of this.events.values()) {
+      const league = leagues.get(stored.event.leagueID ?? '');
+      const event = league ? this.toEvent(stored.event, league) : null;
+      const reason = !league
+        ? `Liga nicht aktiv: ${stored.event.leagueID ?? '?'}`
+        : !event
+          ? 'Teams, Namen oder Startzeit fehlen'
+          : null;
+      if (reason) skipped[reason] = (skipped[reason] ?? 0) + 1;
+      else {
+        mapped++;
+        markets += this.buildMarkets(league!.sport, stored, event!).length;
+      }
+    }
+    const first = this.events.values().next().value?.event;
+    return {
+      fetched: this.events.size,
+      mapped,
+      markets,
+      skipped,
+      sample: first
+        ? {
+            keys: Object.keys(first),
+            status: first.status,
+            home: first.teams?.home?.names,
+            odds: Object.keys(first.odds ?? {}).slice(0, 8),
+          }
+        : null,
+    };
+  }
+
   private refresh(): Promise<void> {
     this.refreshing ??= this.doRefresh().finally(() => {
       this.refreshing = null;
@@ -468,6 +509,9 @@ export class SportsGameOddsProvider implements OddsProvider {
   }
 
   private async fetchEvents(params: Record<string, string>): Promise<SgoEvent[]> {
+    // Pinned bookmakers: only their prices are downloaded (events are large).
+    if (this.options.bookmakers.length)
+      params = { ...params, bookmakerID: this.options.bookmakers.join(',') };
     const out: SgoEvent[] = [];
     let cursor: string | undefined;
     for (let page = 0; page < MAX_PAGES; page++) {

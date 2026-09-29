@@ -1,7 +1,12 @@
 import { createPrismaClient } from '@storm-bet/database';
 import { createRedis } from '@storm-bet/redis';
 import { afterAll, describe, expect, it } from 'vitest';
-import { MockOddsProvider, OddsSyncService, type OddsProvider } from '../src';
+import {
+  MockOddsProvider,
+  OddsSyncService,
+  retireInactiveProviderEvents,
+  type OddsProvider,
+} from '../src';
 
 const db = createPrismaClient();
 const redis = createRedis(process.env.REDIS_URL!);
@@ -123,6 +128,48 @@ describe('OddsSyncService markets', () => {
     await sync.syncMarkets(event.id, []);
     const stillOpen = await db.market.count({ where: { eventId: event.id, status: 'OPEN' } });
     expect(stillOpen).toBe(0);
+  });
+});
+
+describe('retireInactiveProviderEvents', () => {
+  it('cancels the open events of a feed that is no longer active', async () => {
+    const now = Date.parse('2026-10-04T10:00:00Z');
+    const provider = isolated(() => now);
+    const sync = new OddsSyncService(db, redis, provider, {
+      horizonHours: 3,
+      lookbackHours: 1,
+      now: () => now,
+    });
+    await sync.syncCatalog();
+    const openWhere = {
+      provider: provider.key,
+      status: { in: ['SCHEDULED', 'LIVE', 'SUSPENDED'] as ('SCHEDULED' | 'LIVE' | 'SUSPENDED')[] },
+    };
+    const open = await db.event.count({ where: openWhere });
+    expect(open).toBeGreaterThan(0);
+
+    const result = await retireInactiveProviderEvents(db, 'sportsgameodds', {
+      only: [provider.key],
+    });
+    expect(result).toEqual({ events: open, providers: [provider.key] });
+    expect(await db.event.count({ where: openWhere })).toBe(0);
+    // Finished games with a confirmed result are settled normally, not cancelled.
+    expect(
+      await db.event.count({
+        where: { provider: provider.key, status: 'FINISHED', resultConfirmedAt: { not: null } },
+      }),
+    ).toBeGreaterThan(0);
+    expect(
+      await db.market.count({ where: { event: { provider: provider.key }, status: 'OPEN' } }),
+    ).toBe(0);
+    const audit = await db.auditLog.findFirst({
+      where: { action: 'events.provider_retired', targetId: provider.key },
+    });
+    expect(audit?.metadata).toMatchObject({ activeProvider: 'sportsgameodds', events: open });
+    // Nothing left to do on a second start.
+    expect(
+      (await retireInactiveProviderEvents(db, 'sportsgameodds', { only: [provider.key] })).events,
+    ).toBe(0);
   });
 });
 

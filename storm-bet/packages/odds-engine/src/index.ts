@@ -8,3 +8,4 @@ export { TheOddsApiProvider, type TheOddsApiOptions } from './providers/the-odds
 export { SportsGameOddsProvider, type SportsGameOddsOptions } from './providers/sportsgameodds';
 export { americanToDecimal, type ProviderQuota } from './providers/shared';
 export { PROVIDER_INFO, isSimulatedProvider } from './provider-info';
+export * from './sync/retire';

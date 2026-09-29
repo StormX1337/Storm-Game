@@ -3,7 +3,7 @@ import { SettlementService } from '@storm-bet/betting-engine';
 import { CasinoService, MockCasinoProvider, syncCasinoCatalog } from '@storm-bet/casino';
 import { parseEnv, QUEUES, REDIS_KEYS, workerEnvSchema } from '@storm-bet/config';
 import { createPrismaClient } from '@storm-bet/database';
-import { OddsSyncService } from '@storm-bet/odds-engine';
+import { OddsSyncService, retireInactiveProviderEvents } from '@storm-bet/odds-engine';
 import { createRedis } from '@storm-bet/redis';
 import { Queue, Worker } from 'bullmq';
 import { createJobHandlers, type JobName } from './jobs';
@@ -31,6 +31,9 @@ async function main(): Promise<void> {
     logger,
   });
   const settlement = new SettlementService({ db, redis, logger });
+  const retired = await retireInactiveProviderEvents(db, provider.key);
+  if (retired.events)
+    logger.warn(retired, 'open events of the previous odds feed cancelled; their bets are voided');
   const casinoProvider = new MockCasinoProvider();
   const casino = new CasinoService({ db, redis, providers: [casinoProvider] });
   const casinoCatalog = await syncCasinoCatalog(db, casinoProvider);

@@ -48,8 +48,9 @@ export function createInnerProvider(env: WorkerEnv): OddsProvider {
 export function createProvider(env: WorkerEnv, redis: Redis): ResilientOddsProvider {
   const real = env.ODDS_PROVIDER !== 'mock';
   return new ResilientOddsProvider(createInnerProvider(env), redis, {
-    // A real HTTP feed needs more headroom than the in-process simulator.
-    timeoutMs: real ? Math.max(env.PROVIDER_TIMEOUT_MS, 10_000) : env.PROVIDER_TIMEOUT_MS,
+    // A real HTTP feed needs more headroom than the in-process simulator: a
+    // first snapshot of many leagues can be several paged downloads.
+    timeoutMs: real ? Math.max(env.PROVIDER_TIMEOUT_MS, 60_000) : env.PROVIDER_TIMEOUT_MS,
     maxRetries: env.PROVIDER_MAX_RETRIES,
     rateLimitPerMinute: env.PROVIDER_RATE_LIMIT_PER_MINUTE,
     // The real-feed providers keep their own quota-aware snapshots.
