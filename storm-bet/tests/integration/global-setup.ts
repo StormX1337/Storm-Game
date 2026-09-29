@@ -12,7 +12,7 @@ export default function setup(): void {
     process.env.TEST_DATABASE_URL ??
     'postgresql://stormbet:stormbet@localhost:5432/stormbet_test?schema=public';
   const cwd = fileURLToPath(new URL('../../packages/database', import.meta.url));
-  execFileSync(process.execPath, ['./node_modules/prisma/build/index.js', 'migrate', 'deploy'], {
+  execFileSync(process.execPath, ['scripts/prisma.mjs', 'migrate', 'deploy'], {
     cwd,
     env: { ...process.env, DATABASE_URL: url },
     stdio: 'pipe',

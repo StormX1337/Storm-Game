@@ -10,12 +10,12 @@
     "schema": "prisma/schema.prisma"
   },
   "scripts": {
-    "generate": "prisma generate",
-    "migrate": "node --env-file-if-exists=../../.env ./node_modules/prisma/build/index.js migrate deploy",
-    "migrate:dev": "node --env-file-if-exists=../../.env ./node_modules/prisma/build/index.js migrate dev",
-    "reset": "node --env-file-if-exists=../../.env ./node_modules/prisma/build/index.js migrate reset --force --skip-seed",
+    "generate": "node scripts/prisma.mjs generate",
+    "migrate": "node scripts/prisma.mjs migrate deploy",
+    "migrate:dev": "node scripts/prisma.mjs migrate dev",
+    "reset": "node scripts/prisma.mjs migrate reset --force --skip-seed",
     "seed": "tsx --env-file-if-exists=../../.env src/seed/index.ts",
-    "studio": "node --env-file-if-exists=../../.env ./node_modules/prisma/build/index.js studio",
+    "studio": "node scripts/prisma.mjs studio",
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
@@ -28,5 +28,10 @@
     "@storm-bet/security": "workspace:*",
     "tsx": "4.20.6",
     "typescript": "5.9.3"
-  }
+  },
+  "files": [
+    "src",
+    "prisma",
+    "scripts"
+  ]
 }
