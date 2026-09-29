@@ -12,7 +12,8 @@
   },
   "dependencies": {
     "ioredis": "5.8.2",
-    "@storm-bet/config": "workspace:*"
+    "@storm-bet/config": "workspace:*",
+    "@storm-bet/types": "workspace:*"
   },
   "devDependencies": {
     "typescript": "5.9.3"

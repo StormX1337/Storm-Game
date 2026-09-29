@@ -319,6 +319,9 @@ importers:
       '@storm-bet/config':
         specifier: workspace:*
         version: link:../config
+      '@storm-bet/types':
+        specifier: workspace:*
+        version: link:../types
       ioredis:
         specifier: 5.8.2
         version: 5.8.2
