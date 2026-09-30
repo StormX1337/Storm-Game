@@ -13,13 +13,16 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ApiError, api } from '@/lib/api-client';
-import { formatMoney, formatOdds, parseStake } from '@/lib/format';
+import { formatKickoff, formatMoney, formatOdds, parseStake } from '@/lib/format';
 import { effectiveMode, sameEvent, useBetSlip, type SlipItem } from '@/stores/bet-slip';
 import { useLive } from '@/stores/live';
 import { announceWalletChange, useSession } from '../providers/session';
 import { useRealtimeTopics } from '../providers/realtime';
+import { SportIcon } from '../sportsbook/sport-icon';
 
-const QUICK_STAKES = [500, 1000, 2500, 5000];
+/** Quick stakes add to the typed amount (minor units). */
+const QUICK_ADD = [200, 1000, 5000];
+const stakeText = (minor: number) => (minor / 100).toFixed(2).replace('.', ',');
 const MODE_LABELS: Record<SlipMode, string> = {
   COMBO: 'Kombi',
   BUILDER: 'Bet Builder',
@@ -208,6 +211,13 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
   const potentialReturn =
     quote?.quote.mode === mode ? quote.quote.potentialReturn : estimate.potentialReturn;
   const totalStake = estimate.stake;
+  // The highest stake the limits allow at this price, within the available balance.
+  const maxStake = (() => {
+    const caps = [wallet?.available, quote?.quote.maxStake].filter(
+      (v): v is number => typeof v === 'number',
+    );
+    return caps.length ? Math.max(0, Math.min(...caps)) : null;
+  })();
   // With the opt-in, a higher price is taken by the server (bounded there);
   // only a lower one needs the player's explicit acceptance. A Bet Builder
   // has one price: only that one counts, not the legs'.
@@ -378,76 +388,71 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
       ) : null}
 
       {mode === 'BUILDER' ? (
-        <p
-          className="border-b border-border px-3 py-2 text-xs text-fg-muted"
-          data-testid="builder-info"
-        >
-          <span className="font-semibold text-fg">Bet Builder:</span> eine Quote für mehrere Tipps
-          auf dieses Spiel. Alle Tipps müssen gewinnen; ist einer ungültig, wird die Wette storniert
-          (Einsatz zurück).
-        </p>
-      ) : null}
-
-      <ul className="min-h-0 flex-1 divide-y divide-border overflow-y-auto">
-        {slip.items.map((item) => (
-          <li key={item.selectionId} className="p-3" data-testid="slip-item">
-            <div className="flex items-start gap-2">
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-fg">{item.selectionName}</p>
-                <p className="truncate text-xs text-fg-muted">{item.marketName}</p>
-                <p className="truncate text-xs text-fg-subtle">
-                  {item.isLive ? <span className="mr-1 font-semibold text-live">LIVE</span> : null}
-                  {item.eventName}
-                </p>
-              </div>
-              <div className="text-right">
-                {item.status !== 'OPEN' ? (
-                  <span className="inline-flex items-center gap-1 text-xs text-warning">
-                    <Lock className="size-3" /> Gesperrt
-                  </span>
-                ) : item.pendingOdds != null && mode !== 'BUILDER' ? (
-                  <span className="flex flex-col items-end">
-                    <span className="tabular text-xs text-fg-subtle line-through">
-                      {formatOdds(item.odds)}
+        <div className="min-h-0 flex-1 overflow-y-auto p-3">
+          <BuilderCard
+            items={slip.items}
+            odds={totalOdds}
+            onRemove={slip.remove}
+            onClear={slip.clear}
+          />
+        </div>
+      ) : (
+        <ul className="min-h-0 flex-1 divide-y divide-border overflow-y-auto">
+          {slip.items.map((item) => (
+            <li key={item.selectionId} className="p-3" data-testid="slip-item">
+              <div className="flex items-start gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-fg">{item.selectionName}</p>
+                  <p className="truncate text-xs text-fg-muted">{item.marketName}</p>
+                  <p className="truncate text-xs text-fg-subtle">
+                    {item.isLive ? (
+                      <span className="mr-1 font-semibold text-live">LIVE</span>
+                    ) : null}
+                    {item.eventName}
+                  </p>
+                </div>
+                <div className="text-right">
+                  {item.status !== 'OPEN' ? (
+                    <span className="inline-flex items-center gap-1 text-xs text-warning">
+                      <Lock className="size-3" /> Gesperrt
                     </span>
-                    <span
-                      className={cn(
-                        'tabular text-sm font-semibold',
-                        item.pendingOdds > item.odds ? 'text-up' : 'text-down',
-                      )}
-                    >
-                      {formatOdds(item.pendingOdds)}
+                  ) : item.pendingOdds != null ? (
+                    <span className="flex flex-col items-end">
+                      <span className="tabular text-xs text-fg-subtle line-through">
+                        {formatOdds(item.odds)}
+                      </span>
+                      <span
+                        className={cn(
+                          'tabular text-sm font-semibold',
+                          item.pendingOdds > item.odds ? 'text-up' : 'text-down',
+                        )}
+                      >
+                        {formatOdds(item.pendingOdds)}
+                      </span>
                     </span>
-                  </span>
-                ) : (
-                  <span
-                    className={cn(
-                      'tabular text-sm font-semibold',
-                      mode === 'BUILDER' && 'text-fg-muted',
-                    )}
-                  >
-                    {formatOdds(item.pendingOdds ?? item.odds)}
-                  </span>
-                )}
+                  ) : (
+                    <span className="tabular text-sm font-semibold">{formatOdds(item.odds)}</span>
+                  )}
+                </div>
+                <button
+                  onClick={() => slip.remove(item.selectionId)}
+                  className="-mr-1 rounded p-1 text-fg-subtle transition-colors hover:bg-surface-3 hover:text-fg"
+                  aria-label={`${item.selectionName} entfernen`}
+                >
+                  <X className="size-3.5" />
+                </button>
               </div>
-              <button
-                onClick={() => slip.remove(item.selectionId)}
-                className="-mr-1 rounded p-1 text-fg-subtle transition-colors hover:bg-surface-3 hover:text-fg"
-                aria-label={`${item.selectionName} entfernen`}
-              >
-                <X className="size-3.5" />
-              </button>
-            </div>
-            {mode === 'SINGLES' ? (
-              <StakeInput
-                value={slip.singleStakes[item.selectionId] ?? ''}
-                onChange={(v) => slip.setSingleStake(item.selectionId, v)}
-                label={`Einsatz für ${item.selectionName}`}
-              />
-            ) : null}
-          </li>
-        ))}
-      </ul>
+              {mode === 'SINGLES' ? (
+                <StakeInput
+                  value={slip.singleStakes[item.selectionId] ?? ''}
+                  onChange={(v) => slip.setSingleStake(item.selectionId, v)}
+                  label={`Einsatz für ${item.selectionName}`}
+                />
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      )}
 
       <div className="space-y-3 border-t border-border p-3">
         {toAccept > 0 ? (
@@ -493,7 +498,13 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
         ) : null}
 
         {mode !== 'SINGLES' ? (
-          <StakeInput value={slip.comboStake} onChange={slip.setComboStake} label="Einsatz" quick />
+          <StakeInput
+            value={slip.comboStake}
+            onChange={slip.setComboStake}
+            label="Einsatz"
+            quick
+            max={maxStake}
+          />
         ) : null}
 
         <dl className="space-y-1.5 text-sm">
@@ -582,13 +593,18 @@ function StakeInput({
   onChange,
   label,
   quick = false,
+  max = null,
 }: {
   value: string;
   onChange: (v: string) => void;
   label: string;
   quick?: boolean;
+  /** Highest allowed stake (minor units), for the MAX button. */
+  max?: number | null;
 }) {
   const invalid = value !== '' && parseStake(value) === null;
+  const quickClass =
+    'tabular rounded-md border border-border bg-surface-2 py-1.5 text-xs font-semibold text-fg-muted transition-colors hover:border-border-strong hover:text-fg disabled:opacity-40';
   return (
     <div className="mt-2 space-y-2">
       <div className="relative">
@@ -609,17 +625,105 @@ function StakeInput({
       </div>
       {quick ? (
         <div className="grid grid-cols-4 gap-1.5">
-          {QUICK_STAKES.map((s) => (
+          {QUICK_ADD.map((s) => (
             <button
               key={s}
-              onClick={() => onChange(String(s / 100).replace('.', ','))}
-              className="tabular rounded-md border border-border bg-surface-2 py-1 text-xs text-fg-muted transition-colors hover:border-border-strong hover:text-fg"
+              type="button"
+              onClick={() => onChange(stakeText((parseStake(value) ?? 0) + s))}
+              className={quickClass}
             >
-              {s / 100}
+              +{s / 100}
             </button>
           ))}
+          <button
+            type="button"
+            disabled={!max}
+            onClick={() => max && onChange(stakeText(max))}
+            className={quickClass}
+            data-testid="stake-max"
+          >
+            MAX
+          </button>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/** A Bet Builder: one match, its picks as one chain, one price. */
+function BuilderCard({
+  items,
+  odds,
+  onRemove,
+  onClear,
+}: {
+  items: SlipItem[];
+  odds: number;
+  onRemove: (selectionId: string) => void;
+  onClear: () => void;
+}) {
+  const first = items[0]!;
+  return (
+    <div
+      className="overflow-hidden rounded-lg border border-accent/40 bg-surface-2"
+      data-testid="builder-card"
+    >
+      <div className="flex items-center gap-2 border-b border-border px-3 py-2">
+        <SportIcon sport={first.sportKey} />
+        <span className="text-sm font-semibold text-accent-strong">Bet Builder</span>
+        <span className="tabular rounded bg-surface-3 px-1.5 py-0.5 text-xs text-fg-muted">
+          {items.length} Tipps
+        </span>
+        <span
+          className="tabular ml-auto rounded-md bg-surface-3 px-2 py-1 text-sm font-semibold"
+          data-testid="builder-odds"
+        >
+          {odds > 0 ? formatOdds(odds) : '–'}
+        </span>
+        <button
+          type="button"
+          onClick={onClear}
+          aria-label="Bet Builder leeren"
+          className="rounded p-1.5 text-fg-subtle transition-colors hover:bg-surface-3 hover:text-fg"
+        >
+          <Trash2 className="size-4" />
+        </button>
+      </div>
+      <div className="flex items-center justify-between gap-2 px-3 pt-2.5 text-xs">
+        <span className="truncate font-medium text-fg">{first.eventName}</span>
+        <span className="tabular shrink-0 text-fg-muted">{formatKickoff(first.startTime)}</span>
+      </div>
+      <ol className="px-3 pb-2 pt-1.5">
+        {items.map((item, i) => (
+          <li key={item.selectionId} className="flex gap-3" data-testid="slip-item">
+            <span className="flex w-2.5 shrink-0 flex-col items-center pt-1.5" aria-hidden="true">
+              <span className="size-2.5 rounded-full border-2 border-accent" />
+              {i < items.length - 1 ? <span className="w-px flex-1 bg-accent/40" /> : null}
+            </span>
+            <div className="min-w-0 flex-1 pb-2.5">
+              <p className="truncate text-sm font-semibold">{item.selectionName}</p>
+              <p className="truncate text-xs text-fg-muted">{item.marketName}</p>
+            </div>
+            {item.status !== 'OPEN' ? (
+              <Lock className="mt-1 size-3.5 text-warning" aria-label="Gesperrt" />
+            ) : null}
+            <button
+              type="button"
+              onClick={() => onRemove(item.selectionId)}
+              className="-mr-1 h-fit rounded p-1 text-fg-subtle transition-colors hover:bg-surface-3 hover:text-fg"
+              aria-label={`${item.selectionName} entfernen`}
+            >
+              <X className="size-3.5" />
+            </button>
+          </li>
+        ))}
+      </ol>
+      <p
+        className="border-t border-border px-3 py-2 text-[11px] text-fg-subtle"
+        data-testid="builder-info"
+      >
+        Alle Tipps müssen gewinnen. Ist einer ungültig, wird die Wette storniert (Einsatz zurück).
+      </p>
     </div>
   );
 }

@@ -1,7 +1,7 @@
 'use client';
 
 import type { EventDetailDto, MarketDto, MarketType, SportKey } from '@storm-bet/types';
-import { MARKET_DEFINITIONS, OUTCOME_LABELS } from '@storm-bet/types';
+import { BUILDER_MARKETS, MARKET_DEFINITIONS, OUTCOME_LABELS } from '@storm-bet/types';
 import { Card, cn, EmptyState, Tabs, TabsList, TabsTrigger } from '@storm-bet/ui';
 import { Lock, Timer } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -73,6 +73,7 @@ export function EventMarkets({ event }: { event: EventDetailDto }) {
   useRealtimeTopics([`event:${event.id}`]);
   const groups = GROUPS[event.sport.key];
   const [tab, setTab] = useState('all');
+  const [builderOnly, setBuilderOnly] = useState(false);
 
   // New in-play lines or a status change of the event: fetch the fresh book.
   const known = useMemo(() => new Set(event.markets.map((m) => m.id)), [event.markets]);
@@ -110,6 +111,8 @@ export function EventMarkets({ event }: { event: EventDetailDto }) {
     );
   }
 
+  // Bet Builder: football before kick-off, markets the model prices.
+  const builderEvent = event.sport.key === 'football' && live.status === 'SCHEDULED';
   const shown =
     tab === 'all'
       ? visible
@@ -127,21 +130,46 @@ export function EventMarkets({ event }: { event: EventDetailDto }) {
 
   return (
     <div className="space-y-3">
-      <Tabs value={tab} onValueChange={setTab}>
-        <TabsList aria-label="Marktgruppen">
-          <TabsTrigger value="all">Alle</TabsTrigger>
-          {groups
-            .filter((g) => visible.some((m) => g.types.includes(m.type)))
-            .map((g) => (
-              <TabsTrigger key={g.key} value={g.key}>
-                {g.label}
-              </TabsTrigger>
-            ))}
-        </TabsList>
-      </Tabs>
+      <div className="flex items-center gap-2">
+        <Tabs value={tab} onValueChange={setTab} className="min-w-0 flex-1">
+          <TabsList aria-label="Marktgruppen">
+            <TabsTrigger value="all">Alle</TabsTrigger>
+            {groups
+              .filter((g) => visible.some((m) => g.types.includes(m.type)))
+              .map((g) => (
+                <TabsTrigger key={g.key} value={g.key}>
+                  {g.label}
+                </TabsTrigger>
+              ))}
+          </TabsList>
+        </Tabs>
+        {builderEvent ? (
+          <button
+            type="button"
+            aria-pressed={builderOnly}
+            onClick={() => setBuilderOnly((v) => !v)}
+            className={cn(
+              'shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors',
+              builderOnly
+                ? 'border-accent bg-accent-soft text-accent-strong'
+                : 'border-border text-fg-muted hover:text-fg',
+            )}
+            data-testid="builder-filter"
+          >
+            Bet Builder
+          </button>
+        ) : null}
+      </div>
       <div className="grid gap-3 xl:grid-cols-2">
-        {combineLines(shown).map(([type, markets]) => (
-          <MarketCard key={type} markets={markets} context={context} />
+        {combineLines(
+          builderOnly ? shown.filter((m) => BUILDER_MARKETS.includes(m.type)) : shown,
+        ).map(([type, markets]) => (
+          <MarketCard
+            key={type}
+            markets={markets}
+            context={context}
+            builder={builderEvent && BUILDER_MARKETS.includes(type)}
+          />
         ))}
       </div>
     </div>
@@ -151,9 +179,12 @@ export function EventMarkets({ event }: { event: EventDetailDto }) {
 function MarketCard({
   markets,
   context,
+  builder,
 }: {
   markets: MarketDto[];
   context: (m: MarketDto) => OddsContext;
+  /** Selections of this market can be combined in a Bet Builder. */
+  builder: boolean;
 }) {
   const first = markets[0]!;
   const playerTotal = MARKET_DEFINITIONS[first.type].kind === 'PLAYER_TOTAL';
@@ -168,6 +199,14 @@ function MarketCard({
     <Card className={cn('overflow-hidden', wide && 'xl:col-span-2')} data-testid="market-card">
       <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
         <h3 className="text-sm font-semibold">{title}</h3>
+        {builder ? (
+          <span
+            className="rounded bg-accent-soft px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-accent-strong"
+            title="Mit anderen Tipps dieses Spiels im Bet Builder kombinierbar"
+          >
+            BET BUILDER
+          </span>
+        ) : null}
       </div>
       <div className="space-y-2 p-3">
         {markets.map((m) => (

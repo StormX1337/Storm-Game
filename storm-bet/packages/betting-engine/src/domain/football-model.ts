@@ -6,7 +6,7 @@ import type {
   Pair,
   SelectionResult,
 } from '@storm-bet/types';
-import { MARKET_DEFINITIONS } from '@storm-bet/types';
+import { BUILDER_MARKETS, MARKET_DEFINITIONS } from '@storm-bet/types';
 import { combineOdds } from './odds';
 import { resolveSelection } from './settlement-rules';
 
@@ -47,19 +47,7 @@ export interface ModelLeg {
 /** A model that misses the feed's own prices by more than this is not used. */
 export const MAX_MODEL_ERROR = 0.035;
 /** Markets the model can price and combine: football score markets only. */
-export const MODEL_MARKETS: ReadonlySet<MarketType> = new Set<MarketType>([
-  'MATCH_RESULT',
-  'DOUBLE_CHANCE',
-  'DRAW_NO_BET',
-  'TOTAL_GOALS',
-  'ASIAN_HANDICAP',
-  'BOTH_TEAMS_TO_SCORE',
-  'HALF_TIME_RESULT',
-  'FIRST_HALF_HANDICAP',
-  'FIRST_HALF_TOTAL_GOALS',
-  'SECOND_HALF_RESULT',
-  'SECOND_HALF_TOTAL_GOALS',
-]);
+export const MODEL_MARKETS: ReadonlySet<MarketType> = new Set<MarketType>(BUILDER_MARKETS);
 
 const DEFAULT_FIRST_HALF_SHARE = 0.45;
 const MAX_GOALS = 15;

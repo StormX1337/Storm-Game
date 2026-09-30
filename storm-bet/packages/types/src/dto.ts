@@ -212,6 +212,8 @@ export interface SlipQuoteDto {
   totalStake: Money;
   potentialReturn: Money;
   selectionCount: number;
+  /** Kombi and Bet Builder: the highest stake the limits allow at this price. */
+  maxStake: Money | null;
 }
 
 export interface ValidateSlipResponse {

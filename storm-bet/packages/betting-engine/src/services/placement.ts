@@ -23,7 +23,7 @@ import {
   type ValidateSlipResponse,
 } from '@storm-bet/types';
 import type { PlaceBetInput, ValidateSlipInput } from '@storm-bet/validation';
-import { fromMilli, toMilli } from '../domain/odds';
+import { fromMilli, maxStakeForPayout, toMilli } from '../domain/odds';
 import type { BuilderPrice } from '../domain/football-model';
 import {
   bettability,
@@ -190,6 +190,15 @@ export class BetPlacementService {
         totalStake: moneyToNumber(evaluation.totalStake),
         potentialReturn: moneyToNumber(evaluation.potentialReturn),
         selectionCount: request.legs.length,
+        maxStake:
+          request.mode === 'SINGLES' || evaluation.totalOddsMilli === 0n
+            ? null
+            : moneyToNumber(
+                [
+                  BigInt(this.deps.limits.maxStake),
+                  maxStakeForPayout(BigInt(this.deps.limits.maxPayout), evaluation.totalOddsMilli),
+                ].reduce((a, b) => (a < b ? a : b)),
+              ),
       },
       selections,
       issues: issues.map((i) => ({ ...i })),
