@@ -14,6 +14,7 @@ import { betRoutes } from './routes/bets';
 import { casinoRoutes } from './routes/casino';
 import { catalogRoutes } from './routes/catalog';
 import { InsightsService } from './services/insights';
+import { TwoFactorService } from './services/two-factor';
 import { contactRoutes } from './routes/contact';
 import { healthRoutes } from './routes/health';
 import { LiveEventTracker, streamRoutes } from './routes/stream';
@@ -72,11 +73,23 @@ export async function buildApp(
     },
     ctx.now,
   );
-  const auth = new AuthService(ctx.db, ctx.redis, sessions, ctx.mailer, {
-    appUrl: ctx.env.APP_URL,
-    startingBalance: BigInt(ctx.demoWallet.startingBalance),
+  const twoFactor = new TwoFactorService(ctx.db, {
+    authSecret: ctx.env.AUTH_SECRET,
+    issuer: 'STORM BET',
     now: ctx.now,
   });
+  const auth = new AuthService(
+    ctx.db,
+    ctx.redis,
+    sessions,
+    ctx.mailer,
+    {
+      appUrl: ctx.env.APP_URL,
+      startingBalance: BigInt(ctx.demoWallet.startingBalance),
+      now: ctx.now,
+    },
+    twoFactor,
+  );
   const catalog = new CatalogService(ctx.db, ctx.cache, ctx.now);
   const insights = new InsightsService(ctx.db, ctx.cache, {
     apiKey: ctx.env.STANDINGS_API_KEY,
@@ -131,11 +144,13 @@ export async function buildApp(
       await api.register(catalogRoutes(catalog, insights));
       await api.register(betRoutes(ctx));
       await api.register(walletRoutes(ctx));
-      await api.register(accountRoutes(ctx, accounts, sessions));
+      await api.register(accountRoutes(ctx, accounts, sessions, twoFactor));
       await api.register(contactRoutes(ctx));
       await api.register(streamRoutes(ctx, tracker));
       await api.register(casinoRoutes(ctx, casinoCatalog), { prefix: '/casino' });
-      await api.register(adminRoutes(ctx, admin, accounts, casinoCatalog), { prefix: '/admin' });
+      await api.register(adminRoutes(ctx, admin, accounts, casinoCatalog, twoFactor), {
+        prefix: '/admin',
+      });
     },
     { prefix: '/api' },
   );

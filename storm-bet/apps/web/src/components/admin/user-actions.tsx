@@ -43,6 +43,17 @@ export function UserActions({ user }: { user: AdminUserDetailDto }) {
           />
         )
       ) : null}
+      {canManage && !self && user.twoFactorEnabled ? (
+        <ReasonAction
+          label="2FA zurücksetzen"
+          title="Zwei-Faktor-Anmeldung zurücksetzen"
+          description="Nur nach sicherer Identitätsprüfung (z. B. Gerät verloren). Der Nutzer meldet sich danach nur mit Passwort an und kann 2FA neu einrichten."
+          path={`/admin/users/${user.id}/2fa/reset`}
+          destructive
+          variant="destructive"
+          successMessage="2FA zurückgesetzt"
+        />
+      ) : null}
       {canRoles && !self ? (
         <ReasonAction
           label="Rolle ändern"

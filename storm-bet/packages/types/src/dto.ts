@@ -153,6 +153,12 @@ export interface EventInsightsDto {
   standings: { competition: string; source: string; rows: StandingRowDto[] } | null;
 }
 
+export interface TwoFactorStatusDto {
+  enabled: boolean;
+  enabledAt: string | null;
+  recoveryCodesLeft: number;
+}
+
 export interface WalletDto {
   currency: 'DEMO';
   balance: Money;
@@ -366,6 +372,7 @@ export interface AdminUserDto extends ProfileDto {
   lockedAt: string | null;
   wallet: WalletDto | null;
   betCount: number;
+  twoFactorEnabled: boolean;
 }
 
 export interface AuditLogDto {

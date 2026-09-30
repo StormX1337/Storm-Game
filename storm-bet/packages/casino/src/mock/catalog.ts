@@ -79,7 +79,7 @@ const instant = (
   n: number,
   slug: string,
   name: string,
-  type: 'CRASH' | 'PLINKO' | 'MINES',
+  type: ProviderCasinoGame['type'],
   rtp: number,
   description: string,
   theme: ProviderCasinoGame['theme'],

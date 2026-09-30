@@ -31,6 +31,12 @@ import type {
 import { REDIS_KEYS } from '@storm-bet/config/constants';
 import { mailTemplates, type Mailer } from '../lib/mailer';
 import type { SessionService } from './sessions';
+import type { TwoFactorService } from './two-factor';
+
+/** A password-checked login waiting for its second factor. */
+const CHALLENGE_TTL_SECONDS = 5 * 60;
+const CHALLENGE_ATTEMPTS = 5;
+const challengeKey = (token: string) => `sb:2fa:challenge:${hashToken(token)}`;
 
 export interface RequestInfo {
   ip: string | null;
@@ -68,6 +74,7 @@ export class AuthService {
     private readonly sessions: SessionService,
     private readonly mailer: Mailer,
     private readonly options: { appUrl: string; startingBalance: bigint; now: () => Date },
+    private readonly twoFactor?: TwoFactorService,
   ) {}
 
   async register(input: RegisterInput, info: RequestInfo) {
@@ -153,14 +160,76 @@ export class AuthService {
     if (user.status === 'CLOSED') {
       throw new AppError('FORBIDDEN', 'Dieses Konto wurde geschlossen.');
     }
+    if (needsRehash(user.passwordHash)) {
+      await this.db.user.update({
+        where: { id: user.id },
+        data: { passwordHash: await hashPassword(input.password) },
+      });
+    }
+    // With a second factor the password alone opens no session.
+    if (user.totpEnabledAt && this.twoFactor) {
+      const challenge = generateToken();
+      await this.redis.set(
+        challengeKey(challenge),
+        JSON.stringify({ userId: user.id, attempts: 0 }),
+        'EX',
+        CHALLENGE_TTL_SECONDS,
+      );
+      return { twoFactorChallenge: challenge } as const;
+    }
     await this.redis.del(failuresKey).catch(() => undefined);
+    return this.openSession(user, info, null);
+  }
 
-    const updates: { lastLoginAt: Date; passwordHash?: string } = {
-      lastLoginAt: this.options.now(),
-    };
-    if (needsRehash(user.passwordHash)) updates.passwordHash = await hashPassword(input.password);
-    await this.db.user.update({ where: { id: user.id }, data: updates });
+  /** Second step of a login: the code from the authenticator app or a recovery code. */
+  async completeTwoFactor(challenge: string, code: string, info: RequestInfo) {
+    const key = challengeKey(challenge);
+    const raw = await this.redis.get(key);
+    if (!raw || !this.twoFactor)
+      throw new AppError(
+        'UNAUTHORIZED',
+        'Die Anmeldung ist abgelaufen. Bitte melde dich erneut an.',
+      );
+    const pending = JSON.parse(raw) as { userId: string; attempts: number };
+    const user = await this.db.user.findUnique({ where: { id: pending.userId } });
+    if (!user || user.status !== 'ACTIVE' || !user.totpEnabledAt) {
+      await this.redis.del(key);
+      throw new AppError(
+        'UNAUTHORIZED',
+        'Die Anmeldung ist abgelaufen. Bitte melde dich erneut an.',
+      );
+    }
+    const method = await this.twoFactor.verify(user.id, code);
+    if (!method) {
+      // Wrong codes count towards the account lockout, like wrong passwords.
+      const failuresKey = REDIS_KEYS.loginFailures(user.email);
+      const count = await this.redis.incr(failuresKey).catch(() => 0);
+      if (count === 1) await this.redis.expire(failuresKey, LOCKOUT_SECONDS).catch(() => undefined);
+      pending.attempts += 1;
+      if (pending.attempts >= CHALLENGE_ATTEMPTS || count >= MAX_FAILURES)
+        await this.redis.del(key);
+      else await this.redis.set(key, JSON.stringify(pending), 'KEEPTTL');
+      await recordAudit(
+        this.db,
+        { id: user.id, role: user.role, ip: info.auditIp, userAgent: info.userAgent },
+        { action: 'auth.2fa_failed', targetType: 'user', targetId: user.id },
+      );
+      throw new AppError('UNAUTHORIZED', 'Der Code stimmt nicht.');
+    }
+    await this.redis.del(key);
+    await this.redis.del(REDIS_KEYS.loginFailures(user.email)).catch(() => undefined);
+    return this.openSession(user, info, method);
+  }
 
+  private async openSession(
+    user: User,
+    info: RequestInfo,
+    secondFactor: 'totp' | 'recovery' | null,
+  ) {
+    await this.db.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: this.options.now() },
+    });
     const { token, session } = await this.sessions.create(user.id, info);
     await recordAudit(
       this.db,
@@ -169,6 +238,7 @@ export class AuthService {
         action: 'auth.login',
         targetType: 'session',
         targetId: session.id,
+        ...(secondFactor ? { metadata: { secondFactor } } : {}),
       },
     );
     return { user, token, session };

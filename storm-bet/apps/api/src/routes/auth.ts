@@ -4,6 +4,7 @@ import {
   changePasswordSchema,
   forgotPasswordSchema,
   loginSchema,
+  loginTwoFactorSchema,
   registerSchema,
   resetPasswordSchema,
   verifyEmailSchema,
@@ -68,8 +69,20 @@ export function authRoutes(ctx: AppContext, auth: AuthService, sessions: Session
       await enforceRateLimit(ctx.redis, RATE_LIMITS.login, request.ip, reply);
       const input = parse(loginSchema, request.body);
       if (request.session) await sessions.revoke(request.session.sessionId, 'replaced by login');
-      const { user, token, session } = await auth.login(
-        input,
+      const result = await auth.login(input, requestInfo(request, ctx.env.AUDIT_LOG_IP));
+      // Second factor needed: no session yet, only a short-lived challenge.
+      if ('twoFactorChallenge' in result)
+        return { twoFactorRequired: true, challenge: result.twoFactorChallenge };
+      const csrfToken = startSession(reply, request, result.token, result.session.id);
+      return { user: toSessionUser(result.user), csrfToken };
+    });
+
+    app.post('/auth/login/2fa', async (request, reply) => {
+      await enforceRateLimit(ctx.redis, RATE_LIMITS.login, request.ip, reply);
+      const input = parse(loginTwoFactorSchema, request.body);
+      const { user, token, session } = await auth.completeTwoFactor(
+        input.challenge,
+        input.code,
         requestInfo(request, ctx.env.AUDIT_LOG_IP),
       );
       const csrfToken = startSession(reply, request, token, session.id);

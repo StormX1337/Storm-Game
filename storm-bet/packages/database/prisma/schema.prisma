@@ -207,10 +207,18 @@ model User {
   kycStatus         KycStatus  @default(NOT_REQUIRED) @map("kyc_status")
   passwordChangedAt DateTime   @default(now()) @map("password_changed_at")
   lastLoginAt       DateTime?  @map("last_login_at")
+  /// Two-factor login (TOTP). The secret is sealed with a key derived from AUTH_SECRET.
+  totpSecret        String?    @map("totp_secret")
+  /// Set up but not yet confirmed with a first code.
+  totpPendingSecret String?    @map("totp_pending_secret")
+  totpEnabledAt     DateTime?  @map("totp_enabled_at")
+  /// Last 30-second step a code was accepted for; older or equal steps are refused.
+  totpLastStep      Int?       @map("totp_last_step")
   createdAt         DateTime   @default(now()) @map("created_at")
   updatedAt         DateTime   @updatedAt @map("updated_at")
 
   sessions        Session[]
+  recoveryCodes   RecoveryCode[]
   authTokens      AuthToken[]
   wallet          Wallet?
   transactions    Transaction[]
@@ -227,6 +235,20 @@ model User {
   @@index([status])
   @@index([createdAt])
   @@map("users")
+}
+
+/// Single-use two-factor recovery codes, stored as SHA-256 hashes only.
+model RecoveryCode {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  codeHash  String    @map("code_hash")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, codeHash])
+  @@map("recovery_codes")
 }
 
 model Session {

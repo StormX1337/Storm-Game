@@ -1,24 +1,29 @@
-import type { SessionInfoDto } from '@storm-bet/types';
+import type { SessionInfoDto, TwoFactorStatusDto } from '@storm-bet/types';
 import type { Metadata } from 'next';
 import {
   ChangePasswordForm,
   LogoutEverywhere,
   SessionsList,
 } from '@/components/dashboard/account-forms';
+import { TwoFactorCard } from '@/components/dashboard/two-factor-card';
 import { PageHeader } from '@/components/sportsbook/page-header';
 import { serverApi } from '@/lib/server-api';
 
 export const metadata: Metadata = { title: 'Sicherheit' };
 
 export default async function SecurityPage() {
-  const sessions = await serverApi<SessionInfoDto[]>('/account/sessions');
+  const [sessions, twoFactor] = await Promise.all([
+    serverApi<SessionInfoDto[]>('/account/sessions'),
+    serverApi<TwoFactorStatusDto>('/account/2fa'),
+  ]);
   return (
     <>
       <PageHeader
         title="Sicherheit"
-        description="Passwort, angemeldete Geräte und Sitzungen."
+        description="Passwort, Zwei-Faktor-Anmeldung, angemeldete Geräte und Sitzungen."
         actions={<LogoutEverywhere />}
       />
+      <TwoFactorCard initial={twoFactor} />
       <ChangePasswordForm />
       <SessionsList sessions={sessions} />
     </>

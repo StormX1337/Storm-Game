@@ -67,3 +67,32 @@ export const updateProfileSchema = z.object({
   country: countryCode.nullable().optional(),
 });
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
+
+/** A 6-digit authenticator code or a recovery code ("abcd-2345"). */
+const secondFactorCode = z
+  .string()
+  .trim()
+  .min(6, 'Bitte gib den Code ein')
+  .max(20)
+  .regex(/^[0-9a-zA-Z\s-]+$/, 'Ungültiger Code');
+
+export const loginTwoFactorSchema = z.object({
+  challenge: z.string().min(20).max(200),
+  code: secondFactorCode,
+});
+
+export const twoFactorSetupSchema = z.object({
+  password: z.string().min(1, 'Bitte gib dein Passwort ein').max(PASSWORD_MAX_LENGTH),
+});
+
+export const twoFactorCodeSchema = z.object({
+  code: z
+    .string()
+    .trim()
+    .regex(/^\d{6}$/, 'Bitte gib den 6-stelligen Code ein'),
+});
+
+export const twoFactorDisableSchema = z.object({
+  password: z.string().min(1, 'Bitte gib dein Passwort ein').max(PASSWORD_MAX_LENGTH),
+  code: secondFactorCode,
+});

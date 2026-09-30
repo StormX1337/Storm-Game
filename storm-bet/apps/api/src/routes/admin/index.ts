@@ -26,6 +26,7 @@ import { requirePermission } from '../../plugins/auth';
 import { enforceRateLimit, RATE_LIMITS } from '../../plugins/rate-limit';
 import type { AccountService } from '../../services/account';
 import type { AdminService } from '../../services/admin';
+import type { TwoFactorService } from '../../services/two-factor';
 import type { CasinoCatalogService } from '../../services/casino';
 import { adminCasinoRoutes } from './casino';
 import { actorOf } from '../request-info';
@@ -41,6 +42,7 @@ export function adminRoutes(
   admin: AdminService,
   accounts: AccountService,
   casino: CasinoCatalogService,
+  twoFactor: TwoFactorService,
 ) {
   const allowlist = ctx.env.ADMIN_IP_ALLOWLIST.split(',')
     .map((s) => s.trim())
@@ -112,6 +114,16 @@ export function adminRoutes(
         byStaff: true,
         reason: input.reason,
       });
+      return admin.getUser(id);
+    });
+    app.post('/users/:id/2fa/reset', async (request) => {
+      requirePermission(request, Permission.USERS_MANAGE);
+      const { id } = parse(idParam, request.params);
+      await twoFactor.resetByStaff(
+        id,
+        actor(request),
+        parse(adminUnlockSchema, request.body).reason,
+      );
       return admin.getUser(id);
     });
     app.post('/users/:id/sessions/revoke', async (request) => {

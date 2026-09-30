@@ -55,16 +55,37 @@ export function LoginForm() {
   });
   const { errors, isSubmitting } = form.formState;
 
+  const [challenge, setChallenge] = useState<string | null>(null);
+  const done = () => {
+    router.replace(safeNext(params.get('next')));
+    router.refresh();
+  };
+
   const onSubmit = form.handleSubmit(async (values) => {
     setFormError(null);
     try {
-      await api('/auth/login', { body: values });
-      router.replace(safeNext(params.get('next')));
-      router.refresh();
+      const res = await api<{ twoFactorRequired?: boolean; challenge?: string }>('/auth/login', {
+        body: values,
+      });
+      if (res.twoFactorRequired && res.challenge) setChallenge(res.challenge);
+      else done();
     } catch (e) {
       setFormError(applyServerErrors(e, form.setError));
     }
   });
+
+  if (challenge) {
+    return (
+      <TwoFactorStep
+        challenge={challenge}
+        onDone={done}
+        onRestart={() => {
+          setChallenge(null);
+          form.setValue('password', '');
+        }}
+      />
+    );
+  }
 
   return (
     <Card className="p-6">
@@ -105,6 +126,76 @@ export function LoginForm() {
           Jetzt registrieren
         </Link>
       </p>
+    </Card>
+  );
+}
+
+/** Second login step: the code from the authenticator app or a recovery code. */
+function TwoFactorStep({
+  challenge,
+  onDone,
+  onRestart,
+}: {
+  challenge: string;
+  onDone: () => void;
+  onRestart: () => void;
+}) {
+  const [code, setCode] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setBusy(true);
+    try {
+      await api('/auth/login/2fa', { body: { challenge, code: code.trim() } });
+      onDone();
+    } catch (err) {
+      setError(errorMessage(err));
+      setCode('');
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Card className="p-6">
+      <h1 className="text-lg font-semibold">Bestätigungscode</h1>
+      <p className="mt-1 text-sm text-fg-muted">
+        Gib den 6-stelligen Code aus deiner Authenticator-App ein – oder einen deiner
+        Wiederherstellungscodes.
+      </p>
+      <form onSubmit={submit} className="mt-6 space-y-4" noValidate>
+        <FormError message={error} />
+        <Field label="Code" htmlFor="otp">
+          <Input
+            id="otp"
+            autoComplete="one-time-code"
+            inputMode="text"
+            autoFocus
+            placeholder="123456"
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            className="tabular text-center text-lg tracking-[0.3em]"
+            data-testid="otp-input"
+          />
+        </Field>
+        <Button
+          type="submit"
+          className="w-full"
+          loading={busy}
+          disabled={code.trim().length < 6}
+          data-testid="otp-submit"
+        >
+          Bestätigen
+        </Button>
+      </form>
+      <button
+        type="button"
+        onClick={onRestart}
+        className="mt-4 w-full text-center text-xs text-fg-muted hover:text-fg"
+      >
+        Zurück zur Anmeldung
+      </button>
     </Card>
   );
 }

@@ -3,6 +3,9 @@ import {
   idParam,
   selfExclusionSchema,
   setLimitSchema,
+  twoFactorCodeSchema,
+  twoFactorDisableSchema,
+  twoFactorSetupSchema,
   updateProfileSchema,
 } from '@storm-bet/validation';
 import type { FastifyInstance } from 'fastify';
@@ -11,11 +14,40 @@ import { parse } from '../lib/validate';
 import { authenticated, requireSession } from '../plugins/auth';
 import type { AccountService } from '../services/account';
 import type { SessionService } from '../services/sessions';
+import type { TwoFactorService } from '../services/two-factor';
 import { actorOf } from './request-info';
 
-export function accountRoutes(ctx: AppContext, accounts: AccountService, sessions: SessionService) {
+export function accountRoutes(
+  ctx: AppContext,
+  accounts: AccountService,
+  sessions: SessionService,
+  twoFactor: TwoFactorService,
+) {
   return async (app: FastifyInstance) => {
     app.addHook('preHandler', authenticated);
+
+    // Two-factor login (authenticator app).
+    app.get('/account/2fa', async (request) => twoFactor.status(requireSession(request).userId));
+    app.post('/account/2fa/setup', async (request) => {
+      const { password } = parse(twoFactorSetupSchema, request.body);
+      return twoFactor.setup(requireSession(request).userId, password);
+    });
+    app.post('/account/2fa/enable', async (request) => {
+      const { code } = parse(twoFactorCodeSchema, request.body);
+      const actor = actorOf(request, ctx.env.AUDIT_LOG_IP);
+      return twoFactor.enable(actor.id, code, actor);
+    });
+    app.post('/account/2fa/disable', async (request) => {
+      const { password, code } = parse(twoFactorDisableSchema, request.body);
+      const actor = actorOf(request, ctx.env.AUDIT_LOG_IP);
+      await twoFactor.disable(actor.id, password, code, actor);
+      return { ok: true };
+    });
+    app.post('/account/2fa/recovery-codes', async (request) => {
+      const { code } = parse(twoFactorCodeSchema, request.body);
+      const actor = actorOf(request, ctx.env.AUDIT_LOG_IP);
+      return twoFactor.regenerateRecoveryCodes(actor.id, code, actor);
+    });
 
     app.get('/account/profile', async (request) =>
       accounts.profile(requireSession(request).userId),

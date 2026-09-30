@@ -315,6 +315,7 @@ export class AdminService {
       lockedAt: user.lockedAt?.toISOString() ?? null,
       wallet: user.wallet ? toWalletDto(user.wallet) : null,
       betCount: user._count.bets,
+      twoFactorEnabled: user.totpEnabledAt !== null,
     };
   }
 
@@ -346,6 +347,7 @@ export class AdminService {
       lockedAt: user.lockedAt?.toISOString() ?? null,
       wallet: user.wallet ? toWalletDto(user.wallet) : null,
       betCount: user._count.bets,
+      twoFactorEnabled: user.totpEnabledAt !== null,
     }));
   }
 
