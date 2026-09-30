@@ -40,6 +40,7 @@ export function createInnerProvider(env: WorkerEnv): OddsProvider {
       minRemainingObjects: env.SGO_MIN_REMAINING,
       liveBetting: env.SGO_LIVE_BETTING,
       liveMaxAgeMs: env.SGO_LIVE_MAX_AGE_SECONDS * 1000,
+      settleAfterMs: env.SGO_SETTLE_AFTER_MINUTES * 60_000,
     });
   }
   return new MockOddsProvider({ seed: env.MOCK_SEED, timeScale: env.MOCK_TIME_SCALE });

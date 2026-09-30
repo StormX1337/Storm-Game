@@ -134,6 +134,8 @@ export const workerEnvSchema = z
     SGO_MIN_REMAINING: int(50, 0),
     SGO_LIVE_BETTING: bool(false),
     SGO_LIVE_MAX_AGE_SECONDS: int(60, 5),
+    /** A completed game's result counts as final this long after the feed reports it (or once finalized). */
+    SGO_SETTLE_AFTER_MINUTES: int(5, 0, 1440),
   })
   .superRefine((env, ctx) => {
     if (env.ODDS_PROVIDER === 'theoddsapi' && !env.ODDS_API_KEY) {

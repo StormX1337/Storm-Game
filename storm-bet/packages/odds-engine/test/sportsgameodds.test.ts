@@ -193,6 +193,20 @@ describe('SportsGameOddsProvider', () => {
     expect((await p.getMarkets('sgo-live')).some((m) => m.derived)).toBe(false);
   });
 
+  it('settles a completed game after a short delay, without waiting for "finalized"', async () => {
+    let now = T0;
+    const { provider: p } = provider({ settleAfterMs: 5 * MINUTE }, fakeSgo(), () => now);
+    const find = async () =>
+      (await p.getEvents(window)).find((e) => e.externalId === 'sgo-completed')!;
+    expect(await find()).toMatchObject({ status: 'FINISHED', resultFinal: false });
+    now += 5 * MINUTE;
+    expect(await find()).toMatchObject({ status: 'FINISHED', resultFinal: true });
+    // Without the option only "finalized" counts.
+    const { provider: strict } = provider({}, fakeSgo(), () => now + 60 * MINUTE);
+    const e = (await strict.getEvents(window)).find((x) => x.externalId === 'sgo-completed')!;
+    expect(e.resultFinal).toBe(false);
+  });
+
   it('shows the running period, the clock and the team figures the feed reports', async () => {
     const { provider: p } = provider();
     const live = (await p.getEvents(window)).find((e) => e.externalId === 'sgo-live')!;
@@ -392,13 +406,13 @@ describe('SportsGameOddsProvider', () => {
     expect(eventCalls()[0]!.params.get('leagueID')).toBe(
       'BUNDESLIGA,UEFA_CHAMPIONS_LEAGUE,NBA,ATP',
     );
-    expect(eventCalls()[1]!.params.get('eventIDs')).toBe('sgo-live');
+    expect(eventCalls()[1]!.params.get('eventIDs')).toBe('sgo-live,sgo-completed');
     expect(eventCalls()[1]!.params.get('expandResults')).toBe('true');
 
     now += 2 * MINUTE;
     await p.getEvents(window);
     expect(eventCalls()).toHaveLength(3);
-    expect(eventCalls()[2]!.params.get('eventIDs')).toBe('sgo-live');
+    expect(eventCalls()[2]!.params.get('eventIDs')).toBe('sgo-live,sgo-completed');
 
     now += 30 * MINUTE;
     await p.getEvents(window);

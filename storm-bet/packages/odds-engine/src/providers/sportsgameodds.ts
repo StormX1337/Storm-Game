@@ -74,6 +74,12 @@ export interface SportsGameOddsOptions {
   minRemainingObjects: number;
   liveBetting: boolean;
   liveMaxAgeMs: number;
+  /**
+   * The feed marks results "finalized" only some time after the final
+   * whistle. A completed game's score counts as final this long after it was
+   * first seen completed (undefined: wait for "finalized").
+   */
+  settleAfterMs?: number;
   fetch?: typeof fetch;
   now?: () => number;
 }
@@ -556,6 +562,20 @@ export class SportsGameOddsProvider implements OddsProvider {
     return !!(st.started || st.live || Date.parse(st.startsAt ?? '') <= now);
   }
 
+  /** First time each game was seen completed (not yet finalized). */
+  private readonly completedAt = new Map<string, number>();
+
+  private settledByDelay(event: SgoEvent): boolean {
+    const delay = this.options.settleAfterMs;
+    if (delay === undefined || !event.eventID) return false;
+    const st = event.status ?? {};
+    if (!st.completed && !st.ended) return false;
+    const now = this.now();
+    const since = this.completedAt.get(event.eventID) ?? now;
+    this.completedAt.set(event.eventID, since);
+    return now - since >= delay;
+  }
+
   private awaitsResult(event: SgoEvent, now: number): boolean {
     const st = event.status ?? {};
     return this.hasStarted(event, now) && !st.finalized && !st.cancelled;
@@ -696,7 +716,7 @@ export class SportsGameOddsProvider implements OddsProvider {
       status = 'FINISHED';
       final = this.finalScore(league.sport, event);
       score = final ?? live;
-      resultFinal = !!st.finalized && final !== null;
+      resultFinal = final !== null && (!!st.finalized || this.settledByDelay(event));
       liveState = { period: 'FT', clock: null };
     } else if (this.hasStarted(event, this.now())) {
       status = 'LIVE';

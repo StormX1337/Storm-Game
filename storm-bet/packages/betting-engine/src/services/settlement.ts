@@ -66,6 +66,9 @@ const noopLogger: SettlementLogger = {
  * - the ledger accepts one settlement entry per bet (unique key + trigger).
  * Running it twice, or in two workers at once, can never pay a bet twice.
  */
+/** Wait before retrying an event some of whose markets still lack official data. */
+const RETRY_INCOMPLETE_SECONDS = 300;
+
 export class SettlementService {
   private readonly logger: SettlementLogger;
   private readonly now: () => Date;
@@ -75,7 +78,12 @@ export class SettlementService {
     this.now = deps.now ?? (() => new Date());
   }
 
-  /** Finds finished or cancelled events that are not yet settled and settles them. */
+  /**
+   * Finds finished or cancelled events that are not yet settled and settles
+   * them. An event that could not be settled completely (a market still lacks
+   * official data) waits a few minutes before the next attempt, so it never
+   * holds up newer results.
+   */
   async settleDueEvents(limit = 25): Promise<EventSettlementReport[]> {
     const due = await this.deps.db.event.findMany({
       where: {
@@ -83,15 +91,23 @@ export class SettlementService {
         OR: [{ status: 'FINISHED', resultConfirmedAt: { not: null } }, { status: 'CANCELLED' }],
       },
       select: { id: true },
-      orderBy: { startTime: 'asc' },
-      take: limit,
+      orderBy: { startTime: 'desc' },
+      take: 2_000,
     });
+    const keys = due.map((d) => `settle:retry:${d.id}`);
+    const waiting = keys.length ? await this.deps.redis.mget(keys) : [];
+    const ready = due.filter((_, i) => !waiting[i]).slice(0, limit);
     const reports: EventSettlementReport[] = [];
-    for (const { id } of due) {
+    const later = (id: string) =>
+      this.deps.redis.set(`settle:retry:${id}`, '1', 'EX', RETRY_INCOMPLETE_SECONDS);
+    for (const { id } of ready) {
       try {
-        reports.push(await this.settleEvent(id));
+        const report = await this.settleEvent(id);
+        reports.push(report);
+        if (!report.completed) await later(id);
       } catch (error) {
         this.logger.error({ eventId: id, err: String(error) }, 'event settlement failed');
+        await later(id).catch(() => undefined);
       }
     }
     // Safety net: bets whose legs are all decided but that are still open

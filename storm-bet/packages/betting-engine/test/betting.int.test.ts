@@ -570,3 +570,38 @@ describe('cashout', () => {
     expect((await wallet(user.id)).reserved).toBe(1_000n);
   });
 });
+
+describe('due settlement', () => {
+  it('retries an incompletely settled event later instead of blocking newer ones', async () => {
+    // Newest first: a start far ahead puts it at the front of the queue.
+    const m = await createEvent({ startInMs: 10 * 365 * 24 * 3_600_000 });
+    // A market the recorded result cannot decide: no card figures are recorded.
+    await db.market.create({
+      data: {
+        eventId: m.event.id,
+        key: 'TOTAL_CARDS:4.5',
+        type: 'TOTAL_CARDS',
+        name: 'Karten Über/Unter 4.5',
+        line: new Prisma.Decimal(4.5),
+        selections: {
+          create: (['OVER', 'UNDER'] as const).map((outcome, i) => ({
+            key: outcome,
+            name: outcome,
+            outcome,
+            odds: new Prisma.Decimal(1.9),
+            sortOrder: i,
+          })),
+        },
+      },
+    });
+    await finishEvent(m.event.id, 1, 0);
+    await db.event.update({
+      where: { id: m.event.id },
+      data: { statistics: { sport: 'football', goals: { home: 1, away: 0 } } },
+    });
+    const report = (await settlement.settleDueEvents()).find((r) => r.eventId === m.event.id);
+    expect(report?.completed).toBe(false);
+    const again = await settlement.settleDueEvents();
+    expect(again.some((r) => r.eventId === m.event.id)).toBe(false);
+  });
+});

@@ -323,6 +323,41 @@ export function events(): Record<string, unknown>[] {
       odds: {},
     },
     {
+      eventID: 'sgo-completed',
+      sportID: 'SOCCER',
+      leagueID: 'BUNDESLIGA',
+      type: 'match',
+      teams: {
+        home: team('RB_LEIPZIG_BUNDESLIGA', 'RB Leipzig', 'RBL', 2),
+        away: team('BAYER_LEVERKUSEN_BUNDESLIGA', 'Bayer Leverkusen', 'B04', 2),
+      },
+      status: status(iso(-180), {
+        started: true,
+        ended: true,
+        completed: true,
+        finalized: false,
+        periods: { started: ['1h', '2h'], ended: ['1h', '2h'] },
+      }),
+      players: {
+        ...player('LOIS_OPENDA_1_BUNDESLIGA', 'RB_LEIPZIG_BUNDESLIGA', 'Loïs Openda'),
+        ...player('XAVI_SIMONS_1_BUNDESLIGA', 'RB_LEIPZIG_BUNDESLIGA', 'Xavi Simons'),
+        ...player('PATRIK_SCHICK_1_BUNDESLIGA', 'BAYER_LEVERKUSEN_BUNDESLIGA', 'Patrik Schick'),
+      },
+      results: {
+        game: {
+          home: { points: 2 },
+          away: { points: 2 },
+          LOIS_OPENDA_1_BUNDESLIGA: { goals: 2, shots: 4 },
+          XAVI_SIMONS_1_BUNDESLIGA: { goals: 0, assists: 1 },
+          PATRIK_SCHICK_1_BUNDESLIGA: { goals: 2 },
+        },
+        reg: { home: { points: 2 }, away: { points: 2 } },
+        '1h': { home: { points: 1 }, away: { points: 0 } },
+        '2h': { home: { points: 1 }, away: { points: 2 } },
+      },
+      odds: {},
+    },
+    {
       // A cup tie decided in extra time: regular-time bets need a manual result.
       eventID: 'ucl-extra-time',
       sportID: 'SOCCER',
