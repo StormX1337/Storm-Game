@@ -116,7 +116,8 @@ export type SettlementTransactionType =
   | 'BET_LOST'
   | 'BET_VOID'
   | 'BET_REFUND'
-  | 'CASH_OUT';
+  | 'CASH_OUT'
+  | 'PARTIAL_CASH_OUT';
 
 /**
  * Releases a reserved stake and books the result: the stake leaves the

@@ -1,13 +1,19 @@
 'use client';
 
 import type { EventDetailDto, MarketDto, MarketType, SportKey } from '@storm-bet/types';
-import { BUILDER_MARKETS, MARKET_DEFINITIONS, OUTCOME_LABELS } from '@storm-bet/types';
+import {
+  BUILDER_MARKETS,
+  LIVE_BUILDER_MARKETS,
+  MARKET_DEFINITIONS,
+  OUTCOME_LABELS,
+} from '@storm-bet/types';
 import { Card, cn, EmptyState, Tabs, TabsList, TabsTrigger } from '@storm-bet/ui';
 import { Lock, Timer } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLive } from '@/stores/live';
 import { useRealtimeTopics } from '../providers/realtime';
+import { BuilderSuggestions } from './builder-suggestions';
 import { eventName } from './event-row';
 import { useLiveEvent, useLiveMarketStatus } from './hooks';
 import { OddsButton, type OddsContext } from './odds-button';
@@ -112,7 +118,9 @@ export function EventMarkets({ event }: { event: EventDetailDto }) {
   }
 
   // Bet Builder: football before kick-off, markets the model prices.
-  const builderEvent = event.sport.key === 'football' && live.status === 'SCHEDULED';
+  const builderEvent =
+    event.sport.key === 'football' && (live.status === 'SCHEDULED' || live.status === 'LIVE');
+  const builderTypes = live.status === 'LIVE' ? LIVE_BUILDER_MARKETS : BUILDER_MARKETS;
   const shown =
     tab === 'all'
       ? visible
@@ -126,10 +134,13 @@ export function EventMarkets({ event }: { event: EventDetailDto }) {
     marketId: m.id,
     marketName: m.name,
     marketStatus: m.status,
+    // Several goalscorers can be picked from one market.
+    multi: m.type === 'PLAYER_TO_SCORE',
   });
 
   return (
     <div className="space-y-3">
+      <BuilderSuggestions event={event} />
       <div className="flex items-center gap-2">
         <Tabs value={tab} onValueChange={setTab} className="min-w-0 flex-1">
           <TabsList aria-label="Marktgruppen">
@@ -161,16 +172,16 @@ export function EventMarkets({ event }: { event: EventDetailDto }) {
         ) : null}
       </div>
       <div className="grid gap-3 xl:grid-cols-2">
-        {combineLines(
-          builderOnly ? shown.filter((m) => BUILDER_MARKETS.includes(m.type)) : shown,
-        ).map(([type, markets]) => (
-          <MarketCard
-            key={type}
-            markets={markets}
-            context={context}
-            builder={builderEvent && BUILDER_MARKETS.includes(type)}
-          />
-        ))}
+        {combineLines(builderOnly ? shown.filter((m) => builderTypes.includes(m.type)) : shown).map(
+          ([type, markets]) => (
+            <MarketCard
+              key={type}
+              markets={markets}
+              context={context}
+              builder={builderEvent && builderTypes.includes(type)}
+            />
+          ),
+        )}
       </div>
     </div>
   );

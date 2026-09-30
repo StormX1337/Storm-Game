@@ -66,10 +66,13 @@ export default async function TermsPage() {
           Wettschein angezeigt.
         </li>
         <li>
-          Bet Builder: mehrere Tipps auf ein Fußballspiel (vor Anpfiff) zu einer Quote. Sie wird aus
-          einem Tor-Modell berechnet, das an die Quoten des Datendienstes angepasst ist (Marge 8 %),
-          und ist nie höher als das Produkt der Einzelquoten. Alle Tipps müssen gewinnen; ist einer
-          ungültig, wird die ganze Wette storniert (Einsatz zurück).
+          Bet Builder: mehrere Tipps auf ein Fußballspiel zu einer Quote – vor Anpfiff (auch
+          Torschützen, Ecken und Karten, wenn angeboten) und live (nur Märkte fürs ganze Spiel). Die
+          Quote wird aus einem Tor-Modell berechnet, das an die Quoten des Datendienstes angepasst
+          ist (Marge 8 %, live 10 %), und ist nie höher als das Produkt der Einzelquoten. Alle Tipps
+          müssen gewinnen – verliert einer, ist die Wette verloren. Nur wenn ein Tipp annulliert
+          wird (z. B. Spielabsage, Spieler nicht eingesetzt), wird die ganze Wette storniert und der
+          Einsatz erstattet.
         </li>
         <li>
           Zusätzliche Fußball-Märkte (z. B. Doppelte Chance, Beide treffen, weitere Tor-Linien)

@@ -149,7 +149,7 @@ describe('SportsGameOdds → sync → settlement', () => {
       row.teams.away.score = away;
       row.results = results;
     };
-    // 3:1 in regular time, 0:1 at half time; Kane scores twice, Musiala not.
+    // 3:1 in regular time, 0:1 at half time, 11 corners; Kane scores twice, Musiala not.
     finish('sgo-upcoming', 3, 1, {
       game: {
         home: { points: 3 },
@@ -158,7 +158,7 @@ describe('SportsGameOdds → sync → settlement', () => {
         JAMAL_MUSIALA_1_BUNDESLIGA: { goals: 0 },
         SERHOU_GUIRASSY_1_BUNDESLIGA: { goals: 1 },
       },
-      reg: { home: { points: 3 }, away: { points: 1 } },
+      reg: { home: { points: 3, cornerKicks: 6 }, away: { points: 1, cornerKicks: 5 } },
       '1h': { home: { points: 0 }, away: { points: 1 } },
       '2h': { home: { points: 3 }, away: { points: 0 } },
     });

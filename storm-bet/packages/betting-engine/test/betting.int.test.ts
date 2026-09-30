@@ -494,7 +494,7 @@ describe('cashout', () => {
 
     const [quote] = await cashout.quotes(user.id, [betId]);
     // 10,00 × 2.00 / 1.60 × 0.95 = 11,87
-    expect(quote).toEqual({ betId, available: true, amount: 1_187, reason: null });
+    expect(quote).toMatchObject({ betId, available: true, amount: 1_187, reason: null });
 
     await expectCode(cashout.cashOut(user.id, betId, 1_300n), 'ODDS_CHANGED');
     const result = await cashout.cashOut(user.id, betId, 1_187n);
@@ -513,6 +513,47 @@ describe('cashout', () => {
     await settlement.settleEvent(m.event.id);
     expect((await db.bet.findUniqueOrThrow({ where: { id: betId } })).status).toBe('CASHED_OUT');
     expect((await wallet(user.id)).balance).toBe(100_187n);
+  });
+
+  it('closes part of the stake, then settles only the rest', async () => {
+    const user = await createUser(100_000n);
+    const m = await createEvent({ odds: [2.0, 3.4, 3.8] });
+    const betId = (await placement.place(user.id, single(m.home.id, 2.0, 1_000))).bets[0]!.id;
+    await db.selection.update({
+      where: { id: m.home.id },
+      data: { odds: new Prisma.Decimal(1.6) },
+    });
+    // 40 % of the stake at a full value of 11,87 → 4,74.
+    const partial = await cashout.cashOut(user.id, betId, 474n, { part: 400n });
+    expect(partial.bet).toMatchObject({
+      status: 'PENDING',
+      remainingStake: 600,
+      partialCashouts: [{ stake: 400, amount: 474 }],
+    });
+    expect(partial.wallet).toMatchObject({ balance: 100_074, reserved: 600 });
+    await expectCode(cashout.cashOut(user.id, betId, 1n, { part: 600n }), 'VALIDATION_ERROR');
+
+    await finishEvent(m.event.id, 1, 0);
+    await settlement.settleEvent(m.event.id);
+    const bet = await db.bet.findUniqueOrThrow({ where: { id: betId } });
+    expect(bet).toMatchObject({ status: 'WON', payout: 1_200n });
+    expect(await wallet(user.id)).toMatchObject({ balance: 100_674n, reserved: 0n });
+  });
+
+  it('auto-cashout pays once the value reaches the target', async () => {
+    const user = await createUser(100_000n);
+    const m = await createEvent({ odds: [2.0, 3.4, 3.8] });
+    const betId = (await placement.place(user.id, single(m.home.id, 2.0, 1_000))).bets[0]!.id;
+    await cashout.setAutoCashout(user.id, betId, 1_150n);
+    await cashout.runAutoCashouts();
+    expect((await db.bet.findUniqueOrThrow({ where: { id: betId } })).status).toBe('PENDING');
+    await db.selection.update({
+      where: { id: m.home.id },
+      data: { odds: new Prisma.Decimal(1.6) },
+    });
+    await cashout.runAutoCashouts();
+    const bet = await db.bet.findUniqueOrThrow({ where: { id: betId } });
+    expect(bet).toMatchObject({ status: 'CASHED_OUT', payout: 1_187n, autoCashoutAmount: null });
   });
 
   it('offers nothing for suspended markets, other players or lost legs', async () => {

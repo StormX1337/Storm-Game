@@ -42,8 +42,10 @@
      `AuditLog`
 5. Deadlock/Serialisierungsfehler ⇒ bis zu zwei Wiederholungen
 
-**Bet Builder** (`mode: BUILDER`, Wetttyp `BET_BUILDER`): 2–8 Auswahlen eines Fußballspiels vor Anpfiff, je
-Markt eine. Der Preis kommt aus `football-model.ts`: je Team und Halbzeit unabhängige Poisson-Tore, deren Raten
+**Bet Builder** (`mode: BUILDER`, Wetttyp `BET_BUILDER`): 2–8 Auswahlen eines Fußballspiels, je Markt eine
+(mehrere Torschützen erlaubt). Vor Anpfiff alle Modell-Märkte inkl. Torschützen (Anteil an den Teamtoren aus
+der Anytime-Quote), Ecken und Karten (eigene Poisson-Zählungen, an ihre Über/Unter-Quoten angepasst); live nur
+Märkte fürs ganze Spiel, das Modell startet vom aktuellen Spielstand (Marge 10 %). Der Preis kommt aus `football-model.ts`: je Team und Halbzeit unabhängige Poisson-Tore, deren Raten
 an die margenfreien 1X2- und Über/Unter-Quoten (und, falls vorhanden, Halbzeit-Quoten) des Spiels angepasst
 werden. Jede Kombination wird über alle Halbzeit-Spielstände mit derselben `resolveSelection`-Regel bewertet,
 die später abrechnet; Quote = fair ÷ 1,08, höchstens das Produkt der Einzelquoten, abgerundet auf 0,01. Weicht
@@ -144,7 +146,10 @@ Annahmequote ÷ aktuelle Quote) × (1 − `CASHOUT_MARGIN_PCT`), abgerundet, hö
 wenn alle offenen Märkte gerade wettbar sind (kein Bet Builder). Auszahlung unter Redis-Lock in einer
 Transaktion: Wette `FOR UPDATE`, Auswahlen `FOR SHARE`, Wert neu berechnen, ein niedrigerer Wert als der
 bestätigte wird abgelehnt (`ODDS_CHANGED`), dann `CASHED_OUT` + Hauptbuch `CASH_OUT` + Audit. Die DB erlaubt
-genau eine Abrechnungsbuchung pro Wette (auch Cashout).
+genau eine Abrechnungsbuchung pro Wette (auch Cashout). Teil-Cashout schließt einen Teil des Einsatzes
+(`bet_cashouts`, append-only; `cashed_out_stake` kann nur steigen; Hauptbuch `PARTIAL_CASH_OUT`), die
+Abrechnung rechnet dann mit dem offenen Rest. Auto-Cashout: Zielwert pro Wette; der Worker zahlt aus, sobald
+der Wert ihn erreicht (nie darunter).
 
 ## Settlement
 

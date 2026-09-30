@@ -49,6 +49,7 @@ export const TRANSACTION_LABELS: Record<TransactionType, string> = {
   BET_VOID: 'Storno',
   BET_REFUND: 'Erstattung',
   CASH_OUT: 'Cashout',
+  PARTIAL_CASH_OUT: 'Teil-Cashout',
   CASINO_BET: 'Casino-Einsatz',
   CASINO_WIN: 'Casino-Gewinn',
   CASINO_REFUND: 'Casino-Erstattung',

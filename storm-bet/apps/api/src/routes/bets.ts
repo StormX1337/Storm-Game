@@ -2,6 +2,7 @@ import { BET_INCLUDE, toBetDto } from '@storm-bet/betting-engine';
 import type { Prisma } from '@storm-bet/database';
 import { AppError, type BetStatus } from '@storm-bet/types';
 import {
+  autoCashoutSchema,
   betListQuery,
   cashoutQuotesSchema,
   cashoutSchema,
@@ -55,11 +56,20 @@ export function betRoutes(ctx: AppContext) {
       const session = requireSession(request);
       await enforceRateLimit(ctx.redis, RATE_LIMITS.placeBet, session.userId, reply);
       const { id } = parse(idParam, request.params);
-      const { amount } = parse(cashoutSchema, request.body);
+      const { amount, part } = parse(cashoutSchema, request.body);
       return ctx.cashout.cashOut(session.userId, id, BigInt(amount), {
+        part: part === undefined ? undefined : BigInt(part),
         ip: ctx.env.AUDIT_LOG_IP ? request.ip : null,
         userAgent: request.headers['user-agent'] ?? null,
       });
+    });
+
+    app.put('/bets/:id/auto-cashout', { preHandler: authenticated }, async (request) => {
+      const session = requireSession(request);
+      const { id } = parse(idParam, request.params);
+      const { amount } = parse(autoCashoutSchema, request.body);
+      await ctx.cashout.setAutoCashout(session.userId, id, amount === null ? null : BigInt(amount));
+      return { ok: true };
     });
 
     app.get('/bets', { preHandler: authenticated }, async (request) => {

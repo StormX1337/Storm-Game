@@ -22,6 +22,8 @@ export interface SlipItem {
   pendingOdds: number | null;
   status: SelectionStatus;
   isLive: boolean;
+  /** Picked from a market that allows several picks (goalscorers). */
+  multi?: boolean;
 }
 
 interface SlipState {
@@ -37,6 +39,8 @@ interface SlipState {
   toggle: (item: Omit<SlipItem, 'pendingOdds' | 'status'> & { status?: SelectionStatus }) => void;
   remove: (selectionId: string) => void;
   clear: () => void;
+  /** Replaces the picks of one match (a suggested Bet Builder). */
+  replaceEvent: (eventId: string, items: Omit<SlipItem, 'pendingOdds'>[]) => void;
   setMode: (mode: SlipMode) => void;
   setComboStake: (value: string) => void;
   setSingleStake: (selectionId: string, value: string) => void;
@@ -69,8 +73,11 @@ export const useBetSlip = create<SlipState>()(
               idempotencyKey: null,
             };
           if (state.items.length >= MAX_SLIP_ITEMS) return state;
-          // One pick per market: choosing another outcome of the same market replaces it.
-          const items = state.items.filter((i) => i.marketId !== item.marketId);
+          // One pick per market: choosing another outcome of the same market replaces it
+          // (goalscorer markets allow several).
+          const items = item.multi
+            ? state.items
+            : state.items.filter((i) => i.marketId !== item.marketId);
           return {
             items: [...items, { ...item, status: item.status ?? 'OPEN', pendingOdds: null }],
             idempotencyKey: null,
@@ -82,6 +89,14 @@ export const useBetSlip = create<SlipState>()(
           idempotencyKey: null,
         })),
       clear: () => set({ items: [], comboStake: '', singleStakes: {}, idempotencyKey: null }),
+      replaceEvent: (eventId, items) =>
+        set((state) => ({
+          items: [
+            ...state.items.filter((i) => i.eventId !== eventId),
+            ...items.map((i) => ({ ...i, pendingOdds: null })),
+          ].slice(0, MAX_SLIP_ITEMS),
+          idempotencyKey: null,
+        })),
       setMode: (mode) => set({ mode, idempotencyKey: null }),
       setComboStake: (comboStake) => set({ comboStake, idempotencyKey: null }),
       setSingleStake: (selectionId, value) =>

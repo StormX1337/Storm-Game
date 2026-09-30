@@ -270,14 +270,22 @@ const LIVE_PERIODS: Record<string, string> = {
   '3s': 'S3',
 };
 
-/** Team figures by the feed's stat ids, first match wins; only what the feed reports. */
+/** Corner stat ids of the feed; the same ids price the market and settle it. */
+const CORNER_STATS = ['cornerKicks', 'corners'];
+
+/** Named team figures by the feed's stat ids, first match wins; only what the feed reports. */
 const FOOTBALL_TEAM_STATS: [keyof FootballStatistics, string[]][] = [
-  ['possession', ['possessionPercent', 'possession']],
+  ['possession', ['possessionPercent', 'possession', 'ballPossession']],
   ['shotsOnTarget', ['shots_onGoal', 'shotsOnGoal', 'shots_onTarget', 'shotsOnTarget']],
-  ['corners', ['cornerKicks', 'corners']],
+  ['corners', CORNER_STATS],
   ['yellowCards', ['yellowCards']],
   ['redCards', ['redCards']],
 ];
+const BASKETBALL_TEAM_STATS: [keyof BasketballStatistics, string[]][] = [
+  ['fouls', ['fouls', 'personalFouls']],
+];
+const PERCENT_STAT = /percent|possession|pct/i;
+const MAX_TEAM_STATS = 24;
 const MAX_PAGES = 20;
 const USAGE_TTL_MS = 10 * 60_000;
 const LEAGUES_TTL_MS = 3_600_000;
@@ -443,7 +451,24 @@ export class SportsGameOddsProvider implements OddsProvider {
       }
     }
     const first = this.events.values().next().value?.event;
+    // Which stat ids the feed uses (odds and results), to map more of them.
+    const oddsStats: Record<string, number> = {};
+    const resultStats: Record<string, number> = {};
+    for (const { event } of this.events.values()) {
+      for (const o of Object.values(event.odds ?? {}))
+        if (!o.playerID) {
+          const key = `${event.sportID ?? '?'}:${o.statID}/${o.betTypeID}`;
+          oddsStats[key] = (oddsStats[key] ?? 0) + 1;
+        }
+      for (const block of Object.values(event.results ?? {}))
+        for (const k of Object.keys(block?.home ?? {})) {
+          const key = `${event.sportID ?? '?'}:${k}`;
+          resultStats[key] = (resultStats[key] ?? 0) + 1;
+        }
+    }
     return {
+      oddsStats,
+      resultStats,
       fetched: this.events.size,
       mapped,
       markets,
@@ -728,18 +753,62 @@ export class SportsGameOddsProvider implements OddsProvider {
     return { period, clock };
   }
 
-  /** A pair of one team figure from a result block, if the feed reports it for both sides. */
-  private teamFigure(block: Record<string, Record<string, number>> | undefined, ids: string[]) {
-    for (const id of ids) {
-      const pair = pairOf(block?.home?.[id], block?.away?.[id]);
-      if (pair) return pair;
+  /**
+   * Every team figure the feed reports (except the score): from the whole-game
+   * block, or summed over the periods so far while no whole-game block exists
+   * (percentages are then left out rather than added up).
+   */
+  private teamFigures(results: NonNullable<SgoEvent['results']>): Map<string, Pair> {
+    // Regular time first (as the score is settled), then the whole game.
+    const wholes = [results.reg, results.game].filter((b) => b !== undefined);
+    const blocks = wholes.length ? wholes : Object.values(results);
+    const keys = new Set<string>();
+    for (const b of blocks)
+      for (const side of ['home', 'away'])
+        for (const k of Object.keys(b?.[side] ?? {})) keys.add(k);
+    const out = new Map<string, Pair>();
+    for (const key of keys) {
+      if (key === 'points') continue;
+      const pairs = blocks.map((b) => pairOf(b?.home?.[key], b?.away?.[key]));
+      if (wholes.length) {
+        const pair = pairs.find((p) => p !== null);
+        if (pair) out.set(key, pair);
+      } else if (!pairs.includes(null) && !(blocks.length > 1 && PERCENT_STAT.test(key))) {
+        out.set(
+          key,
+          (pairs as Pair[]).reduce((a, b) => ({ home: a.home + b.home, away: a.away + b.away })),
+        );
+      }
     }
-    return null;
+    return out;
+  }
+
+  /** Named figures into their fields, the rest into `teamStats`. */
+  private addTeamStats(
+    stats: FootballStatistics | BasketballStatistics,
+    results: NonNullable<SgoEvent['results']>,
+  ) {
+    const figures = this.teamFigures(results);
+    const named = stats.sport === 'football' ? FOOTBALL_TEAM_STATS : BASKETBALL_TEAM_STATS;
+    const used = new Set<string>();
+    for (const [field, ids] of named) {
+      const id = ids.find((i) => figures.has(i));
+      if (!id) continue;
+      (stats as unknown as Record<string, Pair>)[field] = figures.get(id)!;
+      ids.forEach((i) => used.add(i));
+    }
+    const rest = [...figures]
+      .filter(([key]) => !used.has(key))
+      .sort(([a], [b]) => a.localeCompare(b))
+      .slice(0, MAX_TEAM_STATS)
+      .map(([key, pair]) => ({ key, ...pair }));
+    if (rest.length) stats.teamStats = rest;
   }
 
   /** Figures so far in a running game: score, finished periods and team stats. */
   private liveStatistics(sport: SportKey, event: SgoEvent, score: Pair): EventStatistics {
     const results = event.results ?? {};
+    const ended = new Set(event.status?.periods?.ended ?? []);
     const period = (ids: string[]) => {
       for (const id of ids) {
         const pair = pairOf(results[id]?.home?.points, results[id]?.away?.points);
@@ -748,12 +817,12 @@ export class SportsGameOddsProvider implements OddsProvider {
       return null;
     };
     const stats = scoreStatistics(sport, score);
-    const block = results.game ?? results.reg;
     if (stats.sport === 'football') {
       const football: FootballStatistics = { ...stats };
-      const firstHalf = period(H1);
+      // The half-time score only once the first half is over.
+      const firstHalf = H1.some((id) => ended.has(id)) ? period(H1) : null;
       if (firstHalf) football.firstHalf = firstHalf;
-      this.addTeamStats(football, block);
+      this.addTeamStats(football, results);
       return football;
     }
     if (stats.sport === 'basketball') {
@@ -764,21 +833,10 @@ export class SportsGameOddsProvider implements OddsProvider {
         if (!q) break;
         basketball.periods.push(q);
       }
-      const fouls = this.teamFigure(block, ['fouls', 'personalFouls']);
-      if (fouls) basketball.fouls = fouls;
+      this.addTeamStats(basketball, results);
       return basketball;
     }
     return stats;
-  }
-
-  private addTeamStats(
-    football: FootballStatistics,
-    block: Record<string, Record<string, number>> | undefined,
-  ) {
-    for (const [key, ids] of FOOTBALL_TEAM_STATS) {
-      const pair = this.teamFigure(block, ids);
-      if (pair) (football as unknown as Record<string, Pair>)[key] = pair;
-    }
   }
 
   /** Official figures: the score, the halves and player stat lines — only what the feed reports. */
@@ -798,7 +856,7 @@ export class SportsGameOddsProvider implements OddsProvider {
       const secondHalf = period(H2);
       if (firstHalf) football.firstHalf = firstHalf;
       if (secondHalf) football.secondHalf = secondHalf;
-      this.addTeamStats(football, results.reg ?? results.game);
+      this.addTeamStats(football, results);
       const players = this.playerLines(sport, event);
       if (players) football.players = players;
       return football;
@@ -809,6 +867,7 @@ export class SportsGameOddsProvider implements OddsProvider {
       if (quarters.every((q) => q !== null)) basketball.periods = quarters as Pair[];
       const firstHalf = period(H1);
       if (firstHalf) basketball.firstHalf = firstHalf;
+      this.addTeamStats(basketball, results);
       const players = this.playerLines(sport, event);
       if (players) basketball.players = players;
       return basketball;
@@ -859,6 +918,24 @@ export class SportsGameOddsProvider implements OddsProvider {
         const inPeriod = odds.filter((o) => o.betTypeID === betType && o.periodID === periodID);
         const raw = this.rawMarket(betType, inPeriod, bookmaker);
         const market = raw ? buildMarket(type, raw, names, gate) : null;
+        if (market) {
+          markets.push(market);
+          break;
+        }
+      }
+    }
+    if (sport === 'football') {
+      // Total corners, when the feed prices them (settled from the same stat).
+      const corners = open.filter(
+        (o) => CORNER_STATS.includes(o.statID ?? '') && !o.playerID && o.statEntityID === 'all',
+      );
+      for (const periodID of ['reg', 'game']) {
+        const raw = this.rawMarket(
+          'ou',
+          corners.filter((o) => o.betTypeID === 'ou' && o.periodID === periodID),
+          bookmaker,
+        );
+        const market = raw ? buildMarket('TOTAL_CORNERS', raw, names, gate) : null;
         if (market) {
           markets.push(market);
           break;

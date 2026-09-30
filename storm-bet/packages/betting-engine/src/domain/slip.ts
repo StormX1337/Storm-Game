@@ -14,6 +14,7 @@ import {
 import {
   BUILDER_MAX_LEGS,
   BUILDER_MIN_LEGS,
+  LIVE_MODEL_MARKETS,
   MODEL_MARKETS,
   type BuilderPrice,
 } from './football-model';
@@ -349,10 +350,13 @@ function builderBet(
   const markets = new Set<string>();
   for (const leg of legs) {
     const at = { selectionId: leg.book.selectionId };
-    if (markets.has(leg.book.marketId)) {
-      issues.push(issue('VALIDATION_ERROR', 'Pro Markt ist nur eine Auswahl möglich.', at));
+    // Several goalscorers may share their market; any other market takes one pick.
+    if (leg.book.marketType !== 'PLAYER_TO_SCORE') {
+      if (markets.has(leg.book.marketId)) {
+        issues.push(issue('VALIDATION_ERROR', 'Pro Markt ist nur eine Auswahl möglich.', at));
+      }
+      markets.add(leg.book.marketId);
     }
-    markets.add(leg.book.marketId);
     if (!MODEL_MARKETS.has(leg.book.marketType)) {
       issues.push(
         issue(
@@ -361,8 +365,18 @@ function builderBet(
           at,
         ),
       );
+    } else if (leg.book.eventStatus === 'LIVE') {
+      if (!LIVE_MODEL_MARKETS.has(leg.book.marketType)) {
+        issues.push(
+          issue(
+            'VALIDATION_ERROR',
+            `„${leg.book.marketName}“ ist im Live-Bet-Builder nicht verfügbar (nur Märkte fürs ganze Spiel).`,
+            at,
+          ),
+        );
+      }
     } else if (leg.book.eventStatus !== 'SCHEDULED') {
-      issues.push(issue('VALIDATION_ERROR', 'Bet Builder gibt es nur vor Spielbeginn.', at));
+      issues.push(issue('VALIDATION_ERROR', 'Für dieses Spiel gibt es keinen Bet Builder.', at));
     }
   }
   // Missing or blocked legs were reported above; no price for an incomplete slip.

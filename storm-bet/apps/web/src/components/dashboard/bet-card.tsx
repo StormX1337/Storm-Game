@@ -14,7 +14,11 @@ const RESULT_STYLE = {
 } as const;
 
 export function BetCard({ bet, href }: { bet: BetDto; href?: string }) {
-  const payout = bet.payout ?? (bet.status === 'PENDING' ? bet.potentialReturn : 0);
+  const payout =
+    bet.payout ??
+    (bet.status === 'PENDING'
+      ? Math.floor((bet.potentialReturn * bet.remainingStake) / bet.stake)
+      : 0);
   const content = (
     <>
       <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2.5">
@@ -65,6 +69,15 @@ export function BetCard({ bet, href }: { bet: BetDto; href?: string }) {
           </dd>
         </div>
       </dl>
+      {bet.partialCashouts.length ? (
+        <p className="border-t border-border px-4 py-2 text-xs text-fg-muted">
+          Teil-Cashouts:{' '}
+          {bet.partialCashouts
+            .map((c) => `${formatMoney(c.amount)} (Einsatz ${formatMoney(c.stake)})`)
+            .join(' · ')}
+          {bet.status === 'PENDING' ? ` · offen: ${formatMoney(bet.remainingStake)}` : ''}
+        </p>
+      ) : null}
     </>
   );
   return (

@@ -244,7 +244,9 @@ export class SettlementService {
         }[]
       >`
         SELECT "id", "status"::text AS "status", "type"::text AS "type",
-               "total_odds"::text AS "total_odds", "stake", "user_id", "reference"
+               "total_odds"::text AS "total_odds",
+               -- Partial cashouts closed part of the stake; the rest is settled.
+               "stake" - "cashed_out_stake" AS "stake", "user_id", "reference"
         FROM "bets" WHERE "id" = ${betId}::uuid FOR UPDATE`;
       const bet = locked[0];
       if (!bet || bet.status !== 'PENDING') return null;
@@ -300,7 +302,8 @@ export class SettlementService {
       const locked = await tx.$queryRaw<
         { status: string; stake: bigint; user_id: string; reference: string }[]
       >`
-        SELECT "status"::text AS "status", "stake", "user_id", "reference"
+        SELECT "status"::text AS "status", "stake" - "cashed_out_stake" AS "stake",
+               "user_id", "reference"
         FROM "bets" WHERE "id" = ${betId}::uuid FOR UPDATE`;
       const bet = locked[0];
       if (!bet) throw new AppError('NOT_FOUND', 'Wette nicht gefunden.');

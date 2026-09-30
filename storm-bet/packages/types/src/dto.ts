@@ -164,6 +164,11 @@ export interface BetDto {
   placedAt: string;
   settledAt: string | null;
   settlementNote: string | null;
+  /** Stake still open after partial cashouts. */
+  remainingStake: Money;
+  partialCashouts: { stake: Money; amount: Money; at: string }[];
+  /** Auto-cashout target, if set. */
+  autoCashout: Money | null;
   selections: BetSelectionDto[];
 }
 
@@ -174,6 +179,8 @@ export interface CashoutQuoteDto {
   amount: Money | null;
   /** Why no cashout is offered right now. */
   reason: string | null;
+  remainingStake: Money;
+  autoCashout: Money | null;
 }
 
 export interface CashoutResponse {

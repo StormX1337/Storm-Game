@@ -94,5 +94,13 @@ export const cashoutQuotesSchema = z.object({
 export type CashoutQuotesInput = z.infer<typeof cashoutQuotesSchema>;
 
 /** The cashout value the player accepted; a lower current value is refused. */
-export const cashoutSchema = z.object({ amount: positiveMoneyMinor });
+export const cashoutSchema = z.object({
+  amount: positiveMoneyMinor,
+  /** Partial cashout: the part of the open stake to close (less than all of it). */
+  part: positiveMoneyMinor.optional(),
+});
+
+/** Auto-cashout target, or null to remove it. */
+export const autoCashoutSchema = z.object({ amount: positiveMoneyMinor.nullable() });
+export type AutoCashoutInput = z.infer<typeof autoCashoutSchema>;
 export type CashoutInput = z.infer<typeof cashoutSchema>;

@@ -691,7 +691,11 @@ function BuilderCard({
       </div>
       <div className="flex items-center justify-between gap-2 px-3 pt-2.5 text-xs">
         <span className="truncate font-medium text-fg">{first.eventName}</span>
-        <span className="tabular shrink-0 text-fg-muted">{formatKickoff(first.startTime)}</span>
+        {items.some((i) => i.isLive) ? (
+          <span className="shrink-0 font-semibold text-live">LIVE</span>
+        ) : (
+          <span className="tabular shrink-0 text-fg-muted">{formatKickoff(first.startTime)}</span>
+        )}
       </div>
       <ol className="px-3 pb-2 pt-1.5">
         {items.map((item, i) => (
@@ -722,7 +726,8 @@ function BuilderCard({
         className="border-t border-border px-3 py-2 text-[11px] text-fg-subtle"
         data-testid="builder-info"
       >
-        Alle Tipps müssen gewinnen. Ist einer ungültig, wird die Wette storniert (Einsatz zurück).
+        Alle Tipps müssen gewinnen – verliert einer, ist die Wette verloren. Nur wenn ein Tipp
+        annulliert wird (z. B. Spielabsage), gibt es den Einsatz zurück.
       </p>
     </div>
   );

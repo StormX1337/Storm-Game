@@ -12,6 +12,7 @@ export const BET_INCLUDE = {
       event: { select: { startTime: true, sport: { select: { key: true } } } },
     },
   },
+  cashouts: { orderBy: { createdAt: 'asc' } },
 } satisfies Prisma.BetInclude;
 
 export type BetWithLegs = Prisma.BetGetPayload<{ include: typeof BET_INCLUDE }>;
@@ -33,6 +34,13 @@ export function toBetDto(bet: BetWithLegs): BetDto {
     placedAt: bet.placedAt.toISOString(),
     settledAt: bet.settledAt?.toISOString() ?? null,
     settlementNote: bet.settlementNote,
+    remainingStake: moneyToNumber(bet.stake - bet.cashedOutStake),
+    partialCashouts: bet.cashouts.map((c) => ({
+      stake: moneyToNumber(c.stake),
+      amount: moneyToNumber(c.amount),
+      at: c.createdAt.toISOString(),
+    })),
+    autoCashout: bet.autoCashoutAmount == null ? null : moneyToNumber(bet.autoCashoutAmount),
     selections: bet.selections.map((leg) => ({
       id: leg.id,
       selectionId: leg.selectionId,

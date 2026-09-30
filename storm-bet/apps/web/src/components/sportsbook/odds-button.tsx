@@ -16,6 +16,8 @@ export interface OddsContext {
   marketId: string;
   marketName: string;
   marketStatus: MarketStatus;
+  /** Several selections of this market may sit on the slip (goalscorers). */
+  multi?: boolean;
 }
 
 export function OddsButton({
@@ -60,6 +62,7 @@ export function OddsButton({
           odds: live.odds,
           status: live.status,
           isLive: context.isLive,
+          multi: context.multi,
         })
       }
       className={cn(

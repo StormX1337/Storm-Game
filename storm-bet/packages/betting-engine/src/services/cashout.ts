@@ -21,18 +21,28 @@ export interface CashoutDeps {
   now?: () => Date;
 }
 
+export interface CashoutOptions {
+  /** Partial cashout: the part of the open stake to close. */
+  part?: bigint;
+  /** Triggered by the player's auto-cashout target, not by a click. */
+  auto?: boolean;
+  ip?: string | null;
+  userAgent?: string | null;
+}
+
 const LEG_SELECT = { selectionId: true, odds: true, result: true } as const;
 
-const toDto = (betId: string, quote: CashoutQuote): CashoutQuoteDto =>
-  quote.available
-    ? { betId, available: true, amount: moneyToNumber(quote.amount), reason: null }
-    : { betId, available: false, amount: null, reason: quote.reason };
+/** Stake still open and the return it can still make. */
+function open(bet: { stake: bigint; cashedOutStake: bigint; potentialReturn: bigint }) {
+  const stake = bet.stake - bet.cashedOutStake;
+  return { stake, potentialReturn: (bet.potentialReturn * stake) / bet.stake };
+}
 
 /**
- * Cashout: the player closes an open bet early at its value at the book's
- * current prices. The value is computed on the server only; the client's
- * figure is what the player agreed to, and a lower value is never paid
- * without a new confirmation.
+ * Cashout: the player closes an open bet — all of it or part of the stake —
+ * early at its value at the book's current prices. The value is computed on
+ * the server only; the client's figure is what the player agreed to, and a
+ * lower value is never paid without a new confirmation.
  */
 export class CashoutService {
   private readonly now: () => Date;
@@ -49,7 +59,9 @@ export class CashoutService {
         id: true,
         type: true,
         stake: true,
+        cashedOutStake: true,
         potentialReturn: true,
+        autoCashoutAmount: true,
         selections: { select: LEG_SELECT },
       },
     });
@@ -58,28 +70,34 @@ export class CashoutService {
       bets.flatMap((b) => b.selections.map((s) => s.selectionId)),
     );
     const now = this.now();
-    return bets.map((b) =>
-      toDto(
-        b.id,
-        cashoutValue(
-          b,
-          b.selections.map((s) => ({
-            oddsMilli: oddsToMilli(s.odds),
-            result: s.result,
-            book: book.get(s.selectionId),
-          })),
-          now,
-          this.deps.marginPct,
-        ),
-      ),
-    );
+    return bets.map((b) => {
+      const rest = open(b);
+      const quote: CashoutQuote = cashoutValue(
+        { type: b.type, ...rest },
+        b.selections.map((s) => ({
+          oddsMilli: oddsToMilli(s.odds),
+          result: s.result,
+          book: book.get(s.selectionId),
+        })),
+        now,
+        this.deps.marginPct,
+      );
+      return {
+        betId: b.id,
+        available: quote.available,
+        amount: quote.available ? moneyToNumber(quote.amount) : null,
+        reason: quote.available ? null : quote.reason,
+        remainingStake: moneyToNumber(rest.stake),
+        autoCashout: b.autoCashoutAmount == null ? null : moneyToNumber(b.autoCashoutAmount),
+      };
+    });
   }
 
   async cashOut(
     userId: string,
     betId: string,
     accepted: bigint,
-    meta: { ip?: string | null; userAgent?: string | null } = {},
+    options: CashoutOptions = {},
   ): Promise<CashoutResponse> {
     const lock = await acquireLock(this.deps.redis, `bet:user:${userId}`, {
       ttlMs: 20_000,
@@ -97,19 +115,32 @@ export class CashoutService {
             status: string;
             type: string;
             stake: bigint;
+            cashed_out_stake: bigint;
             potential_return: bigint;
             reference: string;
           }[]
         >`
-          SELECT "status"::text AS "status", "type"::text AS "type", "stake",
+          SELECT "status"::text AS "status", "type"::text AS "type", "stake", "cashed_out_stake",
                  "potential_return", "reference"
           FROM "bets" WHERE "id" = ${betId}::uuid AND "user_id" = ${userId}::uuid FOR UPDATE`;
         const bet = rows[0];
         if (!bet) throw new AppError('NOT_FOUND', 'Wette nicht gefunden.');
-        // A repeated request after a successful cashout answers with the result.
-        if (bet.status === 'CASHED_OUT') return;
+        // A repeated request after a full cashout answers with the result.
+        if (bet.status === 'CASHED_OUT' && !options.part) return;
         if (bet.status !== 'PENDING') {
           throw new AppError('CONFLICT', 'Die Wette ist bereits abgerechnet.');
+        }
+        const rest = open({
+          stake: bet.stake,
+          cashedOutStake: bet.cashed_out_stake,
+          potentialReturn: bet.potential_return,
+        });
+        const part = options.part;
+        if (part !== undefined && (part <= 0n || part >= rest.stake)) {
+          throw new AppError(
+            'VALIDATION_ERROR',
+            'Ein Teil-Cashout muss kleiner sein als der offene Einsatz.',
+          );
         }
         const user = await tx.user.findUniqueOrThrow({
           where: { id: userId },
@@ -123,11 +154,7 @@ export class CashoutService {
         );
         const now = this.now();
         const quote = cashoutValue(
-          {
-            type: bet.type as 'SINGLE',
-            stake: bet.stake,
-            potentialReturn: bet.potential_return,
-          },
+          { type: bet.type as 'SINGLE', ...rest },
           legs.map((l) => ({
             oddsMilli: oddsToMilli(l.odds),
             result: l.result,
@@ -137,44 +164,71 @@ export class CashoutService {
           this.deps.marginPct,
         );
         if (!quote.available) throw new AppError('MARKET_SUSPENDED', quote.reason);
-        if (quote.amount < accepted) {
+        const amount = part === undefined ? quote.amount : (quote.amount * part) / rest.stake;
+        if (amount <= 0n) throw new AppError('VALIDATION_ERROR', 'Der Teil ist zu klein.');
+        if (amount < accepted) {
           throw new AppError('ODDS_CHANGED', 'Der Cashout-Wert hat sich geändert.', {
-            details: { amount: moneyToNumber(quote.amount) },
+            details: { amount: moneyToNumber(amount) },
           });
         }
-        const changed = await tx.bet.updateMany({
-          where: { id: betId, status: 'PENDING' },
-          data: {
-            status: 'CASHED_OUT',
-            payout: quote.amount,
-            settledAt: now,
-            settlementNote: `Cashout: ${formatMoney(quote.amount)} DEMO`,
-          },
-        });
-        if (changed.count !== 1)
-          throw new AppError('CONFLICT', 'Die Wette ist bereits abgerechnet.');
-        await settleStake(
-          tx,
-          userId,
-          bet.stake,
-          quote.amount,
-          'CASH_OUT',
-          betId,
-          `Cashout · ${bet.reference}`,
-          { reference: bet.reference },
-        );
+
+        if (part === undefined) {
+          const changed = await tx.bet.updateMany({
+            where: { id: betId, status: 'PENDING' },
+            data: {
+              status: 'CASHED_OUT',
+              payout: amount,
+              settledAt: now,
+              autoCashoutAmount: null,
+              settlementNote: `${options.auto ? 'Auto-Cashout' : 'Cashout'}: ${formatMoney(amount)} DEMO`,
+            },
+          });
+          if (changed.count !== 1)
+            throw new AppError('CONFLICT', 'Die Wette ist bereits abgerechnet.');
+          await settleStake(
+            tx,
+            userId,
+            rest.stake,
+            amount,
+            'CASH_OUT',
+            betId,
+            `Cashout · ${bet.reference}`,
+            {
+              reference: bet.reference,
+              auto: options.auto ?? false,
+            },
+          );
+        } else {
+          await tx.bet.update({
+            where: { id: betId },
+            data: { cashedOutStake: { increment: part } },
+          });
+          await tx.betCashout.create({ data: { betId, stake: part, amount } });
+          // Releases the closed part of the reserved stake and pays its value.
+          await settleStake(
+            tx,
+            userId,
+            part,
+            amount,
+            'PARTIAL_CASH_OUT',
+            betId,
+            `Teil-Cashout · ${bet.reference}`,
+            { reference: bet.reference },
+          );
+        }
         await recordAudit(
           tx,
-          { id: userId, role: user.role, ip: meta.ip, userAgent: meta.userAgent },
+          { id: userId, role: user.role, ip: options.ip, userAgent: options.userAgent },
           {
-            action: 'bet.cashed_out',
+            action: part === undefined ? 'bet.cashed_out' : 'bet.partially_cashed_out',
             targetType: 'bet',
             targetId: betId,
             metadata: {
               reference: bet.reference,
-              stake: moneyToNumber(bet.stake),
-              payout: moneyToNumber(quote.amount),
+              stakeClosed: moneyToNumber(part ?? rest.stake),
+              payout: moneyToNumber(amount),
               marginPct: this.deps.marginPct,
+              auto: options.auto ?? false,
               legs: legs.map((l) => ({
                 selectionId: l.selectionId,
                 odds: Number(l.odds),
@@ -193,5 +247,53 @@ export class CashoutService {
       this.deps.db.wallet.findUniqueOrThrow({ where: { userId } }),
     ]);
     return { bet: toBetDto(bet), wallet: toWalletDto(wallet) };
+  }
+
+  /** Sets or removes the auto-cashout target of an open bet. */
+  async setAutoCashout(userId: string, betId: string, amount: bigint | null): Promise<void> {
+    const bet = await this.deps.db.bet.findFirst({
+      where: { id: betId, userId },
+      select: { status: true, type: true, stake: true, potentialReturn: true },
+    });
+    if (!bet) throw new AppError('NOT_FOUND', 'Wette nicht gefunden.');
+    if (bet.status !== 'PENDING')
+      throw new AppError('CONFLICT', 'Die Wette ist bereits abgerechnet.');
+    if (bet.type === 'BET_BUILDER')
+      throw new AppError('VALIDATION_ERROR', 'Für Bet Builder gibt es keinen Cashout.');
+    if (amount !== null && amount > bet.potentialReturn) {
+      throw new AppError(
+        'VALIDATION_ERROR',
+        `Der Zielwert darf den möglichen Gewinn (${formatMoney(bet.potentialReturn)} DEMO) nicht übersteigen.`,
+      );
+    }
+    await this.deps.db.bet.updateMany({
+      where: { id: betId, userId, status: 'PENDING' },
+      data: { autoCashoutAmount: amount },
+    });
+  }
+
+  /**
+   * Cashes out every open bet whose value has reached its auto-cashout
+   * target, at the value then (never below the target). Returns how many.
+   */
+  async runAutoCashouts(limit = 200): Promise<number> {
+    const due = await this.deps.db.bet.findMany({
+      where: { status: 'PENDING', autoCashoutAmount: { not: null } },
+      select: { id: true, userId: true, autoCashoutAmount: true },
+      take: limit,
+    });
+    let done = 0;
+    for (const bet of due) {
+      const [quote] = await this.quotes(bet.userId, [bet.id]);
+      const target = bet.autoCashoutAmount!;
+      if (!quote?.available || quote.amount === null || BigInt(quote.amount) < target) continue;
+      try {
+        await this.cashOut(bet.userId, bet.id, target, { auto: true });
+        done += 1;
+      } catch {
+        // Moved below the target or suspended meanwhile: the next run looks again.
+      }
+    }
+    return done;
   }
 }

@@ -117,6 +117,8 @@ export function events(): Record<string, unknown>[] {
         odd('points-away-2h-ml3way-away', { odds: '+320' }),
         odd('points-all-2h-ou-over', { odds: '-110', overUnder: '1.5' }),
         odd('points-all-2h-ou-under', { odds: '-110', overUnder: '1.5' }),
+        odd('cornerKicks-all-game-ou-over', { odds: '-105', overUnder: '9.5' }),
+        odd('cornerKicks-all-game-ou-under', { odds: '-115', overUnder: '9.5' }),
         // Anytime goalscorer: yes/no or over 0.5 goals.
         prop('goals-HARRY_KANE_1_BUNDESLIGA-game-yn-yes', { odds: '-120' }),
         prop('goals-HARRY_KANE_1_BUNDESLIGA-game-yn-no', { odds: '-105' }),
@@ -222,8 +224,8 @@ export function events(): Record<string, unknown>[] {
       status: status(iso(-40), { started: true, live: true, currentPeriodID: '1h', clock: '38' }),
       results: {
         game: {
-          home: { points: 1, cornerKicks: 4, yellowCards: 1, redCards: 0 },
-          away: { points: 0, cornerKicks: 2, yellowCards: 2, redCards: 0 },
+          home: { points: 1, cornerKicks: 4, yellowCards: 1, redCards: 0, shots: 7 },
+          away: { points: 0, cornerKicks: 2, yellowCards: 2, redCards: 0, shots: 3 },
         },
       },
       odds: odds(

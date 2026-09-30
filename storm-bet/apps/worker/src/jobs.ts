@@ -1,4 +1,4 @@
-import type { SettlementService } from '@storm-bet/betting-engine';
+import type { CashoutService, SettlementService } from '@storm-bet/betting-engine';
 import type { CasinoService } from '@storm-bet/casino';
 import type { PrismaClient } from '@storm-bet/database';
 import type { OddsSyncService } from '@storm-bet/odds-engine';
@@ -10,6 +10,7 @@ export interface JobDeps {
   redis: Redis;
   sync: OddsSyncService;
   settlement: SettlementService;
+  cashout: CashoutService;
   casino: CasinoService;
   logger: Logger;
 }
@@ -34,10 +35,16 @@ async function exclusive<T>(
   }
 }
 
-export type JobName = 'catalog-sync' | 'live-sync' | 'prematch-sync' | 'settle-due' | 'cleanup';
+export type JobName =
+  | 'catalog-sync'
+  | 'live-sync'
+  | 'prematch-sync'
+  | 'settle-due'
+  | 'auto-cashout'
+  | 'cleanup';
 
 export function createJobHandlers(deps: JobDeps): Record<JobName, () => Promise<unknown>> {
-  const { db, redis, sync, settlement, casino, logger } = deps;
+  const { db, redis, sync, settlement, cashout, casino, logger } = deps;
   return {
     'catalog-sync': () =>
       exclusive(redis, 'catalog-sync', 120_000, async () => {
@@ -67,6 +74,12 @@ export function createJobHandlers(deps: JobDeps): Record<JobName, () => Promise<
             'settlement run',
           );
         return reports;
+      }),
+    'auto-cashout': () =>
+      exclusive(redis, 'auto-cashout', 60_000, async () => {
+        const count = await cashout.runAutoCashouts();
+        if (count) logger.info({ count }, 'auto-cashouts paid');
+        return count;
       }),
     cleanup: () =>
       exclusive(redis, 'cleanup', 300_000, async () => {

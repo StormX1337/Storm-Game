@@ -157,6 +157,7 @@ enum TransactionType {
   BET_VOID
   BET_REFUND
   CASH_OUT
+  PARTIAL_CASH_OUT
   CASINO_BET
   CASINO_WIN
   CASINO_REFUND
@@ -538,26 +539,31 @@ model BetSlip {
 }
 
 model Bet {
-  id               String           @id @default(uuid()) @db.Uuid
-  reference        String           @unique
-  userId           String           @map("user_id") @db.Uuid
-  slipId           String           @map("slip_id") @db.Uuid
-  type             BetType
-  status           BetStatus        @default(PENDING)
-  stake            BigInt
-  totalOdds        Decimal          @map("total_odds") @db.Decimal(14, 3)
-  potentialReturn  BigInt           @map("potential_return")
-  payout           BigInt?
-  oddsChangePolicy OddsChangePolicy @map("odds_change_policy")
-  placedAt         DateTime         @default(now()) @map("placed_at")
-  settledAt        DateTime?        @map("settled_at")
-  settlementNote   String?          @map("settlement_note")
-  createdAt        DateTime         @default(now()) @map("created_at")
-  updatedAt        DateTime         @updatedAt @map("updated_at")
+  id                String           @id @default(uuid()) @db.Uuid
+  reference         String           @unique
+  userId            String           @map("user_id") @db.Uuid
+  slipId            String           @map("slip_id") @db.Uuid
+  type              BetType
+  status            BetStatus        @default(PENDING)
+  stake             BigInt
+  totalOdds         Decimal          @map("total_odds") @db.Decimal(14, 3)
+  potentialReturn   BigInt           @map("potential_return")
+  payout            BigInt?
+  oddsChangePolicy  OddsChangePolicy @map("odds_change_policy")
+  placedAt          DateTime         @default(now()) @map("placed_at")
+  settledAt         DateTime?        @map("settled_at")
+  settlementNote    String?          @map("settlement_note")
+  /// Part of the stake already closed by partial cashouts; settlement uses the rest.
+  cashedOutStake    BigInt           @default(0) @map("cashed_out_stake")
+  /// Auto-cashout: close the bet once its value reaches this amount.
+  autoCashoutAmount BigInt?          @map("auto_cashout_amount")
+  createdAt         DateTime         @default(now()) @map("created_at")
+  updatedAt         DateTime         @updatedAt @map("updated_at")
 
   user         User           @relation(fields: [userId], references: [id], onDelete: Restrict)
   slip         BetSlip        @relation(fields: [slipId], references: [id], onDelete: Restrict)
   selections   BetSelection[]
+  cashouts     BetCashout[]
   transactions Transaction[]
 
   @@index([userId, status, placedAt])
@@ -789,4 +795,20 @@ model CasinoRound {
   @@index([gameId, createdAt])
   @@index([status, createdAt])
   @@map("casino_rounds")
+}
+
+/// A partial cashout: part of an open bet's stake closed at its value. Append-only.
+model BetCashout {
+  id        String   @id @default(uuid()) @db.Uuid
+  betId     String   @map("bet_id") @db.Uuid
+  /// Stake part closed.
+  stake     BigInt
+  /// Amount paid for it.
+  amount    BigInt
+  createdAt DateTime @default(now()) @map("created_at")
+
+  bet Bet @relation(fields: [betId], references: [id], onDelete: Restrict)
+
+  @@index([betId])
+  @@map("bet_cashouts")
 }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  builderProbability,
   combinationProbability,
   decideBuilder,
   evaluateSlip,
@@ -8,12 +9,15 @@ import {
   priceBuilder,
   scoreStates,
   type BookSelection,
+  type ModelLeg,
   type ModelMarket,
 } from '../src/domain';
 
+const BASE = { offset: { home: 0, away: 0 }, corners: null, cards: null };
+
 /** Fair prices of a match with known goal rates, plus a proportional margin. */
 function pricesFor(home: number, away: number, margin = 0): ModelMarket[] {
-  const model = { home, away, firstHalfShare: 0.45, error: 0 };
+  const model = { home, away, firstHalfShare: 0.45, error: 0, ...BASE };
   const states = periodStates(model, 'FULL');
   const odds = (p: number) => Math.round((1 / (p * (1 + margin))) * 1000) / 1000;
   const prob = (
@@ -57,13 +61,13 @@ describe('fitFootballModel', () => {
   });
 
   it('spreads probability over every half-by-half scoreline', () => {
-    const states = scoreStates({ home: 1.5, away: 1.2, firstHalfShare: 0.45, error: 0 });
+    const states = scoreStates({ home: 1.5, away: 1.2, firstHalfShare: 0.45, error: 0, ...BASE });
     expect(states.reduce((s, x) => s + x.p, 0)).toBeCloseTo(1, 6);
   });
 });
 
 describe('priceBuilder', () => {
-  const model = { home: 1.7, away: 0.9, firstHalfShare: 0.45, error: 0 };
+  const model = { home: 1.7, away: 0.9, firstHalfShare: 0.45, error: 0, ...BASE };
   const leg = (
     marketType: Parameters<typeof priceBuilder>[1][number]['marketType'],
     line: number | null,
@@ -255,13 +259,23 @@ describe('evaluateSlip in BUILDER mode', () => {
     expect(other.issues[0]?.message).toContain('demselben Spiel');
     expect(other.bets).toEqual([]);
 
-    const live = evaluateSlip(request(), bookOf(sel('a', { eventStatus: 'LIVE' }), over), {
+    // In play: full-time markets combine, half-time markets do not.
+    const live = (b: BookSelection) => ({ ...b, eventStatus: 'LIVE' as const });
+    const inPlay = evaluateSlip(request(), bookOf(live(sel('a')), live(over)), {
       now,
       limits,
       requireStake: false,
       builder: price,
     });
-    expect(live.issues.some((i) => i.message.includes('vor Spielbeginn'))).toBe(true);
+    expect(inPlay.issues).toEqual([]);
+    const half = { ...live(over), marketType: 'FIRST_HALF_TOTAL_GOALS' as const };
+    const halfLive = evaluateSlip(request(), bookOf(live(sel('a')), half), {
+      now,
+      limits,
+      requireStake: false,
+      builder: price,
+    });
+    expect(halfLive.issues.some((i) => i.message.includes('Live-Bet-Builder'))).toBe(true);
 
     const none = evaluateSlip(request(), bookOf(sel('a'), over), {
       now,
@@ -269,5 +283,74 @@ describe('evaluateSlip in BUILDER mode', () => {
       requireStake: false,
     });
     expect(none.issues[0]?.message).toContain('kein Bet Builder');
+  });
+});
+
+describe('Bet Builder model extensions', () => {
+  const model = { home: 1.7, away: 0.9, firstHalfShare: 0.45, error: 0, ...BASE };
+  const leg = (
+    marketType: ModelLeg['marketType'],
+    line: number | null,
+    outcome: ModelLeg['outcome'],
+  ) => ({
+    marketType,
+    line,
+    outcome,
+  });
+
+  it('starts from the current score in play', () => {
+    // 2:0 up with little time left: the home win is nearly certain.
+    const live = { ...model, home: 0.2, away: 0.2, offset: { home: 2, away: 0 } };
+    const p = builderProbability(live, [
+      leg('MATCH_RESULT', null, 'HOME'),
+      leg('TOTAL_GOALS', 1.5, 'OVER'),
+    ]);
+    expect('win' in p && p.win).toBeGreaterThan(0.95);
+    const fitted = fitFootballModel(pricesFor(0.4, 0.3), { home: 1, away: 1 })!;
+    expect(fitted.offset).toEqual({ home: 1, away: 1 });
+    expect(fitted.corners).toBeNull();
+  });
+
+  it("prices a goalscorer as a share of his team's goals", () => {
+    // A 40 % anytime scorer for the home side.
+    const scorer = {
+      ...leg('PLAYER_TO_SCORE', null, 'PLAYER'),
+      player: { side: 'HOME' as const, probability: 0.4 },
+    };
+    const alone = builderProbability(model, [scorer]);
+    expect('win' in alone && alone.win).toBeCloseTo(0.4, 2);
+    // Scoring and his team winning go together: more likely than independent.
+    const both = builderProbability(model, [scorer, leg('MATCH_RESULT', null, 'HOME')]);
+    const home = combinationProbability(scoreStates(model), [
+      leg('MATCH_RESULT', null, 'HOME'),
+    ]).win;
+    expect('win' in both && both.win).toBeGreaterThan(0.4 * home);
+    // Two players of one team must both score: less likely than either alone.
+    const second = { ...scorer, player: { side: 'HOME' as const, probability: 0.3 } };
+    const pair = builderProbability(model, [scorer, second]);
+    expect('win' in pair && pair.win).toBeLessThan(0.4 * 0.3 + 0.02);
+  });
+
+  it('combines corners and cards as independent counts fitted to their prices', () => {
+    const withCounts = fitFootballModel([
+      ...pricesFor(1.7, 0.9),
+      {
+        type: 'TOTAL_CORNERS',
+        line: 9.5,
+        selections: [
+          { outcome: 'OVER', odds: 2 },
+          { outcome: 'UNDER', odds: 2 },
+        ],
+      },
+    ])!;
+    expect(withCounts.corners).toBeGreaterThan(9);
+    expect(withCounts.corners).toBeLessThan(11);
+    const legs = [leg('MATCH_RESULT', null, 'HOME'), leg('TOTAL_CORNERS', 9.5, 'OVER')];
+    const p = builderProbability(withCounts, legs);
+    const home = combinationProbability(scoreStates(withCounts), [legs[0]!]).win;
+    expect('win' in p && p.win).toBeCloseTo(home * 0.5, 1);
+    expect(builderProbability(model, [leg('TOTAL_CARDS', 3.5, 'OVER')])).toEqual({
+      error: 'Karten sind für dieses Spiel nicht im Bet Builder verfügbar.',
+    });
   });
 });

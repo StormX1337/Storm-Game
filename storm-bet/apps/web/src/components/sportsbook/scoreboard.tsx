@@ -1,6 +1,6 @@
 'use client';
 
-import type { EventDetailDto, EventStatistics, Pair } from '@storm-bet/types';
+import type { EventDetailDto, EventStatistics, Pair, TeamStat } from '@storm-bet/types';
 import { PERIOD_LABELS } from '@storm-bet/types';
 import { Card, cn } from '@storm-bet/ui';
 import { formatDateTime, formatKickoff } from '@/lib/format';
@@ -171,7 +171,10 @@ function StatisticsPanel({
       ['Ecken', stats.corners, false],
       ['Karten (Gelb/Rot)', cards, false],
     ];
-    const available = bars.filter((b): b is [string, Pair, boolean] => !!b[1]);
+    const available = [
+      ...bars.filter((b): b is [string, Pair, boolean] => !!b[1]),
+      ...extraBars(stats.teamStats),
+    ];
     // A feed that reports only the score gets no statistics panel at all.
     if (available.length === 0 && !stats.goalEvents) return null;
     return (
@@ -254,37 +257,97 @@ function StatisticsPanel({
       </div>
     );
   }
-  if (stats.periods.length === 0) return null;
+  const extra = extraBars(stats.teamStats);
+  if (stats.periods.length === 0 && extra.length === 0) return null;
   return (
-    <div className="overflow-x-auto border-t border-border px-4 py-4">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="text-xs text-fg-subtle">
-            <th className="py-1 text-left font-medium">Team</th>
-            {stats.periods.map((_, i) => (
-              <th key={i} className="w-10 py-1 text-center font-medium">
-                {i < 4 ? `Q${i + 1}` : 'OT'}
-              </th>
-            ))}
-            <th className="w-12 py-1 text-center font-medium">Fouls</th>
-          </tr>
-        </thead>
-        <tbody>
-          {(['home', 'away'] as const).map((side) => (
-            <tr key={side} className="border-t border-border/60">
-              <td className="py-1.5 font-medium">{side === 'home' ? home : away}</td>
-              {stats.periods.map((p, i) => (
-                <td key={i} className="tabular py-1.5 text-center">
-                  {p[side]}
-                </td>
+    <div className="space-y-4 overflow-x-auto border-t border-border px-4 py-4">
+      {stats.periods.length ? (
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-xs text-fg-subtle">
+              <th className="py-1 text-left font-medium">Team</th>
+              {stats.periods.map((_, i) => (
+                <th key={i} className="w-10 py-1 text-center font-medium">
+                  {i < 4 ? `Q${i + 1}` : 'OT'}
+                </th>
               ))}
-              <td className="tabular py-1.5 text-center text-fg-muted">
-                {stats.fouls?.[side] ?? '–'}
-              </td>
+              <th className="w-12 py-1 text-center font-medium">Fouls</th>
             </tr>
+          </thead>
+          <tbody>
+            {(['home', 'away'] as const).map((side) => (
+              <tr key={side} className="border-t border-border/60">
+                <td className="py-1.5 font-medium">{side === 'home' ? home : away}</td>
+                {stats.periods.map((p, i) => (
+                  <td key={i} className="tabular py-1.5 text-center">
+                    {p[side]}
+                  </td>
+                ))}
+                <td className="tabular py-1.5 text-center text-fg-muted">
+                  {stats.fouls?.[side] ?? '–'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : null}
+      {extra.length ? (
+        <div className="space-y-3">
+          {extra.map(([label, value, percent]) => (
+            <StatBar key={label} label={label} value={value} percent={percent} />
           ))}
-        </tbody>
-      </table>
+        </div>
+      ) : null}
     </div>
   );
+}
+
+/** German names of common feed stat ids; unknown ids are shown readable as they are. */
+const STAT_LABELS: Record<string, string> = {
+  shots: 'Schüsse',
+  shots_onGoal: 'Schüsse aufs Tor',
+  shotsOnGoal: 'Schüsse aufs Tor',
+  shots_offGoal: 'Schüsse neben das Tor',
+  shots_blocked: 'Geblockte Schüsse',
+  fouls: 'Fouls',
+  offsides: 'Abseits',
+  saves: 'Paraden',
+  passes: 'Pässe',
+  passes_accurate: 'Angekommene Pässe',
+  tackles: 'Tacklings',
+  freeKicks: 'Freistöße',
+  throwIns: 'Einwürfe',
+  goalKicks: 'Abstöße',
+  attacks: 'Angriffe',
+  dangerousAttacks: 'Gefährliche Angriffe',
+  rebounds: 'Rebounds',
+  assists: 'Assists',
+  steals: 'Steals',
+  blocks: 'Blocks',
+  turnovers: 'Ballverluste',
+  fieldGoalsMade: 'Feldkörbe',
+  fieldGoalsAttempted: 'Wurfversuche',
+  threePointersMade: 'Dreier',
+  threePointersAttempted: 'Dreierversuche',
+  freeThrowsMade: 'Freiwürfe',
+  freeThrowsAttempted: 'Freiwurfversuche',
+  timeouts: 'Auszeiten',
+};
+
+function statLabel(key: string): string {
+  return (
+    STAT_LABELS[key] ??
+    key
+      .replace(/_/g, ' ')
+      .replace(/([a-z])([A-Z])/g, '$1 $2')
+      .replace(/^./, (c) => c.toUpperCase())
+  );
+}
+
+function extraBars(teamStats: TeamStat[] | undefined): [string, Pair, boolean][] {
+  return (teamStats ?? []).map((s) => [
+    statLabel(s.key),
+    { home: s.home, away: s.away },
+    /percent|possession|pct/i.test(s.key),
+  ]);
 }

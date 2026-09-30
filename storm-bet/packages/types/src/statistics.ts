@@ -14,6 +14,13 @@ export interface GoalEvent {
   playerName: string | null;
 }
 
+/** A team figure as the feed names it (e.g. "shots_onGoal"); only what it reports. */
+export interface TeamStat {
+  key: string;
+  home: number;
+  away: number;
+}
+
 /** One player's official figures, as far as the feed reports them. */
 export interface PlayerStatLine {
   /** Internal player id once synced; the provider's own id never leaves the sync layer. */
@@ -42,6 +49,8 @@ export interface FootballStatistics {
   firstHalf?: Pair;
   /** Goals of the second half (regular time only). */
   secondHalf?: Pair;
+  /** Further team figures the feed reports, beyond the named ones. */
+  teamStats?: TeamStat[];
   /**
    * Players with an official stat line. A player missing from a recorded list
    * did not play; an absent list means player figures were not recorded.
@@ -70,6 +79,8 @@ export interface BasketballStatistics {
   firstHalf?: Pair;
   /** See FootballStatistics.players. */
   players?: PlayerStatLine[];
+  /** See FootballStatistics.teamStats. */
+  teamStats?: TeamStat[];
 }
 
 export type EventStatistics = FootballStatistics | TennisStatistics | BasketballStatistics;

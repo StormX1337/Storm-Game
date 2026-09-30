@@ -203,7 +203,12 @@ describe('SportsGameOddsProvider', () => {
       corners: { home: 4, away: 2 },
       yellowCards: { home: 1, away: 2 },
       redCards: { home: 0, away: 0 },
+      // Figures without a named field are kept under the feed's own id.
+      teamStats: [{ key: 'shots', home: 7, away: 3 }],
     });
+    // Total corners from the feed's corner stat.
+    const corners = (await p.getMarkets('sgo-upcoming')).find((m) => m.type === 'TOTAL_CORNERS');
+    expect(corners).toMatchObject({ key: 'TOTAL_CORNERS:9.5', line: 9.5 });
   });
 
   it('skips quarter lines and markets without bookmaker margin', async () => {

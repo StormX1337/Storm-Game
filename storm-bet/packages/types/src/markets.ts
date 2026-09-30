@@ -443,7 +443,7 @@ export const OUTCOME_LABELS: Record<Outcome, string> = {
   PLAYER: 'Spieler',
 };
 
-/** Football score markets that can be combined in a Bet Builder (priced by the goal model). */
+/** Football markets that can be combined in a Bet Builder before kick-off. */
 export const BUILDER_MARKETS: readonly MarketType[] = [
   'MATCH_RESULT',
   'DOUBLE_CHANCE',
@@ -456,4 +456,17 @@ export const BUILDER_MARKETS: readonly MarketType[] = [
   'FIRST_HALF_TOTAL_GOALS',
   'SECOND_HALF_RESULT',
   'SECOND_HALF_TOTAL_GOALS',
+  'PLAYER_TO_SCORE',
+  'TOTAL_CORNERS',
+  'TOTAL_CARDS',
+];
+
+/** In play only full-time score markets can be combined. */
+export const LIVE_BUILDER_MARKETS: readonly MarketType[] = [
+  'MATCH_RESULT',
+  'DOUBLE_CHANCE',
+  'DRAW_NO_BET',
+  'TOTAL_GOALS',
+  'ASIAN_HANDICAP',
+  'BOTH_TEAMS_TO_SCORE',
 ];
