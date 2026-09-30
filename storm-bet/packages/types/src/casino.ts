@@ -25,7 +25,11 @@ export interface CasinoTheme {
     | 'chip'
     | 'rocket'
     | 'bomb'
-    | 'pegs';
+    | 'pegs'
+    | 'dice'
+    | 'balls'
+    | 'arrows'
+    | 'spades';
 }
 
 export interface CasinoCategoryDto {
@@ -183,6 +187,70 @@ export interface MinesResult {
   minePositions: number[] | null;
 }
 
+export interface DiceResult {
+  game: 'DICE';
+  /** 0.00–99.99 */
+  roll: number;
+  /** Win chance in percent. */
+  chance: number;
+  direction: 'under' | 'over';
+  /** "under": wins below it; "over": wins at or above it. */
+  threshold: number;
+  multiplier: number;
+  won: boolean;
+}
+
+export interface KenoResult {
+  game: 'KENO';
+  picks: number[];
+  /** The ten numbers drawn, in drawing order. */
+  drawn: number[];
+  hits: number[];
+  multiplier: number;
+}
+
+export interface WheelResult {
+  game: 'WHEEL';
+  segment: number;
+  multiplier: number;
+}
+
+export type HiloGuess = 'higher' | 'lower';
+
+export interface HiloResult {
+  game: 'HILO';
+  current: Card;
+  history: { card: Card; guess: HiloGuess | null; won: boolean | null }[];
+  multiplier: number;
+  /** Chance and cash-out multiplier after a won guess (null: the guess cannot lose). */
+  higher: { chance: number; multiplier: number | null };
+  lower: { chance: number; multiplier: number | null };
+  outcome: 'cashout' | 'lost' | null;
+}
+
+export type VideoPokerHand =
+  | 'royal_flush'
+  | 'straight_flush'
+  | 'four_of_a_kind'
+  | 'full_house'
+  | 'flush'
+  | 'straight'
+  | 'three_of_a_kind'
+  | 'two_pair'
+  | 'jacks_or_better'
+  | 'nothing';
+
+export interface VideoPokerResult {
+  game: 'VIDEO_POKER';
+  hand: Card[];
+  /** Positions kept at the draw (null before it). */
+  held: number[] | null;
+  handName: VideoPokerHand;
+  /** Return per unit, once the hand is final. */
+  multiplier: number | null;
+  final: boolean;
+}
+
 export type CasinoRoundResult =
   | SlotResult
   | RouletteResult
@@ -190,7 +258,12 @@ export type CasinoRoundResult =
   | BaccaratResult
   | CrashResult
   | PlinkoResult
-  | MinesResult;
+  | MinesResult
+  | DiceResult
+  | KenoResult
+  | WheelResult
+  | HiloResult
+  | VideoPokerResult;
 
 export interface CasinoRoundDto {
   id: string;

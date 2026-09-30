@@ -17,7 +17,12 @@ import { PlinkoGame } from './plinko-game';
 import { GameSideContext } from './controls';
 import { GameCover } from './game-cover';
 import { DEMO_MODE_LABEL, GAME_TYPE_LABELS } from './labels';
+import { DiceGame } from './dice-game';
+import { HiloGame } from './hilo-game';
+import { KenoGame } from './keno-game';
+import { PokerGame } from './poker-game';
 import { RouletteGame } from './roulette-game';
+import { WheelGame } from './wheel-game';
 import { SlotGame } from './slot-game';
 
 const RULES: Record<CasinoGameDto['type'], string> = {
@@ -34,6 +39,13 @@ const RULES: Record<CasinoGameDto['type'], string> = {
     'Die Kugel fällt durch 12 Reihen und springt an jedem Stift mit 50 % nach links oder rechts. Das Fach bestimmt den Multiplikator; drei Risikostufen mit eigenen Tabellen.',
   MINES:
     '25 Felder, 1 bis 24 Minen. Jedes sichere Feld erhöht den Multiplikator (faire Quote × 0,97). Du kannst jederzeit auszahlen; eine Mine beendet die Runde ohne Gewinn.',
+  DICE: 'Der Server würfelt eine Zahl von 0,00 bis 99,99. Du wählst die Gewinnchance (1–95 %) und ob der Wurf darunter oder darüber landen soll. Auszahlung: Einsatz × 97 ÷ Chance.',
+  KENO: 'Tippe 1 bis 10 Zahlen von 1 bis 40. Der Server zieht 10 Zahlen; die Auszahlung richtet sich nach der Zahl deiner Tipps und Treffer (Tabelle unter dem Spielfeld).',
+  WHEEL:
+    'Ein Rad mit 50 Feldern: 29 × 0, 10 × 1,5, 6 × 2, 3 × 3, 1 × 5 und 1 × 7 des Einsatzes. Jedes Feld ist gleich wahrscheinlich.',
+  HILO: 'Rate, ob die nächste Karte höher/gleich oder tiefer/gleich ist (Ass niedrig, König hoch; unendlich gemischtes Deck). Jeder Treffer multipliziert mit der fairen Quote; 3 % Hausvorteil einmal auf den Gesamtwert. Aussteigen jederzeit, Überspringen möglich.',
+  VIDEO_POKER:
+    'Jacks or Better mit einem 52er-Deck: 5 Karten, beliebige halten, einmal ziehen. Auszahlung laut Tabelle (8/5); ab einem Paar Buben. Auszahlungsquote 97,3 % bei optimaler Spielweise.',
 };
 
 export function GamePlayer({ game }: { game: CasinoGameDto }) {
@@ -150,6 +162,16 @@ export function GamePlayer({ game }: { game: CasinoGameDto }) {
             <PlinkoGame game={game} sessionId={session.id} />
           ) : game.type === 'MINES' ? (
             <MinesGame game={game} sessionId={session.id} openRound={session.openRound} />
+          ) : game.type === 'DICE' ? (
+            <DiceGame game={game} sessionId={session.id} />
+          ) : game.type === 'KENO' ? (
+            <KenoGame game={game} sessionId={session.id} />
+          ) : game.type === 'WHEEL' ? (
+            <WheelGame game={game} sessionId={session.id} />
+          ) : game.type === 'HILO' ? (
+            <HiloGame game={game} sessionId={session.id} openRound={session.openRound} />
+          ) : game.type === 'VIDEO_POKER' ? (
+            <PokerGame game={game} sessionId={session.id} openRound={session.openRound} />
           ) : game.type === 'BLACKJACK' ? (
             <BlackjackGame game={game} sessionId={session.id} openRound={session.openRound} />
           ) : (

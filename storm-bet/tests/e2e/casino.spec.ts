@@ -89,6 +89,56 @@ test.describe('casino', () => {
     if (await cashout.isVisible()) await cashout.click();
     await expect(page.getByTestId('mines-start')).toBeVisible();
   });
+
+  test('dice, keno, wheel, hi-lo and video poker play on the server', async ({ page }) => {
+    await signIn(page);
+    const open = async (name: string) => {
+      await page.goto('/casino');
+      await page
+        .getByTestId('game-card')
+        .filter({ hasText: name })
+        .getByRole('link', { name: /Demo spielen/ })
+        .first()
+        .click();
+      await expect(page.getByTestId('game-controls')).toBeVisible();
+    };
+    const played = () =>
+      page.waitForResponse((r) => r.url().includes('/play') && r.request().method() === 'POST');
+    const press = async (testId: string) => {
+      const res = played();
+      await page.getByTestId(testId).click();
+      expect((await res).status()).toBe(201);
+    };
+
+    await open('Storm Dice');
+    await press('dice-play');
+    await expect(page.getByTestId('dice-roll')).not.toHaveText('–');
+
+    await open('Storm Keno');
+    await page.getByTestId('keno-number').nth(4).click();
+    await page.getByTestId('keno-number').nth(17).click();
+    await press('keno-play');
+
+    await open('Glücksrad');
+    await press('wheel-spin');
+    await expect(page.getByTestId('wheel-result')).not.toHaveText('?', { timeout: 6_000 });
+
+    await open('Storm Hi-Lo');
+    const hiloCashout = page.getByTestId('hilo-cashout');
+    if (!(await hiloCashout.isVisible())) await press('hilo-start');
+    await expect(hiloCashout).toBeVisible();
+    // Guess the likelier side; a wrong guess ends the round, a right one can be cashed out.
+    const higher = page.getByTestId('hilo-higher');
+    await press((await higher.isEnabled()) ? 'hilo-higher' : 'hilo-lower');
+    if ((await hiloCashout.isVisible()) && (await hiloCashout.isEnabled()))
+      await press('hilo-cashout');
+
+    await open('Jacks or Better');
+    if (!(await page.getByTestId('poker-draw').isVisible())) await press('poker-deal');
+    await page.getByTestId('poker-card').first().click();
+    await press('poker-draw');
+    await expect(page.getByTestId('poker-deal')).toBeVisible();
+  });
 });
 
 test('mobile casino: no horizontal overflow and the tab bar @mobile', async ({ page }) => {

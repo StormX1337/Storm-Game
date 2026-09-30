@@ -12,6 +12,20 @@ import {
   PLINKO_ROWS,
   plinkoRtp,
   startMines,
+  actHilo,
+  dealPoker,
+  diceMultiplier,
+  drawPoker,
+  evaluateHand,
+  hiloChance,
+  kenoRtp,
+  playKeno,
+  POKER_PAYTABLE,
+  rollDice,
+  spinWheel,
+  startHilo,
+  WHEEL_SEGMENTS,
+  wheelRtp,
   dealBaccarat,
   dealBlackjack,
   evaluateSlot,
@@ -192,5 +206,88 @@ describe('instant games', () => {
     expect(boom).toMatchObject({ payout: 0n, result: { outcome: 'mine', hit: 1 } });
     expect(boom.result.minePositions).toEqual([0, 1, 2]);
     expect(() => actMines(safe.state, { type: 'reveal', tile: 10 }, 1_000n)).toThrow();
+  });
+});
+
+describe('more instant games', () => {
+  const seq = (values: number[]) => {
+    let i = 0;
+    return (m: number) => values[i++ % values.length]! % m;
+  };
+
+  it('dice pays 97 % ÷ chance on the chosen side', () => {
+    expect(diceMultiplier(50)).toBe(194);
+    const win = rollDice(seq([4_999]), 1_000n, 50, 'under');
+    expect(win.result).toMatchObject({ roll: 49.99, won: true, multiplier: 1.94 });
+    expect(win.payout).toBe(1_940n);
+    expect(rollDice(seq([5_000]), 1_000n, 50, 'under').payout).toBe(0n);
+    expect(rollDice(seq([5_000]), 1_000n, 50, 'over').payout).toBe(1_940n);
+    expect(() => rollDice(seq([0]), 100n, 96, 'over')).toThrow(RangeError);
+  });
+
+  it('keno tables return 92–97 % and pay the hits', () => {
+    for (let picks = 1; picks <= 10; picks += 1) {
+      expect(kenoRtp(picks)).toBeGreaterThan(0.92);
+      expect(kenoRtp(picks)).toBeLessThan(0.975);
+    }
+    // (m) => m - 1 keeps the pool in order: 1–10 are drawn.
+    const r = playKeno((m) => m - 1, 100n, [1, 2, 3]);
+    expect(r.result.drawn).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    expect(r.result.hits).toEqual([1, 2, 3]);
+    expect(r.payout).toBe(2_500n);
+    expect(() => playKeno(() => 0, 100n, [1, 1])).toThrow(RangeError);
+    expect(() => playKeno(() => 0, 100n, [0])).toThrow(RangeError);
+  });
+
+  it('the wheel returns 96 % over 50 segments', () => {
+    expect(WHEEL_SEGMENTS).toHaveLength(50);
+    expect(wheelRtp()).toBeCloseTo(0.96, 10);
+    const r = spinWheel(() => 0, 1_000n);
+    expect(r.payout).toBe(BigInt(WHEEL_SEGMENTS[0]! * 1_000));
+  });
+
+  it('hi-lo pays fair odds less 3 % once, and ends on a wrong guess', () => {
+    const start = startHilo(seq([7, 0, 9, 0, 1, 0]));
+    const first = start.state.queue[0]!;
+    expect(start.result.current).toBeDefined();
+    const cur = start.state.current;
+    const up = actHilo(start.state, { type: 'higher' }, 1_000n);
+    const order = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+    const higherWins = order.indexOf(first.rank) >= order.indexOf(cur.rank);
+    if (higherWins) {
+      expect(up.payout).toBeNull();
+      const p = hiloChance(cur, 'higher');
+      expect(up.result.multiplier).toBe(Math.floor((1 / p) * 0.97 * 100) / 100);
+      const cash = actHilo(up.state, { type: 'cashout' }, 1_000n);
+      expect(cash.payout).toBe(BigInt(Math.floor((1 / p) * 0.97 * 100) * 10));
+    } else {
+      expect(up.payout).toBe(0n);
+      expect(up.result.outcome).toBe('lost');
+    }
+    // A guess that cannot lose is refused.
+    const ace = { ...start.state, current: { rank: 'A' as const, suit: 'S' as const } };
+    expect(() => actHilo(ace, { type: 'higher' }, 100n)).toThrow(RangeError);
+  });
+
+  it('video poker ranks hands and pays the 8/5 table', () => {
+    expect(evaluateHand([c('10'), c('J'), c('Q'), c('K'), c('A')])).toBe('royal_flush');
+    expect(evaluateHand([c('A', 'H'), c('2'), c('3'), c('4'), c('5')])).toBe('straight');
+    expect(evaluateHand([c('J', 'H'), c('J'), c('3'), c('4', 'D'), c('9')])).toBe(
+      'jacks_or_better',
+    );
+    expect(evaluateHand([c('10', 'H'), c('10'), c('3'), c('4', 'D'), c('9')])).toBe('nothing');
+    expect(evaluateHand([c('K', 'H'), c('K'), c('K', 'D'), c('4', 'D'), c('4')])).toBe(
+      'full_house',
+    );
+    const deal = dealPoker((m) => m - 1);
+    expect(deal.result.final).toBe(false);
+    expect(JSON.stringify(deal.result)).not.toContain('deck');
+    const kept = drawPoker(deal.state, [0, 1, 2, 3, 4], 100n);
+    expect(kept.result.hand).toEqual(deal.result.hand);
+    const name = evaluateHand(deal.result.hand);
+    expect(kept.payout).toBe(name === 'nothing' ? 0n : 100n * BigInt(POKER_PAYTABLE[name]));
+    const fresh = drawPoker(deal.state, [], 100n);
+    expect(fresh.result.hand).toEqual(deal.state.deck.slice(0, 5));
+    expect(() => drawPoker(deal.state, [5], 100n)).toThrow(RangeError);
   });
 });

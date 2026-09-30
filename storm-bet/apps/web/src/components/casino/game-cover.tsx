@@ -1,7 +1,11 @@
 import type { CasinoTheme } from '@storm-bet/types';
 import { cn } from '@storm-bet/ui';
 import {
+  ArrowUpDown,
   Bomb,
+  Club,
+  Dices,
+  Grid3x3,
   Coins,
   Crown,
   Disc3,
@@ -28,6 +32,10 @@ const MOTIF = {
   rocket: Rocket,
   bomb: Bomb,
   pegs: Grip,
+  dice: Dices,
+  balls: Grid3x3,
+  arrows: ArrowUpDown,
+  spades: Club,
 } as const;
 
 /** Generated cover art: gradient, glow, fine grid and the game's motif. No image files. */

@@ -31,6 +31,20 @@ function summary(r: CasinoRoundDto): string {
         : x.outcome
           ? `${x.revealed.length} Felder · ${x.multiplier.toFixed(2)}×`
           : 'Runde läuft';
+    case 'DICE':
+      return `${x.roll.toFixed(2)} (${x.direction === 'under' ? 'unter' : 'über'} ${x.threshold.toFixed(2)})`;
+    case 'KENO':
+      return `${x.hits.length}/${x.picks.length} Treffer · ${x.multiplier}×`;
+    case 'WHEEL':
+      return `${x.multiplier}×`;
+    case 'HILO':
+      return x.outcome === 'lost'
+        ? `Verloren nach ${x.history.filter((h) => h.won).length} Treffern`
+        : x.outcome
+          ? `${x.multiplier.toFixed(2)}×`
+          : 'Runde läuft';
+    case 'VIDEO_POKER':
+      return x.final ? (x.multiplier ? `${x.multiplier}×` : 'Keine Gewinnhand') : 'Hand läuft';
     case 'BACCARAT':
       return `${x.playerTotal} : ${x.bankerTotal} (${x.winner === 'player' ? 'Spieler' : x.winner === 'banker' ? 'Bank' : 'Unentschieden'})`;
   }

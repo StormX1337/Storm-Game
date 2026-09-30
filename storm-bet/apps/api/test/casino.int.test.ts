@@ -435,6 +435,121 @@ describe('instant games', () => {
   });
 });
 
+describe('dice, keno, wheel, hi-lo and video poker', () => {
+  // (max) => max - 1: roll 99.99, keno draws 1–10, the last wheel segment,
+  // an endless run of kings in hi-lo, and an unshuffled poker deck (A–5 of spades).
+  const service = () =>
+    new CasinoService({
+      db: t.db,
+      redis: t.redis,
+      providers: [new MockCasinoProvider()],
+      rng: (m) => m - 1,
+    });
+  const key = () => randomUUID();
+
+  it('decides the single-shot games on the server', async () => {
+    const { user } = await player(10_000n);
+    const casino = service();
+    const run = async (slug: string, body: Record<string, unknown>) => {
+      const gameId = games[slug]!;
+      const session = await casino.openSession(user.id, gameId);
+      return casino.play(user.id, gameId, {
+        sessionId: session.id,
+        idempotencyKey: key(),
+        stake: 100,
+        ...body,
+      } as never);
+    };
+    expect(
+      (await run('storm-dice', { action: 'roll', chance: 50, direction: 'under' })).round,
+    ).toMatchObject({ payout: 0, result: { roll: 99.99, won: false } });
+    expect(
+      (await run('storm-dice', { action: 'roll', chance: 50, direction: 'over' })).round,
+    ).toMatchObject({ payout: 194, result: { won: true, multiplier: 1.94 } });
+    expect((await run('storm-keno', { action: 'play', picks: [1, 2, 3] })).round).toMatchObject({
+      payout: 2_500,
+      result: { hits: [1, 2, 3] },
+    });
+    await expect(run('storm-keno', { action: 'play', picks: [1, 1] })).rejects.toMatchObject({
+      code: 'VALIDATION_ERROR',
+    });
+    expect((await run('storm-wheel', { action: 'spin' })).round).toMatchObject({
+      payout: 150,
+      result: { segment: 49, multiplier: 1.5 },
+    });
+  });
+
+  it('plays hi-lo and video poker step by step and never shows what is to come', async () => {
+    const { user } = await player(10_000n);
+    const casino = service();
+    const hilo = games['storm-hilo']!;
+    const hs = await casino.openSession(user.id, hilo);
+    const start = await casino.play(user.id, hilo, {
+      sessionId: hs.id,
+      idempotencyKey: key(),
+      action: 'start',
+      stake: 100,
+    });
+    expect(start.round.result).toMatchObject({ current: { rank: 'K' } });
+    expect(JSON.stringify(start)).not.toContain('queue');
+    const step = (action: 'higher' | 'lower' | 'cashout', n: number) =>
+      casino.play(user.id, hilo, {
+        sessionId: hs.id,
+        idempotencyKey: key(),
+        action,
+        roundId: start.round.id,
+        step: n,
+      });
+    // Lower-or-same than a king cannot lose: refused.
+    await expect(step('lower', 0)).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    expect((await step('higher', 0)).round).toMatchObject({
+      status: 'OPEN',
+      result: { multiplier: 12.61 },
+    });
+    expect((await step('cashout', 1)).round).toMatchObject({ status: 'SETTLED', payout: 1_261 });
+    expect((await step('cashout', 1)).replayed).toBe(true);
+
+    const poker = games['storm-poker']!;
+    const ps = await casino.openSession(user.id, poker);
+    const deal = await casino.play(user.id, poker, {
+      sessionId: ps.id,
+      idempotencyKey: key(),
+      action: 'deal',
+      stake: 100,
+    });
+    expect(deal.round).toMatchObject({ status: 'OPEN', result: { final: false } });
+    expect(JSON.stringify(deal)).not.toContain('deck');
+    const drawn = await casino.play(user.id, poker, {
+      sessionId: ps.id,
+      idempotencyKey: key(),
+      action: 'draw',
+      holds: [0, 1, 2, 3, 4],
+      roundId: deal.round.id,
+      step: 0,
+    });
+    expect(drawn.round).toMatchObject({
+      status: 'SETTLED',
+      payout: 5_000,
+      result: { handName: 'straight_flush', multiplier: 50 },
+    });
+
+    // A hand left open is drawn with every card kept when the session closes.
+    const open = await casino.play(user.id, poker, {
+      sessionId: ps.id,
+      idempotencyKey: key(),
+      action: 'deal',
+      stake: 100,
+    });
+    await casino.closeSession(ps.id, { userId: user.id }, 'Spieler');
+    expect(
+      await t.db.casinoRound.findUniqueOrThrow({ where: { id: open.round.id } }),
+    ).toMatchObject({ status: 'SETTLED', payout: 5_000n });
+    expect((await wallet(user.id)).balance).toBe(
+      10_000n - 100n + 1_261n - 100n + 5_000n - 100n + 5_000n,
+    );
+  });
+});
+
 describe('casino admin', () => {
   it('manages games with RBAC and an audit trail', async () => {
     const staff = await createUser(t.db, 'ADMIN');

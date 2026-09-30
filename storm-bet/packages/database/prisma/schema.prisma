@@ -708,6 +708,11 @@ enum CasinoGameType {
   CRASH
   PLINKO
   MINES
+  DICE
+  KENO
+  WHEEL
+  HILO
+  VIDEO_POKER
 }
 
 enum CasinoGameStatus {

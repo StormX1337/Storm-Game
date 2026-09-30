@@ -37,7 +37,12 @@ import {
   type BlackjackState,
 } from './games/blackjack';
 import { playCrash } from './games/crash';
+import { rollDice } from './games/dice';
+import { actHilo, startHilo, type HiloState } from './games/hilo';
+import { playKeno } from './games/keno';
 import { actMines, startMines, type MinesState } from './games/mines';
+import { dealPoker, drawPoker, type PokerState } from './games/video-poker';
+import { spinWheel } from './games/wheel';
 import { dropPlinko } from './games/plinko';
 import { rouletteBetValid, spinRoulette } from './games/roulette';
 import { spinSlot } from './games/slots';
@@ -57,7 +62,12 @@ export interface CasinoPlayInput {
     | 'drop'
     | 'start'
     | 'reveal'
-    | 'cashout';
+    | 'cashout'
+    | 'roll'
+    | 'draw'
+    | 'higher'
+    | 'lower'
+    | 'skip';
   /** Slots and blackjack deal. */
   stake?: number;
   /** Roulette. */
@@ -69,6 +79,13 @@ export interface CasinoPlayInput {
   step?: number;
   /** Crash: cash-out multiplier set before the round. */
   target?: number;
+  /** Dice: win chance (percent) and winning side. */
+  chance?: number;
+  direction?: 'under' | 'over';
+  /** Keno picks (1–40). */
+  picks?: number[];
+  /** Video poker: positions kept at the draw. */
+  holds?: number[];
   /** Plinko risk level. */
   risk?: PlinkoRisk;
   /** Mines: mines on the field (start) and the tile to reveal. */
@@ -196,12 +213,19 @@ export class CasinoService {
       where: { sessionId, status: 'OPEN' },
       select: { id: true, game: { select: { type: true } } },
     });
-    // An unfinished hand is stood, an open mines field is cashed out.
+    // An unfinished hand is stood (poker: every card kept), anything else cashed out.
     for (const { id, game } of open) {
       await withTransaction(this.deps.db, (tx) =>
-        game.type === 'MINES'
-          ? this.applyMines(tx, session.userId, id, { type: 'cashout' })
-          : this.applyBlackjack(tx, session.userId, id, 'stand'),
+        game.type === 'BLACKJACK'
+          ? this.applyBlackjack(tx, session.userId, id, 'stand')
+          : this.applyStep(
+              tx,
+              session.userId,
+              id,
+              game.type === 'VIDEO_POKER'
+                ? { type: 'draw', holds: [0, 1, 2, 3, 4] }
+                : { type: 'cashout' },
+            ),
       );
     }
     await withTransaction(this.deps.db, async (tx) => {
@@ -312,18 +336,14 @@ export class CasinoService {
       );
     }
 
-    if (game.type === 'MINES' && input.action !== 'start') {
+    const opening = STEP_GAMES[game.type];
+    if (opening && input.action !== opening) {
       if (!input.roundId || input.step === undefined)
         throw new AppError('VALIDATION_ERROR', 'Runde und Schritt fehlen.');
-      const action =
-        input.action === 'cashout'
-          ? ({ type: 'cashout' } as const)
-          : input.action === 'reveal' && input.tile !== undefined
-            ? ({ type: 'reveal', tile: input.tile } as const)
-            : null;
+      const action = stepAction(game.type, input);
       if (!action) throw new AppError('VALIDATION_ERROR', 'Unbekannte Aktion.');
       return withTransaction(db, (tx) =>
-        this.applyMines(tx, userId, input.roundId!, action, { gameId, step: input.step! }),
+        this.applyStep(tx, userId, input.roundId!, action, { gameId, step: input.step! }),
       );
     }
 
@@ -335,6 +355,11 @@ export class CasinoService {
       CRASH: 'play',
       PLINKO: 'drop',
       MINES: 'start',
+      DICE: 'roll',
+      KENO: 'play',
+      WHEEL: 'spin',
+      HILO: 'start',
+      VIDEO_POKER: 'deal',
     }[game.type];
     if (input.action !== expected) throw new AppError('VALIDATION_ERROR', 'Unbekannte Aktion.');
     const stake = this.stakeOf(game.type, input);
@@ -369,7 +394,7 @@ export class CasinoService {
           },
         });
       }
-      if (game.type === 'BLACKJACK' || game.type === 'MINES') {
+      if (game.type === 'BLACKJACK' || STEP_GAMES[game.type]) {
         const open = await tx.casinoRound.count({
           where: { sessionId: session.id, status: 'OPEN' },
         });
@@ -395,6 +420,32 @@ export class CasinoService {
         if (input.mines === undefined)
           throw new AppError('VALIDATION_ERROR', 'Anzahl der Minen fehlt.');
         const start = startMines(this.rng, input.mines);
+        result = start.result;
+        payout = null;
+        state = start.state;
+      } else if (game.type === 'DICE') {
+        if (input.chance === undefined || !input.direction)
+          throw new AppError('VALIDATION_ERROR', 'Gewinnchance und Richtung fehlen.');
+        ({ result, payout } = rollDice(this.rng, stake, input.chance, input.direction));
+      } else if (game.type === 'KENO') {
+        if (!input.picks) throw new AppError('VALIDATION_ERROR', 'Wähle 1 bis 10 Zahlen.');
+        try {
+          ({ result, payout } = playKeno(this.rng, stake, input.picks));
+        } catch {
+          throw new AppError(
+            'VALIDATION_ERROR',
+            'Wähle 1 bis 10 verschiedene Zahlen von 1 bis 40.',
+          );
+        }
+      } else if (game.type === 'WHEEL') {
+        ({ result, payout } = spinWheel(this.rng, stake));
+      } else if (game.type === 'HILO') {
+        const start = startHilo(this.rng);
+        result = start.result;
+        payout = null;
+        state = start.state;
+      } else if (game.type === 'VIDEO_POKER') {
+        const start = dealPoker(this.rng);
         result = start.result;
         payout = null;
         state = start.state;
@@ -528,11 +579,15 @@ export class CasinoService {
    * One Mines action (reveal a tile or cash out) on a locked field, made
    * idempotent by the step number like a blackjack action.
    */
-  private async applyMines(
+  /**
+   * One action of a multi-step game (Mines, Hi-Lo, video poker) on a locked
+   * round. The step number makes it idempotent, as for blackjack.
+   */
+  private async applyStep(
     tx: Tx,
     userId: string,
     roundId: string,
-    action: { type: 'reveal'; tile: number } | { type: 'cashout' },
+    action: StepAction,
     expect?: { gameId: string; step: number },
   ): Promise<CasinoPlayResponse> {
     await tx.$queryRaw`SELECT "id" FROM "casino_rounds" WHERE "id" = ${roundId}::uuid FOR UPDATE`;
@@ -542,7 +597,12 @@ export class CasinoService {
     });
     if (!round || round.userId !== userId || (expect && round.gameId !== expect.gameId))
       throw new AppError('NOT_FOUND', 'Runde nicht gefunden.');
-    const key = action.type === 'reveal' ? `reveal:${action.tile}` : 'cashout';
+    const key =
+      action.type === 'reveal'
+        ? `reveal:${action.tile}`
+        : action.type === 'draw'
+          ? `draw:${[...action.holds].sort((a, b) => a - b).join('')}`
+          : action.type;
     if (expect && (round.status !== 'OPEN' || round.step !== expect.step)) {
       const applied = (round.result as unknown as { actions?: string[] }).actions;
       if (
@@ -556,14 +616,14 @@ export class CasinoService {
           replayed: true,
         };
       }
-      throw new AppError('CONFLICT', 'Das Feld hat sich geändert. Bitte neu laden.');
+      throw new AppError('CONFLICT', 'Die Runde hat sich geändert. Bitte neu laden.');
     }
     if (round.status !== 'OPEN') throw new AppError('CONFLICT', 'Die Runde ist beendet.');
-    let step;
+    let step: { result: CasinoRoundResult; state: { actions: string[] }; payout: bigint | null };
     try {
-      step = actMines(round.state as unknown as MinesState, action, round.stake);
+      step = runStep(round.game.type, round.state, action, round.stake);
     } catch {
-      throw new AppError('VALIDATION_ERROR', 'Dieses Feld ist nicht verfügbar.');
+      throw new AppError('VALIDATION_ERROR', 'Diese Aktion ist gerade nicht möglich.');
     }
     const done = step.payout !== null;
     const now = this.now();
@@ -665,7 +725,20 @@ export class CasinoService {
   }
 
   private stakeOf(type: string, input: CasinoPlayInput): bigint {
-    if (['SLOT', 'BLACKJACK', 'CRASH', 'PLINKO', 'MINES'].includes(type)) {
+    if (
+      [
+        'SLOT',
+        'BLACKJACK',
+        'CRASH',
+        'PLINKO',
+        'MINES',
+        'DICE',
+        'KENO',
+        'WHEEL',
+        'HILO',
+        'VIDEO_POKER',
+      ].includes(type)
+    ) {
       if (!Number.isSafeInteger(input.stake) || input.stake! <= 0)
         throw new AppError('VALIDATION_ERROR', 'Ungültiger Einsatz.');
       return BigInt(input.stake!);
@@ -690,4 +763,51 @@ export class CasinoService {
     }
     return total;
   }
+}
+
+/** Multi-step games and the action that opens a round. */
+const STEP_GAMES: Partial<Record<string, CasinoPlayInput['action']>> = {
+  MINES: 'start',
+  HILO: 'start',
+  VIDEO_POKER: 'deal',
+};
+
+type StepAction =
+  | { type: 'reveal'; tile: number }
+  | { type: 'cashout' }
+  | { type: 'higher' | 'lower' | 'skip' }
+  | { type: 'draw'; holds: number[] };
+
+function stepAction(type: string, input: CasinoPlayInput): StepAction | null {
+  if (input.action === 'cashout' && (type === 'MINES' || type === 'HILO'))
+    return { type: 'cashout' };
+  if (type === 'MINES' && input.action === 'reveal' && input.tile !== undefined)
+    return { type: 'reveal', tile: input.tile };
+  if (type === 'HILO' && ['higher', 'lower', 'skip'].includes(input.action))
+    return { type: input.action as 'higher' | 'lower' | 'skip' };
+  if (type === 'VIDEO_POKER' && input.action === 'draw')
+    return { type: 'draw', holds: input.holds ?? [] };
+  return null;
+}
+
+/** Applies an action with the game's engine; throws RangeError for one it refuses. */
+function runStep(
+  type: string,
+  state: unknown,
+  action: StepAction,
+  stake: bigint,
+): { result: CasinoRoundResult; state: { actions: string[] }; payout: bigint | null } {
+  if (type === 'MINES' && (action.type === 'reveal' || action.type === 'cashout'))
+    return actMines(state as MinesState, action, stake);
+  if (
+    type === 'HILO' &&
+    (action.type === 'higher' ||
+      action.type === 'lower' ||
+      action.type === 'skip' ||
+      action.type === 'cashout')
+  )
+    return actHilo(state as HiloState, action, stake);
+  if (type === 'VIDEO_POKER' && action.type === 'draw')
+    return drawPoker(state as PokerState, action.holds, stake);
+  throw new RangeError(`action ${action.type} does not belong to ${type}`);
 }

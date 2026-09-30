@@ -188,6 +188,11 @@ export const CasinoGameType = {
   CRASH: 'CRASH',
   PLINKO: 'PLINKO',
   MINES: 'MINES',
+  DICE: 'DICE',
+  KENO: 'KENO',
+  WHEEL: 'WHEEL',
+  HILO: 'HILO',
+  VIDEO_POKER: 'VIDEO_POKER',
 } as const;
 export type CasinoGameType = (typeof CasinoGameType)[keyof typeof CasinoGameType];
 export const CASINO_GAME_TYPES = values(CasinoGameType);

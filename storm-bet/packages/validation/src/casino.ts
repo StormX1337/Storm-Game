@@ -41,6 +41,11 @@ export const casinoPlaySchema = z
       'start',
       'reveal',
       'cashout',
+      'roll',
+      'draw',
+      'higher',
+      'lower',
+      'skip',
     ]),
     /** Crash: cash-out multiplier set before the round. */
     target: z.number().min(1.01).max(100).optional(),
@@ -50,6 +55,13 @@ export const casinoPlaySchema = z
     mines: z.number().int().min(1).max(24).optional(),
     /** Mines: tile to reveal (0–24). */
     tile: z.number().int().min(0).max(24).optional(),
+    /** Dice: win chance in percent and which side of the roll wins. */
+    chance: z.number().int().min(1).max(95).optional(),
+    direction: z.enum(['under', 'over']).optional(),
+    /** Keno: 1–10 numbers of 1–40. */
+    picks: z.array(z.number().int().min(1).max(40)).min(1).max(10).optional(),
+    /** Video poker: positions (0–4) kept at the draw. */
+    holds: z.array(z.number().int().min(0).max(4)).max(5).optional(),
     stake: positiveMoneyMinor.optional(),
     bets: z.array(rouletteBet).min(1).max(20).optional(),
     sides: z.array(baccaratBet).min(1).max(3).optional(),

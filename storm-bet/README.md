@@ -34,7 +34,7 @@ keinen Echtgeldbetrieb; der entsprechende Schalter ist technisch gesperrt.
 - Live-Updates per Server-Sent Events (Quoten, Marktstatus, Spielstand)
 - **Casino (DEMO MODE – No real money)**: Lobby mit Empfohlen/Beliebt/Neu, Kategorien (Slots, Roulette,
   Blackjack, Baccarat, Tischspiele, Live Casino), Suche und Favoriten; spielbare Demo-Versionen von Slots,
-  europäischem Roulette, Blackjack, Baccarat sowie Sofortspiele Crash, Mines und Plinko – jede Runde serverseitig entschieden und gespeichert;
+  europäischem Roulette, Blackjack, Baccarat sowie Sofortspiele Crash, Mines, Plinko, Dice, Keno, Glücksrad, Hi-Lo und Video Poker (Jacks or Better) – jede Runde serverseitig entschieden und gespeichert;
   Casino-Verlauf unter `/casino/history`
 - Navigation: Sport, Live, Casino, Aktionen, Meine Wetten, Wallet, Profil; mobile Bottom-Navigation
 - Dashboard: Guthaben, offene/abgerechnete Wetten, Wetthistorie mit Quoten-Snapshot, Transaktionen, Profil,

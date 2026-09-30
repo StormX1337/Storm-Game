@@ -2,10 +2,14 @@ import type { ProviderCasinoCategory, ProviderCasinoGame } from '../provider';
 import { BACCARAT_RTP } from '../games/baccarat';
 import { BLACKJACK_RTP } from '../games/blackjack';
 import { CRASH_RTP } from '../games/crash';
+import { DICE_RTP } from '../games/dice';
+import { HILO_RTP } from '../games/hilo';
+import { kenoRtp } from '../games/keno';
 import { MINES_RTP } from '../games/mines';
 import { plinkoRtp } from '../games/plinko';
 import { ROULETTE_RTP } from '../games/roulette';
 import { SLOT_RTP } from '../games/slots';
+import { wheelRtp } from '../games/wheel';
 
 /** Original game names and artwork parameters; no third-party titles or designs. */
 export const MOCK_CATEGORIES: ProviderCasinoCategory[] = [
@@ -122,6 +126,51 @@ export const MOCK_GAMES: ProviderCasinoGame[] = [
     Math.min(plinkoRtp('low'), plinkoRtp('medium'), plinkoRtp('high')),
     'Die Kugel fällt durch 12 Reihen Stifte in ein Gewinnfach. Drei Risikostufen.',
     { from: '#172554', to: '#2563eb', accent: '#fb923c', motif: 'pegs' },
+  ),
+  instant(
+    8,
+    'storm-dice',
+    'Storm Dice',
+    'DICE',
+    DICE_RTP,
+    'Wähle deine Gewinnchance und ob der Wurf darunter oder darüber landet. Je kleiner die Chance, desto höher der Gewinn.',
+    { from: '#1f2937', to: '#0891b2', accent: '#a3e635', motif: 'dice' },
+  ),
+  instant(
+    9,
+    'storm-keno',
+    'Storm Keno',
+    'KENO',
+    Math.min(...Array.from({ length: 10 }, (_, i) => kenoRtp(i + 1))),
+    'Tippe 1 bis 10 Zahlen von 1 bis 40. Zehn Zahlen werden gezogen – je mehr Treffer, desto mehr Gewinn.',
+    { from: '#3b0764', to: '#9333ea', accent: '#fcd34d', motif: 'balls' },
+  ),
+  instant(
+    11,
+    'storm-wheel',
+    'Glücksrad',
+    'WHEEL',
+    wheelRtp(),
+    'Ein Dreh, 50 Felder: bis zu 7-facher Einsatz.',
+    { from: '#7c2d12', to: '#f59e0b', accent: '#fef3c7', motif: 'wheel' },
+  ),
+  instant(
+    12,
+    'storm-hilo',
+    'Storm Hi-Lo',
+    'HILO',
+    HILO_RTP,
+    'Höher oder tiefer? Rate die nächste Karte, der Gewinn wächst mit jedem Treffer. Aussteigen jederzeit.',
+    { from: '#064e3b', to: '#059669', accent: '#fca5a5', motif: 'arrows' },
+  ),
+  instant(
+    13,
+    'storm-poker',
+    'Jacks or Better',
+    'VIDEO_POKER',
+    0.973,
+    'Video Poker: fünf Karten, halten, ziehen. Ab einem Paar Buben gewinnt die Hand.',
+    { from: '#111827', to: '#b91c1c', accent: '#fde68a', motif: 'spades' },
   ),
   slot(
     10,

@@ -37,3 +37,14 @@ export {
   MINES_TILES,
   type MinesState,
 } from './games/mines';
+export { rollDice, diceMultiplier, DICE_RTP } from './games/dice';
+export { playKeno, kenoRtp, KENO_PAYTABLE, KENO_NUMBERS, KENO_DRAWN } from './games/keno';
+export { spinWheel, wheelRtp, WHEEL_SEGMENTS } from './games/wheel';
+export { startHilo, actHilo, hiloChance, HILO_RTP, type HiloState } from './games/hilo';
+export {
+  dealPoker,
+  drawPoker,
+  evaluateHand,
+  POKER_PAYTABLE,
+  type PokerState,
+} from './games/video-poker';
