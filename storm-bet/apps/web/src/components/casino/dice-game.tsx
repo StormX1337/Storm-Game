@@ -5,11 +5,13 @@ import { Button, cn } from '@storm-bet/ui';
 import { useState } from 'react';
 import { formatMoney } from '@/lib/format';
 import { GameShell, StakeControl, useCasinoPlay } from './controls';
+import { useT } from '@/i18n/client';
 
 /** Same formula as the server: 97 % ÷ chance, cut to hundredths. */
 const multiplierFor = (chance: number) => Math.floor(9700 / chance) / 100;
 
 export function DiceGame({ game, sessionId }: { game: CasinoGameDto; sessionId: string }) {
+  const t = useT();
   const { play, busy } = useCasinoPlay(game.id, sessionId);
   const [stake, setStake] = useState(Math.max(game.minStake, 100));
   const [chance, setChance] = useState(50);
@@ -51,7 +53,7 @@ export function DiceGame({ game, sessionId }: { game: CasinoGameDto; sessionId: 
         ) : null}
       </div>
       <p className="mt-4 text-center text-sm text-white/70">
-        Gewinn bei {direction === 'under' ? 'unter' : 'mindestens'} {threshold.toFixed(2)} ·{' '}
+        {t('Gewinn bei')} {direction === 'under' ? 'unter' : 'mindestens'} {threshold.toFixed(2)} ·{' '}
         {multiplierFor(chance).toFixed(2)}×
         {last ? ` · ${last.result.won ? `+${formatMoney(last.payout)}` : 'verloren'}` : ''}
       </p>
@@ -69,7 +71,7 @@ export function DiceGame({ game, sessionId }: { game: CasinoGameDto; sessionId: 
       />
       <div className="space-y-2">
         <div className="flex justify-between text-xs text-fg-muted">
-          <span>Gewinnchance</span>
+          <span>{t('Gewinnchance')}</span>
           <span className="tabular">
             {chance} % · {multiplierFor(chance).toFixed(2)}×
           </span>
@@ -81,10 +83,10 @@ export function DiceGame({ game, sessionId }: { game: CasinoGameDto; sessionId: 
           value={chance}
           onChange={(e) => setChance(Number(e.target.value))}
           className="w-full accent-[var(--color-accent)]"
-          aria-label="Gewinnchance in Prozent"
+          aria-label={t('Gewinnchance in Prozent')}
           disabled={busy}
         />
-        <div className="grid grid-cols-2 gap-1.5" role="radiogroup" aria-label="Richtung">
+        <div className="grid grid-cols-2 gap-1.5" role="radiogroup" aria-label={t('Richtung')}>
           {(['under', 'over'] as const).map((d) => (
             <button
               key={d}
@@ -99,7 +101,7 @@ export function DiceGame({ game, sessionId }: { game: CasinoGameDto; sessionId: 
                   : 'border-border text-fg-muted hover:text-fg',
               )}
             >
-              {d === 'under' ? 'Darunter' : 'Darüber'}
+              {d === 'under' ? t('Darunter') : t('Darüber')}
             </button>
           ))}
         </div>
@@ -112,7 +114,7 @@ export function DiceGame({ game, sessionId }: { game: CasinoGameDto; sessionId: 
         data-testid="dice-play"
         data-play
       >
-        {busy ? 'Würfelt …' : 'Würfeln'}
+        {busy ? t('Würfelt …') : t('Würfeln')}
       </Button>
     </>
   );

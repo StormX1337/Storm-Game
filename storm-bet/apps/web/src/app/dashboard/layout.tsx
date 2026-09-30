@@ -5,11 +5,13 @@ import { DemoBanner } from '@/components/shell/demo-banner';
 import { Footer } from '@/components/shell/footer';
 import { MobileTabBar } from '@/components/shell/mobile-tab-bar';
 import { Header } from '@/components/shell/header';
+import { getT } from '@/i18n/server';
 import { getSessionUser } from '@/lib/server-api';
 
-export const metadata: Metadata = {
-  title: { default: 'Mein Konto', template: '%s · Mein Konto · STORM BET' },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return { title: { default: t('Mein Konto'), template: `%s · ${t('Mein Konto')} · STORM BET` } };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {

@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import { LiveDot } from '../sportsbook/live-indicator';
 import { Brand } from './brand';
 import { UserMenu } from './user-menu';
+import { useT } from '@/i18n/client';
 
 const NAV = [
   { href: '/sports', label: 'Sport' },
@@ -18,13 +19,14 @@ const NAV = [
 ];
 
 export function Header({ liveCount }: { liveCount?: number }) {
+  const t = useT();
   const pathname = usePathname();
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-bg/85 backdrop-blur supports-[backdrop-filter]:bg-bg/70">
       <div className="mx-auto flex h-14 max-w-[1600px] items-center gap-2 px-4 sm:gap-4 lg:px-6">
         <Brand />
         {/* Phones use the bottom tab bar instead. */}
-        <nav aria-label="Hauptnavigation" className="hidden items-center gap-1 md:flex">
+        <nav aria-label={t('Hauptnavigation')} className="hidden items-center gap-1 md:flex">
           {NAV.map((item, i) => {
             const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
             return (
@@ -38,7 +40,7 @@ export function Header({ liveCount }: { liveCount?: number }) {
                 )}
               >
                 {item.live ? <LiveDot /> : null}
-                {item.label}
+                {t(item.label)}
                 {item.live && liveCount ? (
                   <span className="tabular text-xs text-fg-subtle">{liveCount}</span>
                 ) : null}

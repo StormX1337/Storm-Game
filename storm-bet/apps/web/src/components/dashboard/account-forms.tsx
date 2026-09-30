@@ -37,8 +37,10 @@ import { useForm } from 'react-hook-form';
 import { ApiError, api, errorMessage } from '@/lib/api-client';
 import { formatDateTime, formatMoney, formatRelative, parseStake, stakeInput } from '@/lib/format';
 import { LIMIT_LABELS } from '@/lib/labels';
+import { useT } from '@/i18n/client';
 
 export function ProfileForm({ profile }: { profile: ProfileDto }) {
+  const t = useT();
   const router = useRouter();
   const form = useForm<UpdateProfileInput>({
     resolver: zodResolver(updateProfileSchema),
@@ -48,7 +50,7 @@ export function ProfileForm({ profile }: { profile: ProfileDto }) {
   const onSubmit = form.handleSubmit(async (values) => {
     try {
       await api('/account/profile', { method: 'PATCH', body: values });
-      toast.success('Profil gespeichert');
+      toast.success(t('Profil gespeichert'));
       form.reset(values);
       router.refresh();
     } catch (e) {
@@ -62,34 +64,38 @@ export function ProfileForm({ profile }: { profile: ProfileDto }) {
     <Card>
       <CardHeader>
         <div>
-          <CardTitle>Persönliche Angaben</CardTitle>
-          <CardDescription>Dein Anzeigename erscheint nur in deinem Konto.</CardDescription>
+          <CardTitle>{t('Persönliche Angaben')}</CardTitle>
+          <CardDescription>{t('Dein Anzeigename erscheint nur in deinem Konto.')}</CardDescription>
         </div>
       </CardHeader>
       <CardContent>
         <form onSubmit={onSubmit} className="grid gap-4 sm:grid-cols-2" noValidate>
           <Field
-            label="E-Mail-Adresse"
+            label={t('E-Mail-Adresse')}
             htmlFor="email"
-            hint={profile.emailVerified ? 'Bestätigt' : 'Noch nicht bestätigt'}
+            hint={profile.emailVerified ? t('Bestätigt') : t('Noch nicht bestätigt')}
           >
             <Input id="email" value={profile.email} disabled readOnly />
           </Field>
-          <Field label="Anzeigename" htmlFor="displayName" error={errors.displayName?.message}>
+          <Field
+            label={t('Anzeigename')}
+            htmlFor="displayName"
+            error={t(errors.displayName?.message)}
+          >
             <Input
               id="displayName"
               invalid={!!errors.displayName}
               {...form.register('displayName')}
             />
           </Field>
-          <Field label="Land" htmlFor="country" error={errors.country?.message}>
+          <Field label={t('Land')} htmlFor="country" error={t(errors.country?.message)}>
             <NativeSelect id="country" {...form.register('country')}>
               {[
-                ['DE', 'Deutschland'],
-                ['AT', 'Österreich'],
-                ['CH', 'Schweiz'],
-                ['LU', 'Luxemburg'],
-                ['NL', 'Niederlande'],
+                ['DE', t('Deutschland')],
+                ['AT', t('Österreich')],
+                ['CH', t('Schweiz')],
+                ['LU', t('Luxemburg')],
+                ['NL', t('Niederlande')],
               ].map(([code, name]) => (
                 <option key={code} value={code}>
                   {name}
@@ -98,15 +104,15 @@ export function ProfileForm({ profile }: { profile: ProfileDto }) {
             </NativeSelect>
           </Field>
           <Field
-            label="Identitätsprüfung (KYC)"
+            label={t('Identitätsprüfung (KYC)')}
             htmlFor="kyc"
-            hint="Nur für einen künftigen Echtgeldbetrieb erforderlich."
+            hint={t('Nur für einen künftigen Echtgeldbetrieb erforderlich.')}
           >
             <Input
               id="kyc"
               value={
                 profile.kycStatus === 'NOT_REQUIRED'
-                  ? 'Nicht erforderlich (Demo)'
+                  ? t('Nicht erforderlich (Demo)')
                   : profile.kycStatus
               }
               disabled
@@ -115,7 +121,7 @@ export function ProfileForm({ profile }: { profile: ProfileDto }) {
           </Field>
           <div className="sm:col-span-2">
             <Button type="submit" loading={isSubmitting} disabled={!isDirty}>
-              Speichern
+              {t('Speichern')}
             </Button>
           </div>
         </form>
@@ -125,6 +131,7 @@ export function ProfileForm({ profile }: { profile: ProfileDto }) {
 }
 
 export function ChangePasswordForm() {
+  const t = useT();
   const form = useForm<ChangePasswordInput>({
     resolver: zodResolver(changePasswordSchema),
     defaultValues: { currentPassword: '', newPassword: '' },
@@ -137,8 +144,8 @@ export function ChangePasswordForm() {
       });
       toast.success(
         result.otherSessionsRevoked
-          ? `Passwort geändert · ${result.otherSessionsRevoked} andere Sitzung(en) beendet`
-          : 'Passwort geändert',
+          ? t('Passwort geändert · {0} andere Sitzung(en) beendet', [result.otherSessionsRevoked])
+          : t('Passwort geändert'),
       );
       form.reset();
     } catch (e) {
@@ -152,16 +159,18 @@ export function ChangePasswordForm() {
     <Card>
       <CardHeader>
         <div>
-          <CardTitle>Passwort ändern</CardTitle>
-          <CardDescription>Andere angemeldete Geräte werden dabei abgemeldet.</CardDescription>
+          <CardTitle>{t('Passwort ändern')}</CardTitle>
+          <CardDescription>
+            {t('Andere angemeldete Geräte werden dabei abgemeldet.')}
+          </CardDescription>
         </div>
       </CardHeader>
       <CardContent>
         <form onSubmit={onSubmit} className="grid gap-4 sm:grid-cols-2" noValidate>
           <Field
-            label="Aktuelles Passwort"
+            label={t('Aktuelles Passwort')}
             htmlFor="currentPassword"
-            error={errors.currentPassword?.message}
+            error={t(errors.currentPassword?.message)}
           >
             <Input
               id="currentPassword"
@@ -171,7 +180,11 @@ export function ChangePasswordForm() {
               {...form.register('currentPassword')}
             />
           </Field>
-          <Field label="Neues Passwort" htmlFor="newPassword" error={errors.newPassword?.message}>
+          <Field
+            label={t('Neues Passwort')}
+            htmlFor="newPassword"
+            error={t(errors.newPassword?.message)}
+          >
             <Input
               id="newPassword"
               type="password"
@@ -182,7 +195,7 @@ export function ChangePasswordForm() {
           </Field>
           <div className="sm:col-span-2">
             <Button type="submit" loading={isSubmitting}>
-              Passwort ändern
+              {t('Passwort ändern')}
             </Button>
           </div>
         </form>
@@ -192,6 +205,7 @@ export function ChangePasswordForm() {
 }
 
 export function SessionsList({ sessions }: { sessions: SessionInfoDto[] }) {
+  const t = useT();
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const run = async (key: string, fn: () => Promise<unknown>, message: string) => {
@@ -210,8 +224,8 @@ export function SessionsList({ sessions }: { sessions: SessionInfoDto[] }) {
     <Card>
       <CardHeader>
         <div>
-          <CardTitle>Aktive Sitzungen</CardTitle>
-          <CardDescription>Geräte, auf denen du angemeldet bist.</CardDescription>
+          <CardTitle>{t('Aktive Sitzungen')}</CardTitle>
+          <CardDescription>{t('Geräte, auf denen du angemeldet bist.')}</CardDescription>
         </div>
         <Button
           size="sm"
@@ -222,11 +236,11 @@ export function SessionsList({ sessions }: { sessions: SessionInfoDto[] }) {
             void run(
               'others',
               () => api('/account/sessions/revoke-others', { method: 'POST' }),
-              'Andere Sitzungen beendet',
+              t('Andere Sitzungen beendet'),
             )
           }
         >
-          <LogOut /> Andere abmelden
+          <LogOut /> {t('Andere abmelden')}
         </Button>
       </CardHeader>
       <ul className="divide-y divide-border border-t border-border">
@@ -234,14 +248,14 @@ export function SessionsList({ sessions }: { sessions: SessionInfoDto[] }) {
           <li key={s.id} className="flex items-center gap-3 px-4 py-3">
             <Laptop className="size-4 shrink-0 text-fg-muted" aria-hidden="true" />
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm">{s.userAgent ?? 'Unbekanntes Gerät'}</p>
+              <p className="truncate text-sm">{s.userAgent ?? t('Unbekanntes Gerät')}</p>
               <p className="text-xs text-fg-subtle">
-                {s.ip ?? 'IP unbekannt'} · aktiv {formatRelative(s.lastSeenAt)} · angemeldet{' '}
-                {formatDateTime(s.createdAt)}
+                {s.ip ?? t('IP unbekannt')} {t('· aktiv')} {t(formatRelative(s.lastSeenAt))}{' '}
+                {t('· angemeldet')} {formatDateTime(s.createdAt)}
               </p>
             </div>
             {s.current ? (
-              <Badge variant="accent">Dieses Gerät</Badge>
+              <Badge variant="accent">{t('Dieses Gerät')}</Badge>
             ) : (
               <Button
                 size="sm"
@@ -251,11 +265,11 @@ export function SessionsList({ sessions }: { sessions: SessionInfoDto[] }) {
                   void run(
                     s.id,
                     () => api(`/account/sessions/${s.id}`, { method: 'DELETE' }),
-                    'Sitzung beendet',
+                    t('Sitzung beendet'),
                   )
                 }
               >
-                Abmelden
+                {t('Abmelden')}
               </Button>
             )}
           </li>
@@ -266,20 +280,21 @@ export function SessionsList({ sessions }: { sessions: SessionInfoDto[] }) {
 }
 
 export function LogoutEverywhere() {
+  const t = useT();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   return (
     <>
       <Button variant="outline" onClick={() => setOpen(true)}>
-        Überall abmelden
+        {t('Überall abmelden')}
       </Button>
       <ConfirmDialog
         open={open}
         onOpenChange={setOpen}
-        title="Auf allen Geräten abmelden?"
-        description="Alle Sitzungen – auch diese – werden sofort beendet."
-        confirmLabel="Überall abmelden"
+        title={t('Auf allen Geräten abmelden?')}
+        description={t('Alle Sitzungen – auch diese – werden sofort beendet.')}
+        confirmLabel={t('Überall abmelden')}
         destructive
         loading={busy}
         onConfirm={async () => {
@@ -299,6 +314,7 @@ export function LogoutEverywhere() {
 }
 
 function LimitRow({ type, current }: { type: LimitType; current: LimitDto | undefined }) {
+  const t = useT();
   const router = useRouter();
   const [value, setValue] = useState(current ? stakeInput(current.amount) : '');
   const [busy, setBusy] = useState(false);
@@ -311,8 +327,8 @@ function LimitRow({ type, current }: { type: LimitType; current: LimitDto | unde
       });
       toast.success(
         result.appliesImmediately
-          ? 'Limit gilt ab sofort'
-          : 'Änderung gilt nach 24 Stunden Bedenkzeit',
+          ? t('Limit gilt ab sofort')
+          : t('Änderung gilt nach 24 Stunden Bedenkzeit'),
       );
       router.refresh();
     } catch (e) {
@@ -325,18 +341,21 @@ function LimitRow({ type, current }: { type: LimitType; current: LimitDto | unde
   return (
     <li className="grid gap-3 px-4 py-4 sm:grid-cols-[1fr_auto] sm:items-end">
       <div className="space-y-1">
-        <p className="text-sm font-medium">{LIMIT_LABELS[type]}</p>
+        <p className="text-sm font-medium">{t(LIMIT_LABELS[type])}</p>
         <p className="text-xs text-fg-muted">
           {current ? (
             <>
-              Aktuell {formatMoney(current.amount)}
-              {type !== 'STAKE_PER_BET' ? ` · genutzt ${formatMoney(current.used)}` : ''}
+              {t('Aktuell')} {formatMoney(current.amount)}
+              {type !== 'STAKE_PER_BET' ? t(' · genutzt {0}', [formatMoney(current.used)]) : ''}
               {current.pendingAmount != null && current.pendingEffectiveAt
-                ? ` · geplant: ${current.pendingAmount < 0 ? 'Aufhebung' : formatMoney(current.pendingAmount)} ab ${formatDateTime(current.pendingEffectiveAt)}`
+                ? t(' · geplant: {0} ab {1}', [
+                    current.pendingAmount < 0 ? t('Aufhebung') : formatMoney(current.pendingAmount),
+                    formatDateTime(current.pendingEffectiveAt),
+                  ])
                 : ''}
             </>
           ) : (
-            'Kein Limit gesetzt'
+            t('Kein Limit gesetzt')
           )}
         </p>
       </div>
@@ -344,10 +363,10 @@ function LimitRow({ type, current }: { type: LimitType; current: LimitDto | unde
         <div className="relative w-36">
           <Input
             inputMode="decimal"
-            placeholder="z. B. 50,00"
+            placeholder={t('z. B. 50,00')}
             value={value}
             onChange={(e) => setValue(e.target.value)}
-            aria-label={`${LIMIT_LABELS[type]} in €`}
+            aria-label={t('{0} in €', [t(LIMIT_LABELS[type])])}
             className="pr-14 text-right"
           />
           <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-fg-subtle">
@@ -360,11 +379,11 @@ function LimitRow({ type, current }: { type: LimitType; current: LimitDto | unde
           disabled={parsed === null}
           onClick={() => parsed !== null && void save(parsed)}
         >
-          Setzen
+          {t('Setzen')}
         </Button>
         {current ? (
           <Button size="md" variant="ghost" disabled={busy} onClick={() => void save(null)}>
-            Aufheben
+            {t('Aufheben')}
           </Button>
         ) : null}
       </div>
@@ -373,13 +392,16 @@ function LimitRow({ type, current }: { type: LimitType; current: LimitDto | unde
 }
 
 export function LimitsCard({ limits }: { limits: LimitDto[] }) {
+  const t = useT();
   return (
     <Card>
       <CardHeader>
         <div>
-          <CardTitle>Einsatzlimits</CardTitle>
+          <CardTitle>{t('Einsatzlimits')}</CardTitle>
           <CardDescription>
-            Senkungen gelten sofort. Erhöhungen und Aufhebungen erst nach 24 Stunden Bedenkzeit.
+            {t(
+              'Senkungen gelten sofort. Erhöhungen und Aufhebungen erst nach 24 Stunden Bedenkzeit.',
+            )}
           </CardDescription>
         </div>
       </CardHeader>
@@ -401,6 +423,7 @@ const PERIODS: { value: SelfExclusionPeriod; label: string }[] = [
 ];
 
 export function SelfExclusionCard({ exclusion }: { exclusion: SelfExclusionDto }) {
+  const t = useT();
   const router = useRouter();
   const [period, setPeriod] = useState<SelfExclusionPeriod>('24h');
   const [open, setOpen] = useState(false);
@@ -410,11 +433,12 @@ export function SelfExclusionCard({ exclusion }: { exclusion: SelfExclusionDto }
       <CardHeader>
         <div>
           <CardTitle className="flex items-center gap-2">
-            <ShieldAlert className="size-4 text-warning" aria-hidden="true" /> Selbstsperre
+            <ShieldAlert className="size-4 text-warning" aria-hidden="true" /> {t('Selbstsperre')}
           </CardTitle>
           <CardDescription>
-            Während einer Selbstsperre kannst du keine Wetten platzieren. Sie kann nicht vorzeitig
-            beendet werden.
+            {t(
+              'Während einer Selbstsperre kannst du keine Wetten platzieren. Sie kann nicht vorzeitig beendet werden.',
+            )}
           </CardDescription>
         </div>
       </CardHeader>
@@ -424,12 +448,12 @@ export function SelfExclusionCard({ exclusion }: { exclusion: SelfExclusionDto }
             className="rounded-md border border-warning/30 bg-warning-soft p-3 text-sm text-warning"
             data-testid="self-exclusion-active"
           >
-            Selbstsperre aktiv{' '}
+            {t('Selbstsperre aktiv')}{' '}
             {exclusion.endsAt ? `bis ${formatDateTime(exclusion.endsAt)}` : '(unbefristet)'}.
           </p>
         ) : null}
         <div className="mt-3 flex flex-wrap items-end gap-2">
-          <Field label="Dauer" htmlFor="period" className="w-48">
+          <Field label={t('Dauer')} htmlFor="period" className="w-48">
             <NativeSelect
               id="period"
               value={period}
@@ -437,29 +461,32 @@ export function SelfExclusionCard({ exclusion }: { exclusion: SelfExclusionDto }
             >
               {PERIODS.map((p) => (
                 <option key={p.value} value={p.value}>
-                  {p.label}
+                  {t(p.label)}
                 </option>
               ))}
             </NativeSelect>
           </Field>
           <Button variant="destructive" onClick={() => setOpen(true)}>
-            Selbstsperre aktivieren
+            {t('Selbstsperre aktivieren')}
           </Button>
         </div>
       </CardContent>
       <ConfirmDialog
         open={open}
         onOpenChange={setOpen}
-        title="Selbstsperre wirklich aktivieren?"
-        description={`Für ${PERIODS.find((p) => p.value === period)?.label} kannst du keine Wetten platzieren. Das lässt sich nicht rückgängig machen.`}
-        confirmLabel="Verbindlich sperren"
+        title={t('Selbstsperre wirklich aktivieren?')}
+        description={t(
+          'Für {0} kannst du keine Wetten platzieren. Das lässt sich nicht rückgängig machen.',
+          [PERIODS.find((p) => p.value === period)?.label],
+        )}
+        confirmLabel={t('Verbindlich sperren')}
         destructive
         loading={busy}
         onConfirm={async () => {
           setBusy(true);
           try {
             await api('/account/self-exclusion', { body: { period, confirm: true } });
-            toast.success('Selbstsperre aktiviert');
+            toast.success(t('Selbstsperre aktiviert'));
             setOpen(false);
             router.refresh();
           } catch (e) {

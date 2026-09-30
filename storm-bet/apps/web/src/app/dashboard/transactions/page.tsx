@@ -8,14 +8,19 @@ import { TransactionsTable } from '@/components/dashboard/transactions-table';
 import { PageHeader } from '@/components/sportsbook/page-header';
 import { TRANSACTION_LABELS } from '@/lib/labels';
 import { serverApi } from '@/lib/server-api';
+import { getT } from '@/i18n/server';
 
-export const metadata: Metadata = { title: 'Transaktionen' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return { title: t('Transaktionen') };
+}
 
 export default async function TransactionsPage({
   searchParams,
 }: {
   searchParams: Promise<{ type?: string }>;
 }) {
+  const t = await getT();
   const { type: raw } = await searchParams;
   const type = (TRANSACTION_TYPES as readonly string[]).includes(raw ?? '') ? raw : undefined;
   const path = `/transactions?limit=25${type ? `&type=${type}` : ''}`;
@@ -28,22 +33,26 @@ export default async function TransactionsPage({
   return (
     <>
       <PageHeader
-        title="Transaktionen"
-        description="Jede Bewegung deines Demo-Guthabens – unveränderlich protokolliert."
+        title={t('Transaktionen')}
+        description={t('Jede Bewegung deines Demo-Guthabens – unveränderlich protokolliert.')}
       />
-      <nav className="scrollbar-none flex gap-1 overflow-x-auto" aria-label="Filter">
+      <nav className="scrollbar-none flex gap-1 overflow-x-auto" aria-label={t('Filter')}>
         <Link href="/dashboard/transactions" className={chip(!type)}>
-          Alle
+          {t('Alle')}
         </Link>
-        {TRANSACTION_TYPES.map((t) => (
-          <Link key={t} href={`/dashboard/transactions?type=${t}`} className={chip(type === t)}>
-            {TRANSACTION_LABELS[t]}
+        {TRANSACTION_TYPES.map((kind) => (
+          <Link
+            key={kind}
+            href={`/dashboard/transactions?type=${kind}`}
+            className={chip(type === kind)}
+          >
+            {t(TRANSACTION_LABELS[kind])}
           </Link>
         ))}
       </nav>
       <Card className="overflow-hidden">
         {page.items.length === 0 ? (
-          <EmptyState icon={<ArrowLeftRight />} title="Keine Transaktionen" />
+          <EmptyState icon={<ArrowLeftRight />} title={t('Keine Transaktionen')} />
         ) : (
           <TransactionsTable items={page.items} nextCursor={page.nextCursor} path={path} />
         )}

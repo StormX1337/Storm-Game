@@ -5,6 +5,7 @@ import { cn, EmptyState, Input } from '@storm-bet/ui';
 import { Search, Sparkles } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { GameCard } from './game-card';
+import { useT } from '@/i18n/client';
 
 function Section({
   title,
@@ -30,6 +31,7 @@ function Section({
 
 /** Casino lobby: search, category chips and curated rows, all client-side on one payload. */
 export function CasinoLobby({ lobby }: { lobby: CasinoLobbyDto }) {
+  const t = useT();
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<string>('all');
   const [favorites, setFavorites] = useState(
@@ -59,8 +61,8 @@ export function CasinoLobby({ lobby }: { lobby: CasinoLobbyDto }) {
   const byId = new Map(games.map((g) => [g.id, g]));
   const popular = lobby.popular.flatMap((id) => (byId.get(id) ? [byId.get(id)!] : []));
   const chips = [
-    { key: 'all', name: 'Alle' },
-    { key: 'favorites', name: `Favoriten${favorites.size ? ` (${favorites.size})` : ''}` },
+    { key: 'all', name: t('Alle') },
+    { key: 'favorites', name: t('Favoriten{0}', [favorites.size ? ` (${favorites.size})` : '']) },
     ...lobby.categories.filter((c) => c.gameCount > 0),
   ];
 
@@ -72,15 +74,15 @@ export function CasinoLobby({ lobby }: { lobby: CasinoLobbyDto }) {
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Spiel oder Anbieter suchen"
-            aria-label="Spiele suchen"
+            placeholder={t('Spiel oder Anbieter suchen')}
+            aria-label={t('Spiele suchen')}
             className="pl-9"
           />
         </div>
         <div
           className="scrollbar-none -mx-4 flex gap-2 overflow-x-auto px-4 sm:mx-0 sm:px-0"
           role="tablist"
-          aria-label="Kategorien"
+          aria-label={t('Kategorien')}
         >
           {chips.map((c) => (
             <button
@@ -95,7 +97,7 @@ export function CasinoLobby({ lobby }: { lobby: CasinoLobbyDto }) {
                   : 'border-border bg-surface text-fg-muted hover:text-fg',
               )}
             >
-              {c.name}
+              {t(c.name)}
             </button>
           ))}
         </div>
@@ -104,18 +106,18 @@ export function CasinoLobby({ lobby }: { lobby: CasinoLobbyDto }) {
       {category === 'all' && !search ? (
         <>
           <Section
-            title="Empfohlen"
+            title={t('Empfohlen')}
             games={games.filter((g) => g.isFeatured)}
             onFavorite={onFavorite}
           />
-          <Section title="Beliebt" games={popular.slice(0, 8)} onFavorite={onFavorite} />
-          <Section title="Neu" games={games.filter((g) => g.isNew)} onFavorite={onFavorite} />
+          <Section title={t('Beliebt')} games={popular.slice(0, 8)} onFavorite={onFavorite} />
+          <Section title={t('Neu')} games={games.filter((g) => g.isNew)} onFavorite={onFavorite} />
           {lobby.categories
             .filter((c) => c.gameCount > 0)
             .map((c) => (
               <Section
                 key={c.key}
-                title={c.name}
+                title={t(c.name)}
                 games={games.filter((g) => g.categories.includes(c.key))}
                 onFavorite={onFavorite}
               />
@@ -123,18 +125,18 @@ export function CasinoLobby({ lobby }: { lobby: CasinoLobbyDto }) {
         </>
       ) : filtered.length ? (
         <Section
-          title={chips.find((c) => c.key === category)?.name ?? 'Ergebnisse'}
+          title={chips.find((c) => c.key === category)?.name ?? t('Ergebnisse')}
           games={filtered}
           onFavorite={onFavorite}
         />
       ) : (
         <EmptyState
           icon={<Sparkles />}
-          title={category === 'favorites' ? 'Noch keine Favoriten' : 'Keine Spiele gefunden'}
+          title={category === 'favorites' ? t('Noch keine Favoriten') : t('Keine Spiele gefunden')}
           description={
             category === 'favorites'
-              ? 'Tippe auf das Herz eines Spiels, um es hier zu sammeln.'
-              : 'Versuche einen anderen Suchbegriff.'
+              ? t('Tippe auf das Herz eines Spiels, um es hier zu sammeln.')
+              : t('Versuche einen anderen Suchbegriff.')
           }
         />
       )}

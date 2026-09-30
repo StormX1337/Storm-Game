@@ -7,8 +7,10 @@ import { useState } from 'react';
 import { api, errorMessage } from '@/lib/api-client';
 import { formatMoney } from '@/lib/format';
 import { announceWalletChange } from '../providers/session';
+import { useT } from '@/i18n/client';
 
 export function TopUpButton() {
+  const t = useT();
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const topUp = async () => {
@@ -28,7 +30,7 @@ export function TopUpButton() {
   };
   return (
     <Button variant="secondary" onClick={() => void topUp()} loading={busy}>
-      Demo-Guthaben aufladen
+      {t('Demo-Guthaben aufladen')}
     </Button>
   );
 }

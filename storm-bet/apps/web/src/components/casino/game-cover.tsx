@@ -1,3 +1,5 @@
+'use client';
+
 import type { CasinoTheme } from '@storm-bet/types';
 import { cn } from '@storm-bet/ui';
 import {
@@ -18,6 +20,7 @@ import {
   Waves,
   Zap,
 } from 'lucide-react';
+import { useT } from '@/i18n/client';
 
 const MOTIF = {
   bolt: Zap,
@@ -50,13 +53,14 @@ export function GameCover({
   className?: string;
   large?: boolean;
 }) {
+  const t = useT();
   const Icon = MOTIF[theme.motif] ?? Sparkles;
   return (
     <div
       className={cn('relative isolate overflow-hidden', className)}
       style={{ background: `linear-gradient(135deg, ${theme.from}, ${theme.to})` }}
       role="img"
-      aria-label={`Cover ${name}`}
+      aria-label={t('Cover {0}', [t(name)])}
     >
       <div
         aria-hidden="true"

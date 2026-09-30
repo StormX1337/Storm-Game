@@ -5,16 +5,18 @@ import { cn, Table, Td, Th } from '@storm-bet/ui';
 import { formatDateTime, formatMoney } from '@/lib/format';
 import { TRANSACTION_LABELS } from '@/lib/labels';
 import { LoadMore } from './load-more';
+import { useT } from '@/i18n/client';
 
 function Row({ tx }: { tx: TransactionDto }) {
+  const t = useT();
   // What the player feels: the change of the available amount.
   const available = tx.amount - tx.reservedDelta;
   return (
     <tr>
       <Td className="whitespace-nowrap text-xs text-fg-muted">{formatDateTime(tx.createdAt)}</Td>
       <Td>
-        <p className="font-medium">{TRANSACTION_LABELS[tx.type]}</p>
-        <p className="text-xs text-fg-subtle">{tx.description}</p>
+        <p className="font-medium">{t(TRANSACTION_LABELS[tx.type])}</p>
+        <p className="text-xs text-fg-subtle">{t(tx.description)}</p>
       </Td>
       <Td
         className={cn(
@@ -29,7 +31,7 @@ function Row({ tx }: { tx: TransactionDto }) {
         {formatMoney(tx.balanceAfter, { unit: false })}
         {tx.reservedAfter ? (
           <span className="block text-fg-subtle">
-            davon reserviert {formatMoney(tx.reservedAfter, { unit: false })}
+            {t('davon reserviert')} {formatMoney(tx.reservedAfter, { unit: false })}
           </span>
         ) : null}
       </Td>
@@ -46,15 +48,16 @@ export function TransactionsTable({
   nextCursor: string | null;
   path: string;
 }) {
+  const t = useT();
   return (
     <>
       <Table>
         <thead>
           <tr>
-            <Th>Datum</Th>
-            <Th>Buchung</Th>
-            <Th className="text-right">Verfügbar Δ</Th>
-            <Th className="text-right">Kontostand</Th>
+            <Th>{t('Datum')}</Th>
+            <Th>{t('Buchung')}</Th>
+            <Th className="text-right">{t('Verfügbar Δ')}</Th>
+            <Th className="text-right">{t('Kontostand')}</Th>
           </tr>
         </thead>
         <tbody>

@@ -5,6 +5,7 @@ import { Button, cn } from '@storm-bet/ui';
 import { useEffect, useState } from 'react';
 import { formatMoney } from '@/lib/format';
 import { GameShell, StakeControl, useCasinoPlay } from './controls';
+import { useT } from '@/i18n/client';
 
 /** The server's table (display only): return per unit by picks and hits. */
 const PAYTABLE: Record<number, Record<number, number>> = {
@@ -21,6 +22,7 @@ const PAYTABLE: Record<number, Record<number, number>> = {
 };
 
 export function KenoGame({ game, sessionId }: { game: CasinoGameDto; sessionId: string }) {
+  const t = useT();
   const { play, busy } = useCasinoPlay(game.id, sessionId);
   const [stake, setStake] = useState(Math.max(game.minStake, 100));
   const [picks, setPicks] = useState<number[]>([]);
@@ -94,10 +96,14 @@ export function KenoGame({ game, sessionId }: { game: CasinoGameDto; sessionId: 
       </div>
       <p className="mt-4 text-center text-sm text-white/70" aria-live="polite">
         {!last
-          ? `${picks.length} von 10 gewählt`
+          ? t('{0} von 10 gewählt', [picks.length])
           : !done
-            ? 'Ziehung läuft …'
-            : `${last.result.hits.length} Treffer · ${last.result.multiplier}× · ${formatMoney(last.payout)}`}
+            ? t('Ziehung läuft …')
+            : t('{0} Treffer · {1}× · {2}', [
+                last.result.hits.length,
+                last.result.multiplier,
+                formatMoney(last.payout),
+              ])}
       </p>
     </div>
   );
@@ -116,16 +122,16 @@ export function KenoGame({ game, sessionId }: { game: CasinoGameDto; sessionId: 
         <div className="flex flex-wrap gap-1.5 text-xs">
           {Object.entries(table).map(([h, m]) => (
             <span key={h} className="tabular rounded bg-surface-2 px-2 py-1 text-fg-muted">
-              {h} Treffer: <span className="font-semibold text-fg">{m}×</span>
+              {h} {t('Treffer:')} <span className="font-semibold text-fg">{m}×</span>
             </span>
           ))}
         </div>
       ) : (
-        <p className="text-xs text-fg-muted">Tippe 1 bis 10 Zahlen an.</p>
+        <p className="text-xs text-fg-muted">{t('Tippe 1 bis 10 Zahlen an.')}</p>
       )}
       <div className="grid grid-cols-2 gap-1.5">
         <Button variant="secondary" size="sm" onClick={quick} disabled={busy}>
-          Zufallstipp
+          {t('Zufallstipp')}
         </Button>
         <Button
           variant="secondary"
@@ -136,7 +142,7 @@ export function KenoGame({ game, sessionId }: { game: CasinoGameDto; sessionId: 
           }}
           disabled={busy}
         >
-          Leeren
+          {t('Leeren')}
         </Button>
       </div>
       <Button
@@ -147,7 +153,7 @@ export function KenoGame({ game, sessionId }: { game: CasinoGameDto; sessionId: 
         data-testid="keno-play"
         data-play
       >
-        {busy ? 'Zieht …' : 'Ziehen'}
+        {busy ? t('Zieht …') : t('Ziehen')}
       </Button>
     </>
   );

@@ -100,6 +100,10 @@ export class Client {
     }
   }
 
+  setCookie(name: string, value: string) {
+    this.cookies.set(name, value);
+  }
+
   get hasSession() {
     return this.cookies.has(SESSION_COOKIE);
   }

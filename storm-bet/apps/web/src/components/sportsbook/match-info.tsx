@@ -13,6 +13,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { api } from '@/lib/api-client';
 import { formatDateTime } from '@/lib/format';
 import { useLiveEvent } from './hooks';
+import { useT } from '@/i18n/client';
 
 const INCIDENT_LABELS: Record<IncidentKind, string> = {
   KICK_OFF: 'Anpfiff',
@@ -41,6 +42,7 @@ type Tab = 'ticker' | 'form' | 'h2h' | 'table';
 
 /** Live ticker, form, head-to-head and league table below the scoreboard. */
 export function MatchInfo({ event }: { event: EventDetailDto }) {
+  const t = useT();
   const live = useLiveEvent(event);
   const started = live.status !== 'SCHEDULED' && live.status !== 'POSTPONED';
   const [tab, setTab] = useState<Tab>(started ? 'ticker' : 'form');
@@ -78,20 +80,20 @@ export function MatchInfo({ event }: { event: EventDetailDto }) {
   }, [event.id]);
 
   const tabs: { key: Tab; label: string }[] = [
-    ...(started ? [{ key: 'ticker' as const, label: 'Live-Ticker' }] : []),
-    { key: 'form', label: 'Form' },
-    { key: 'h2h', label: 'Direkter Vergleich' },
-    ...(insights?.standings ? [{ key: 'table' as const, label: 'Tabelle' }] : []),
+    ...(started ? [{ key: 'ticker' as const, label: t('Live-Ticker') }] : []),
+    { key: 'form', label: t('Form') },
+    { key: 'h2h', label: t('Direkter Vergleich') },
+    ...(insights?.standings ? [{ key: 'table' as const, label: t('Tabelle') }] : []),
   ];
 
   return (
     <Card className="overflow-hidden" data-testid="match-info">
       <div className="border-b border-border px-2 pt-2">
         <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)}>
-          <TabsList aria-label="Spielinfos">
-            {tabs.map((t) => (
-              <TabsTrigger key={t.key} value={t.key}>
-                {t.label}
+          <TabsList aria-label={t('Spielinfos')}>
+            {tabs.map((item) => (
+              <TabsTrigger key={item.key} value={item.key}>
+                {item.label}
               </TabsTrigger>
             ))}
           </TabsList>
@@ -107,7 +109,7 @@ export function MatchInfo({ event }: { event: EventDetailDto }) {
               <FormList team={event.away.name} games={insights.form.away} />
             </div>
           ) : (
-            <Muted>Lädt …</Muted>
+            <Muted>{t('Lädt …')}</Muted>
           )
         ) : tab === 'h2h' ? (
           <HeadToHead insights={insights} />
@@ -132,17 +134,20 @@ function Ticker({
   home: string;
   away: string;
 }) {
-  if (items === null) return <Muted>Lädt …</Muted>;
+  const t = useT();
+  if (items === null) return <Muted>{t('Lädt …')}</Muted>;
   if (items.length === 0)
-    return <Muted>Noch keine Ereignisse. Neue Tore, Karten und Ecken erscheinen hier.</Muted>;
+    return (
+      <Muted>{t('Noch keine Ereignisse. Neue Tore, Karten und Ecken erscheinen hier.')}</Muted>
+    );
   return (
     <ol className="space-y-1" data-testid="ticker">
       {items.map((i) => {
         const team = i.side === 'HOME' ? home : i.side === 'AWAY' ? away : null;
         const phase =
           i.kind === 'PERIOD_START' && i.period
-            ? `${PERIOD_LABELS[i.period] ?? i.period}`
-            : INCIDENT_LABELS[i.kind];
+            ? t(PERIOD_LABELS[i.period] ?? i.period)
+            : t(INCIDENT_LABELS[i.kind]);
         const major = i.kind === 'GOAL' || i.kind === 'RED_CARD';
         return (
           <li
@@ -180,6 +185,7 @@ const RESULT_STYLE = {
 const RESULT_LABEL = { W: 'S', D: 'U', L: 'N' } as const;
 
 function FormList({ team, games }: { team: string; games: FormEntryDto[] }) {
+  const t = useT();
   return (
     <div>
       <div className="mb-2 flex items-center justify-between gap-2">
@@ -200,7 +206,7 @@ function FormList({ team, games }: { team: string; games: FormEntryDto[] }) {
         </span>
       </div>
       {games.length === 0 ? (
-        <p className="text-xs text-fg-muted">Keine erfassten Spiele.</p>
+        <p className="text-xs text-fg-muted">{t('Keine erfassten Spiele.')}</p>
       ) : (
         <ul className="space-y-1 text-xs">
           {games.map((g) => (
@@ -220,8 +226,10 @@ function FormList({ team, games }: { team: string; games: FormEntryDto[] }) {
 }
 
 function HeadToHead({ insights }: { insights: EventInsightsDto | null }) {
-  if (!insights) return <Muted>Lädt …</Muted>;
-  if (insights.headToHead.length === 0) return <Muted>Keine erfassten Duelle dieser Teams.</Muted>;
+  const t = useT();
+  if (!insights) return <Muted>{t('Lädt …')}</Muted>;
+  if (insights.headToHead.length === 0)
+    return <Muted>{t('Keine erfassten Duelle dieser Teams.')}</Muted>;
   return (
     <ul className="space-y-1.5">
       {insights.headToHead.map((g) => (
@@ -239,24 +247,25 @@ function HeadToHead({ insights }: { insights: EventInsightsDto | null }) {
 }
 
 function Standings({ insights }: { insights: EventInsightsDto | null }) {
+  const t = useT();
   const table = insights?.standings;
-  if (!table) return <Muted>Keine Tabelle verfügbar.</Muted>;
+  if (!table) return <Muted>{t('Keine Tabelle verfügbar.')}</Muted>;
   return (
     <div>
       <p className="mb-2 text-xs text-fg-muted">
-        {table.competition} · Quelle: {table.source}
+        {table.competition} {t('· Quelle:')} {table.source}
       </p>
       <table className="tabular w-full text-xs">
         <thead className="text-fg-subtle">
           <tr>
             <th className="w-6 text-left font-normal">#</th>
-            <th className="text-left font-normal">Team</th>
-            <th className="w-7 font-normal">Sp</th>
+            <th className="text-left font-normal">{t('Team')}</th>
+            <th className="w-7 font-normal">{t('Sp')}</th>
             <th className="hidden w-7 font-normal sm:table-cell">S</th>
             <th className="hidden w-7 font-normal sm:table-cell">U</th>
             <th className="hidden w-7 font-normal sm:table-cell">N</th>
-            <th className="w-12 font-normal">Tore</th>
-            <th className="w-8 font-normal">Pkt</th>
+            <th className="w-12 font-normal">{t('Tore')}</th>
+            <th className="w-8 font-normal">{t('Pkt')}</th>
           </tr>
         </thead>
         <tbody>

@@ -17,6 +17,7 @@ import { BuilderSuggestions } from './builder-suggestions';
 import { eventName } from './event-row';
 import { useLiveEvent, useLiveMarketStatus } from './hooks';
 import { OddsButton, type OddsContext } from './odds-button';
+import { useT } from '@/i18n/client';
 
 const GROUPS: Record<SportKey, { key: string; label: string; types: MarketType[] }[]> = {
   football: [
@@ -87,6 +88,7 @@ function combineLines(markets: MarketDto[]) {
 }
 
 export function EventMarkets({ event }: { event: EventDetailDto }) {
+  const t = useT();
   const router = useRouter();
   const live = useLiveEvent(event);
   useRealtimeTopics([`event:${event.id}`]);
@@ -117,13 +119,15 @@ export function EventMarkets({ event }: { event: EventDetailDto }) {
           icon={<Timer />}
           title={
             live.status === 'FINISHED'
-              ? 'Das Event ist beendet'
+              ? t('Das Event ist beendet')
               : live.status === 'CANCELLED'
-                ? 'Das Event wurde abgesagt'
-                : 'Keine Märkte verfügbar'
+                ? t('Das Event wurde abgesagt')
+                : t('Keine Märkte verfügbar')
           }
           description={
-            live.status === 'FINISHED' ? 'Offene Wetten werden automatisch abgerechnet.' : undefined
+            live.status === 'FINISHED'
+              ? t('Offene Wetten werden automatisch abgerechnet.')
+              : undefined
           }
         />
       </Card>
@@ -156,13 +160,13 @@ export function EventMarkets({ event }: { event: EventDetailDto }) {
       <BuilderSuggestions event={event} />
       <div className="flex items-center gap-2">
         <Tabs value={tab} onValueChange={setTab} className="min-w-0 flex-1">
-          <TabsList aria-label="Marktgruppen">
-            <TabsTrigger value="all">Alle</TabsTrigger>
+          <TabsList aria-label={t('Marktgruppen')}>
+            <TabsTrigger value="all">{t('Alle')}</TabsTrigger>
             {groups
               .filter((g) => visible.some((m) => g.types.includes(m.type)))
               .map((g) => (
                 <TabsTrigger key={g.key} value={g.key}>
-                  {g.label}
+                  {t(g.label)}
                 </TabsTrigger>
               ))}
           </TabsList>
@@ -180,7 +184,7 @@ export function EventMarkets({ event }: { event: EventDetailDto }) {
             )}
             data-testid="builder-filter"
           >
-            Bet Builder
+            {t('Bet Builder')}
           </button>
         ) : null}
       </div>
@@ -218,6 +222,7 @@ function MarketCard({
   /** Pre-match 1X2: won early at a two-goal lead. */
   early?: boolean;
 }) {
+  const t = useT();
   const first = markets[0]!;
   const playerTotal = MARKET_DEFINITIONS[first.type].kind === 'PLAYER_TOTAL';
   const title = playerTotal
@@ -230,22 +235,24 @@ function MarketCard({
   return (
     <Card className={cn('overflow-hidden', wide && 'xl:col-span-2')} data-testid="market-card">
       <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
-        <h3 className="text-sm font-semibold">{title}</h3>
+        <h3 className="text-sm font-semibold">{t(title)}</h3>
         {early ? (
           <span
             className="ml-auto mr-2 rounded bg-up-soft px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-up"
-            title="Frühe Auszahlung: Führt dein Team mit 2 Toren, ist der Tipp sofort gewonnen."
+            title={t(
+              'Frühe Auszahlung: Führt dein Team mit 2 Toren, ist der Tipp sofort gewonnen.',
+            )}
             data-testid="early-payout-badge"
           >
-            2+ FRÜH
+            {t('2+ FRÜH')}
           </span>
         ) : null}
         {builder ? (
           <span
             className="rounded bg-accent-soft px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-accent-strong"
-            title="Mit anderen Tipps dieses Spiels im Bet Builder kombinierbar"
+            title={t('Mit anderen Tipps dieses Spiels im Bet Builder kombinierbar')}
           >
-            BET BUILDER
+            {t('BET BUILDER')}
           </span>
         ) : null}
       </div>
@@ -278,6 +285,7 @@ function MarketRow({
   player: boolean;
   playerTotal: boolean;
 }) {
+  const t = useT();
   const status = useLiveMarketStatus(market.id, market.status);
   const cols = player
     ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4'
@@ -292,8 +300,8 @@ function MarketRow({
     <div className="flex items-center gap-3">
       {playerTotal ? (
         // "Jayson Tatum – Punkte Über/Unter 27.5" → "Jayson Tatum"
-        <span className="w-28 shrink-0 truncate text-xs font-medium sm:w-40" title={market.name}>
-          {market.name.split(' – ')[0]}
+        <span className="w-28 shrink-0 truncate text-xs font-medium sm:w-40" title={t(market.name)}>
+          {t(market.name.split(' – ')[0])}
         </span>
       ) : null}
       {showLine ? (
@@ -307,13 +315,13 @@ function MarketRow({
             key={s.id}
             selection={s}
             context={{ ...context, marketStatus: status }}
-            label={shortLabel ? `${OUTCOME_LABELS[s.outcome]} · ${s.name}` : s.name}
+            label={shortLabel ? `${t(OUTCOME_LABELS[s.outcome])} · ${t(s.name)}` : t(s.name)}
             layout={player ? 'inline' : 'stacked'}
           />
         ))}
       </div>
       {status === 'SUSPENDED' ? (
-        <Lock className="size-3.5 shrink-0 text-fg-subtle" aria-label="Markt gesperrt" />
+        <Lock className="size-3.5 shrink-0 text-fg-subtle" aria-label={t('Markt gesperrt')} />
       ) : null}
     </div>
   );

@@ -18,6 +18,7 @@ import QRCode from 'qrcode';
 import { useEffect, useState } from 'react';
 import { api, errorMessage } from '@/lib/api-client';
 import { formatDateTime } from '@/lib/format';
+import { useT } from '@/i18n/client';
 
 type Stage =
   | { kind: 'idle' }
@@ -28,6 +29,7 @@ type Stage =
 
 /** Two-factor login with an authenticator app: set up, recovery codes, switch off. */
 export function TwoFactorCard({ initial }: { initial: TwoFactorStatusDto }) {
+  const t = useT();
   const [status, setStatus] = useState(initial);
   const [stage, setStage] = useState<Stage>({ kind: 'idle' });
   const [password, setPassword] = useState('');
@@ -68,14 +70,14 @@ export function TwoFactorCard({ initial }: { initial: TwoFactorStatusDto }) {
       const r = await api<{ recoveryCodes: string[] }>('/account/2fa/enable', { body: { code } });
       setStage({ kind: 'codes', codes: r.recoveryCodes });
       await refresh();
-      toast.success('Zwei-Faktor-Anmeldung aktiviert');
+      toast.success(t('Zwei-Faktor-Anmeldung aktiviert'));
     });
   const disable = () =>
     run(async () => {
       await api('/account/2fa/disable', { body: { password, code } });
       setStage({ kind: 'idle' });
       await refresh();
-      toast.success('Zwei-Faktor-Anmeldung deaktiviert');
+      toast.success(t('Zwei-Faktor-Anmeldung deaktiviert'));
     });
   const renew = () =>
     run(async () => {
@@ -91,15 +93,16 @@ export function TwoFactorCard({ initial }: { initial: TwoFactorStatusDto }) {
       <CardHeader>
         <div>
           <CardTitle className="flex items-center gap-2">
-            <ShieldCheck className="size-4" aria-hidden="true" /> Zwei-Faktor-Anmeldung
+            <ShieldCheck className="size-4" aria-hidden="true" /> {t('Zwei-Faktor-Anmeldung')}
           </CardTitle>
           <CardDescription>
-            Zusätzlich zum Passwort ein Code aus einer Authenticator-App (z. B. Google
-            Authenticator, Microsoft Authenticator, 1Password oder iPhone-Passwörter).
+            {t(
+              'Zusätzlich zum Passwort ein Code aus einer Authenticator-App (z. B. Google Authenticator, Microsoft Authenticator, 1Password oder iPhone-Passwörter).',
+            )}
           </CardDescription>
         </div>
         <Badge variant={status.enabled ? 'success' : 'outline'}>
-          {status.enabled ? 'Aktiv' : 'Aus'}
+          {status.enabled ? t('Aktiv') : t('Aus')}
         </Badge>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -112,8 +115,10 @@ export function TwoFactorCard({ initial }: { initial: TwoFactorStatusDto }) {
         {stage.kind === 'codes' ? (
           <div className="space-y-3">
             <p className="text-sm">
-              Deine <strong>Wiederherstellungscodes</strong> – jeder funktioniert einmal, falls du
-              dein Handy nicht hast. Bewahre sie sicher auf; sie werden nur jetzt angezeigt.
+              {t('Deine')} <strong>{t('Wiederherstellungscodes')}</strong>{' '}
+              {t(
+                '– jeder funktioniert einmal, falls du dein Handy nicht hast. Bewahre sie sicher auf; sie werden nur jetzt angezeigt.',
+              )}
             </p>
             <ul
               className="tabular grid grid-cols-2 gap-1.5 rounded-md bg-surface-2 p-3 font-mono text-sm"
@@ -130,13 +135,13 @@ export function TwoFactorCard({ initial }: { initial: TwoFactorStatusDto }) {
                 onClick={() =>
                   void navigator.clipboard
                     ?.writeText(stage.codes.join('\n'))
-                    .then(() => toast.success('Kopiert'))
+                    .then(() => toast.success(t('Kopiert')))
                 }
               >
-                <Copy /> Kopieren
+                <Copy /> {t('Kopieren')}
               </Button>
               <Button size="sm" onClick={() => setStage({ kind: 'idle' })}>
-                Gespeichert
+                {t('Gespeichert')}
               </Button>
             </div>
           </div>
@@ -148,21 +153,21 @@ export function TwoFactorCard({ initial }: { initial: TwoFactorStatusDto }) {
               width={180}
               height={180}
               className="rounded-md bg-white"
-              alt="QR-Code für die Authenticator-App"
+              alt={t('QR-Code für die Authenticator-App')}
               data-testid="totp-qr"
             />
             <div className="space-y-3 text-sm">
-              <p>1. QR-Code mit der App scannen – oder am Handy direkt öffnen:</p>
+              <p>{t('1. QR-Code mit der App scannen – oder am Handy direkt öffnen:')}</p>
               <Button asChild variant="secondary" size="sm">
-                <a href={stage.uri}>In Authenticator-App öffnen</a>
+                <a href={stage.uri}>{t('In Authenticator-App öffnen')}</a>
               </Button>
               <p className="text-xs text-fg-muted">
-                Oder manuell eingeben:{' '}
+                {t('Oder manuell eingeben:')}{' '}
                 <code className="break-all font-mono" data-testid="totp-secret">
                   {stage.secret}
                 </code>
               </p>
-              <p>2. Den 6-stelligen Code aus der App eingeben:</p>
+              <p>{t('2. Den 6-stelligen Code aus der App eingeben:')}</p>
               <div className="flex gap-2">
                 <Input
                   autoComplete="one-time-code"
@@ -171,7 +176,7 @@ export function TwoFactorCard({ initial }: { initial: TwoFactorStatusDto }) {
                   value={code}
                   onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
                   className="tabular w-32 text-center tracking-widest"
-                  aria-label="Code aus der App"
+                  aria-label={t('Code aus der App')}
                   data-testid="totp-code"
                 />
                 <Button
@@ -180,14 +185,14 @@ export function TwoFactorCard({ initial }: { initial: TwoFactorStatusDto }) {
                   disabled={code.length !== 6}
                   data-testid="totp-enable"
                 >
-                  Aktivieren
+                  {t('Aktivieren')}
                 </Button>
               </div>
             </div>
           </div>
         ) : stage.kind === 'password' ? (
           <div className="flex flex-wrap items-end gap-2">
-            <Field label="Passwort zur Bestätigung" htmlFor="tfa-password">
+            <Field label={t('Passwort zur Bestätigung')} htmlFor="tfa-password">
               <Input
                 id="tfa-password"
                 type="password"
@@ -197,15 +202,15 @@ export function TwoFactorCard({ initial }: { initial: TwoFactorStatusDto }) {
               />
             </Field>
             <Button onClick={() => void start()} loading={busy} disabled={!password}>
-              Weiter
+              {t('Weiter')}
             </Button>
             <Button variant="ghost" onClick={() => setStage({ kind: 'idle' })}>
-              Abbrechen
+              {t('Abbrechen')}
             </Button>
           </div>
         ) : stage.kind === 'disable' ? (
           <div className="flex flex-wrap items-end gap-2">
-            <Field label="Passwort" htmlFor="tfa-off-password">
+            <Field label={t('Passwort')} htmlFor="tfa-off-password">
               <Input
                 id="tfa-off-password"
                 type="password"
@@ -214,7 +219,7 @@ export function TwoFactorCard({ initial }: { initial: TwoFactorStatusDto }) {
                 onChange={(e) => setPassword(e.target.value)}
               />
             </Field>
-            <Field label="Code oder Wiederherstellungscode" htmlFor="tfa-off-code">
+            <Field label={t('Code oder Wiederherstellungscode')} htmlFor="tfa-off-code">
               <Input
                 id="tfa-off-code"
                 autoComplete="one-time-code"
@@ -228,28 +233,28 @@ export function TwoFactorCard({ initial }: { initial: TwoFactorStatusDto }) {
               loading={busy}
               disabled={!password || code.trim().length < 6}
             >
-              Deaktivieren
+              {t('Deaktivieren')}
             </Button>
             <Button variant="ghost" onClick={() => setStage({ kind: 'idle' })}>
-              Abbrechen
+              {t('Abbrechen')}
             </Button>
           </div>
         ) : status.enabled ? (
           <div className="space-y-3 text-sm">
             <p className="text-fg-muted">
-              Aktiv seit {status.enabledAt ? formatDateTime(status.enabledAt) : '–'} ·{' '}
-              {status.recoveryCodesLeft} Wiederherstellungscodes übrig.
+              {t('Aktiv seit')} {status.enabledAt ? formatDateTime(status.enabledAt) : '–'} ·{' '}
+              {status.recoveryCodesLeft} {t('Wiederherstellungscodes übrig.')}
             </p>
             <div className="flex flex-wrap items-center gap-2">
               <Input
                 autoComplete="one-time-code"
                 inputMode="numeric"
                 maxLength={6}
-                placeholder="Code"
+                placeholder={t('Code')}
                 value={code}
                 onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
                 className="tabular w-28 text-center"
-                aria-label="Code aus der App"
+                aria-label={t('Code aus der App')}
               />
               <Button
                 variant="secondary"
@@ -258,16 +263,16 @@ export function TwoFactorCard({ initial }: { initial: TwoFactorStatusDto }) {
                 loading={busy}
                 disabled={code.length !== 6}
               >
-                Neue Wiederherstellungscodes
+                {t('Neue Wiederherstellungscodes')}
               </Button>
               <Button variant="ghost" size="sm" onClick={() => setStage({ kind: 'disable' })}>
-                Deaktivieren
+                {t('Deaktivieren')}
               </Button>
             </div>
           </div>
         ) : (
           <Button onClick={() => setStage({ kind: 'password' })} data-testid="totp-setup">
-            Einrichten
+            {t('Einrichten')}
           </Button>
         )}
       </CardContent>

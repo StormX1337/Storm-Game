@@ -9,6 +9,7 @@ import { LiveDot } from '@/components/sportsbook/live-indicator';
 import { PageHeader, SectionTitle } from '@/components/sportsbook/page-header';
 import { SPORT_LABELS } from '@/lib/labels';
 import { getPlatformMeta, tryServerApi } from '@/lib/server-api';
+import { getT } from '@/i18n/server';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,7 +19,8 @@ export async function generateMetadata({
   params: Promise<{ sport: string }>;
 }): Promise<Metadata> {
   const { sport } = await params;
-  return { title: SPORT_LABELS[sport as SportKey] ?? 'Sport' };
+  const t = await getT();
+  return { title: t(SPORT_LABELS[sport as SportKey] ?? 'Sport') };
 }
 
 export default async function SportPage({
@@ -28,6 +30,7 @@ export default async function SportPage({
   params: Promise<{ sport: string }>;
   searchParams: Promise<{ league?: string; day?: string }>;
 }) {
+  const t = await getT();
   const { sport } = await params;
   const { league, day: dayParam } = await searchParams;
   const days = calendarDays();
@@ -61,18 +64,20 @@ export default async function SportPage({
   return (
     <div className="space-y-6">
       <PageHeader
-        title={detail.sport.name}
-        description={`${detail.sport.eventCount} Events · ${detail.sport.liveCount} live · ${
-          odds.isSimulated ? 'simulierte Demo-Daten' : `Quoten: ${odds.name}`
-        }`}
+        title={t(detail.sport.name)}
+        description={t('{0} Events · {1} live · {2}', [
+          detail.sport.eventCount,
+          detail.sport.liveCount,
+          odds.isSimulated ? t('simulierte Demo-Daten') : t('Quoten: {0}', [odds.name]),
+        ])}
       />
       {detail.leagues.length > 1 ? (
         <div
           className="scrollbar-none -mx-4 flex gap-2 overflow-x-auto px-4"
-          aria-label="Wettbewerbe"
+          aria-label={t('Wettbewerbe')}
         >
           <Link href={`/sports/${sport}`} className={chip(!league)}>
-            Alle Wettbewerbe
+            {t('Alle Wettbewerbe')}
           </Link>
           {detail.leagues.map((l) => (
             <Link
@@ -88,15 +93,18 @@ export default async function SportPage({
       {live && live.items.length > 0 ? (
         <section className="space-y-3">
           <SectionTitle>
-            <LiveDot /> Live
+            <LiveDot /> {t('Live')}
           </SectionTitle>
           <EventList events={live.items} subscribeLive />
         </section>
       ) : null}
       <section className="space-y-3">
-        <SectionTitle>Demnächst</SectionTitle>
-        <div className="scrollbar-none -mx-4 flex gap-2 overflow-x-auto px-4" aria-label="Tage">
-          {[{ value: undefined, label: 'Alle' }, ...days].map((d) => {
+        <SectionTitle>{t('Demnächst')}</SectionTitle>
+        <div
+          className="scrollbar-none -mx-4 flex gap-2 overflow-x-auto px-4"
+          aria-label={t('Tage')}
+        >
+          {[{ value: undefined, label: t('Alle') }, ...days].map((d) => {
             const query = new URLSearchParams();
             if (league) query.set('league', league);
             if (d.value) query.set('day', d.value);
@@ -108,18 +116,18 @@ export default async function SportPage({
                 className={chip(day === d.value)}
                 data-testid="day-chip"
               >
-                {d.label}
+                {t(d.label)}
               </Link>
             );
           })}
         </div>
         <EventList
           events={upcoming?.items ?? []}
-          emptyTitle="Keine anstehenden Events"
+          emptyTitle={t('Keine anstehenden Events')}
           emptyDescription={
             day
-              ? 'An diesem Tag sind keine Spiele angesetzt.'
-              : 'In diesem Wettbewerb sind aktuell keine Spiele angesetzt.'
+              ? t('An diesem Tag sind keine Spiele angesetzt.')
+              : t('In diesem Wettbewerb sind aktuell keine Spiele angesetzt.')
           }
         />
       </section>

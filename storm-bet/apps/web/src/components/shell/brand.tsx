@@ -1,5 +1,8 @@
+'use client';
+
 import Link from 'next/link';
 import { cn } from '@storm-bet/ui';
+import { useT } from '@/i18n/client';
 
 export function BrandMark({ className }: { className?: string }) {
   return (
@@ -17,11 +20,12 @@ export function Brand({
   className?: string;
   alwaysShowName?: boolean;
 }) {
+  const t = useT();
   return (
     <Link
       href="/"
       className={cn('flex items-center gap-2 rounded-md', className)}
-      aria-label="STORM BET Startseite"
+      aria-label={t('STORM BET Startseite')}
     >
       <BrandMark />
       <span

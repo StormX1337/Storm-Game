@@ -6,6 +6,7 @@ import { RotateCcw, Undo2 } from 'lucide-react';
 import { useState } from 'react';
 import { formatMoney } from '@/lib/format';
 import { ChipPicker, GameShell, useCasinoPlay } from './controls';
+import { useT } from '@/i18n/client';
 
 const RED = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]);
 const colorOf = (n: number) =>
@@ -29,6 +30,7 @@ const OUTSIDE: { label: string; bet: Omit<RouletteBet, 'stake'> }[] = [
 const keyOf = (b: Omit<RouletteBet, 'stake'>) => `${b.type}:${b.value ?? ''}`;
 
 export function RouletteGame({ game, sessionId }: { game: CasinoGameDto; sessionId: string }) {
+  const t = useT();
   const { play, busy } = useCasinoPlay(game.id, sessionId);
   const [chip, setChip] = useState(100);
   const [bets, setBets] = useState<RouletteBet[]>([]);
@@ -81,7 +83,7 @@ export function RouletteGame({ game, sessionId }: { game: CasinoGameDto; session
           colorOf(n),
           last?.number === n && 'ring-2 ring-yellow-300',
         )}
-        aria-label={`Zahl ${n}${stake ? `, Einsatz ${formatMoney(stake)}` : ''}`}
+        aria-label={t('Zahl {0}{1}', [n, stake ? t(', Einsatz {0}', [formatMoney(stake)]) : ''])}
       >
         {n}
         {stake ? (
@@ -108,7 +110,7 @@ export function RouletteGame({ game, sessionId }: { game: CasinoGameDto; session
           {busy ? '' : (last?.number ?? '–')}
         </div>
         <div className="min-w-0 space-y-1 text-white">
-          <p className="text-sm text-white/70">Letzte Zahlen</p>
+          <p className="text-sm text-white/70">{t('Letzte Zahlen')}</p>
           <div className="flex flex-wrap gap-1">
             {history.length ? (
               history.map((n, i) => (
@@ -123,12 +125,12 @@ export function RouletteGame({ game, sessionId }: { game: CasinoGameDto; session
                 </span>
               ))
             ) : (
-              <span className="text-xs text-white/50">Noch keine Runde</span>
+              <span className="text-xs text-white/50">{t('Noch keine Runde')}</span>
             )}
           </div>
           {last ? (
             <p className="text-sm font-semibold text-yellow-300">
-              {lastPayout > 0 ? `Gewinn ${formatMoney(lastPayout)}` : 'Kein Gewinn'}
+              {lastPayout > 0 ? t('Gewinn {0}', [formatMoney(lastPayout)]) : t('Kein Gewinn')}
             </p>
           ) : null}
         </div>
@@ -142,7 +144,7 @@ export function RouletteGame({ game, sessionId }: { game: CasinoGameDto; session
             colorOf(0),
             last?.number === 0 && 'ring-2 ring-yellow-300',
           )}
-          aria-label="Zahl 0"
+          aria-label={t('Zahl 0')}
         >
           0
         </button>
@@ -165,7 +167,7 @@ export function RouletteGame({ game, sessionId }: { game: CasinoGameDto; session
                 stake > 0 && 'ring-2 ring-yellow-300',
               )}
             >
-              {label}
+              {t(label)}
               {stake ? (
                 <span className="tabular block text-[10px] text-yellow-300">
                   {formatMoney(stake)}
@@ -181,7 +183,7 @@ export function RouletteGame({ game, sessionId }: { game: CasinoGameDto; session
   const controls = (
     <>
       <div className="space-y-2">
-        <p className="text-xs text-fg-muted">Chip wählen, dann auf das Tableau tippen</p>
+        <p className="text-xs text-fg-muted">{t('Chip wählen, dann auf das Tableau tippen')}</p>
         <ChipPicker
           values={[10, 50, 100, 500, 1_000, 5_000].filter((c) => c <= game.maxStake)}
           value={chip}
@@ -190,14 +192,14 @@ export function RouletteGame({ game, sessionId }: { game: CasinoGameDto; session
         />
       </div>
       <div className="flex items-center justify-between text-sm">
-        <span className="text-fg-muted">Gesamteinsatz</span>
+        <span className="text-fg-muted">{t('Gesamteinsatz')}</span>
         <span className="tabular font-semibold" data-testid="stake">
           {formatMoney(total)}
         </span>
       </div>
       <div className="flex gap-2">
         <Button variant="secondary" onClick={undo} disabled={busy || !placed.length}>
-          <Undo2 /> Zurück
+          <Undo2 /> {t('Zurück')}
         </Button>
         <Button
           variant="secondary"
@@ -207,7 +209,7 @@ export function RouletteGame({ game, sessionId }: { game: CasinoGameDto; session
           }}
           disabled={busy || !bets.length}
         >
-          <RotateCcw /> Leeren
+          <RotateCcw /> {t('Leeren')}
         </Button>
       </div>
       <Button
@@ -218,7 +220,7 @@ export function RouletteGame({ game, sessionId }: { game: CasinoGameDto; session
         data-testid="spin"
         data-play
       >
-        {busy ? 'Kugel rollt …' : 'Drehen'}
+        {busy ? t('Kugel rollt …') : t('Drehen')}
       </Button>
     </>
   );

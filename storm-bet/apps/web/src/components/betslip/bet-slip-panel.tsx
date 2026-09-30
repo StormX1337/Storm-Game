@@ -6,18 +6,20 @@ import { useEffect, useState } from 'react';
 import { formatOdds } from '@/lib/format';
 import { effectiveMode, useBetSlip } from '@/stores/bet-slip';
 import { BetSlip } from './bet-slip';
+import { useT } from '@/i18n/client';
 
 /** Desktop: sticky right column. */
 export function BetSlipPanel() {
+  const t = useT();
   const count = useBetSlip((s) => s.items.length);
   return (
     <aside
-      aria-label="Wettschein"
+      aria-label={t('Wettschein')}
       className="sticky top-[4.5rem] hidden max-h-[calc(100dvh-5.5rem)] w-full flex-col overflow-hidden rounded-lg border border-border bg-surface lg:flex"
     >
       <div className="flex items-center gap-2 border-b border-border px-4 py-3">
         <Ticket className="size-4 text-accent" aria-hidden="true" />
-        <h2 className="text-sm font-semibold">Wettschein</h2>
+        <h2 className="text-sm font-semibold">{t('Wettschein')}</h2>
         {count ? (
           <span className="tabular ml-auto rounded bg-accent-soft px-1.5 text-xs font-semibold text-accent-strong">
             {count}
@@ -31,6 +33,7 @@ export function BetSlipPanel() {
 
 /** Mobile: sticky bottom bar that opens the slip as a sheet. */
 export function MobileBetSlipBar() {
+  const t = useT();
   const items = useBetSlip((s) => s.items);
   const mode = useBetSlip((s) => s.mode);
   const open = useBetSlip((s) => s.open);
@@ -55,10 +58,10 @@ export function MobileBetSlipBar() {
             <span className="grid size-7 place-items-center rounded-full bg-accent-fg/15 text-sm font-bold">
               {items.length}
             </span>
-            <span className="text-sm font-semibold">Wettschein</span>
+            <span className="text-sm font-semibold">{t('Wettschein')}</span>
             {combo ? (
               <span className="tabular ml-auto text-sm font-semibold">
-                Quote {formatOdds(total)}
+                {t('Quote')} {formatOdds(total)}
               </span>
             ) : (
               <span className="ml-auto" />
@@ -68,7 +71,7 @@ export function MobileBetSlipBar() {
         </div>
       ) : null}
       <SheetContent className="flex flex-col lg:hidden" aria-describedby={undefined}>
-        <DialogTitle className="px-4 pb-2 pt-3 text-sm">Wettschein</DialogTitle>
+        <DialogTitle className="px-4 pb-2 pt-3 text-sm">{t('Wettschein')}</DialogTitle>
         <BetSlip className="min-h-0 flex-1" />
       </SheetContent>
     </Dialog>

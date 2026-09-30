@@ -28,6 +28,7 @@ import { announceWalletChange, useSession } from '../providers/session';
 import { useRealtimeTopics } from '../providers/realtime';
 import { SportIcon } from '../sportsbook/sport-icon';
 import { ShareButton } from './share-button';
+import { useT } from '@/i18n/client';
 
 /** Quick stakes add to the typed amount (minor units). */
 const QUICK_ADD = [200, 1000, 5000];
@@ -155,6 +156,7 @@ function localQuote(
 }
 
 export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?: () => void }) {
+  const t = useT();
   const slip = useBetSlip();
   const { user, wallet } = useSession();
   const pathname = usePathname();
@@ -345,8 +347,8 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
       announceWalletChange(result.wallet);
       toast.success(
         result.bets.length > 1
-          ? `${result.bets.length} Wetten platziert`
-          : `Wette platziert · ${result.bets[0]?.reference ?? ''}`,
+          ? t('{0} Wetten platziert', [result.bets.length])
+          : t('Wette platziert · {0}', [result.bets[0]?.reference ?? '']),
       );
       onPlaced?.();
     } catch (e) {
@@ -362,7 +364,7 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
       // A definitive answer ends this submission; the next attempt is a new slip.
       if (err && err.code !== 'SERVICE_UNAVAILABLE' && err.code !== 'INTERNAL_ERROR')
         slip.resetKey();
-      setError(err?.message ?? 'Die Wette konnte nicht platziert werden.');
+      setError(err?.message ?? t('Die Wette konnte nicht platziert werden.'));
     } finally {
       setPlacing(false);
     }
@@ -373,9 +375,9 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
       <div className={cn('flex flex-col', className)} data-testid="bet-receipt">
         <div className="space-y-3 p-4">
           <div className="rounded-lg border border-up/30 bg-up-soft p-4">
-            <p className="text-sm font-semibold text-up">Wette angenommen</p>
+            <p className="text-sm font-semibold text-up">{t('Wette angenommen')}</p>
             <p className="mt-1 text-xs text-fg-muted">
-              Dein Einsatz ist reserviert. Die Abrechnung erfolgt automatisch nach Spielende.
+              {t('Dein Einsatz ist reserviert. Die Abrechnung erfolgt automatisch nach Spielende.')}
             </p>
           </div>
           {receipt.bets.map((bet) => (
@@ -386,17 +388,17 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
               </div>
               {bet.system ? (
                 <p className="mt-1 text-xs text-fg-muted">
-                  Systemwette {bet.system.size} aus {bet.selections.length} · {bet.system.lines}{' '}
-                  Wetten
+                  {t('Systemwette')} {bet.system.size} aus {bet.selections.length} ·{' '}
+                  {bet.system.lines} {t('Wetten')}
                 </p>
               ) : null}
               <dl className="mt-2 space-y-1 text-xs">
                 <div className="flex justify-between text-fg-muted">
-                  <dt>Einsatz</dt>
+                  <dt>{t('Einsatz')}</dt>
                   <dd className="tabular">{formatMoney(bet.stake)}</dd>
                 </div>
                 <div className="flex justify-between text-fg-muted">
-                  <dt>Möglicher Gewinn</dt>
+                  <dt>{t('Möglicher Gewinn')}</dt>
                   <dd className="tabular font-semibold text-up">
                     {formatMoney(bet.potentialReturn)}
                   </dd>
@@ -406,10 +408,10 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
           ))}
           <div className="grid grid-cols-2 gap-2">
             <Button variant="secondary" onClick={() => setReceipt(null)}>
-              Weiter wetten
+              {t('Weiter wetten')}
             </Button>
             <Button variant="outline" asChild>
-              <Link href="/dashboard/bets">Meine Wetten</Link>
+              <Link href="/dashboard/bets">{t('Meine Wetten')}</Link>
             </Button>
           </div>
         </div>
@@ -422,8 +424,8 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
       <div className={className}>
         <EmptyState
           icon={<Ticket />}
-          title="Dein Wettschein ist leer"
-          description="Tippe auf eine Quote, um eine Auswahl hinzuzufügen."
+          title={t('Dein Wettschein ist leer')}
+          description={t('Tippe auf eine Quote, um eine Auswahl hinzuzufügen.')}
         />
       </div>
     );
@@ -438,7 +440,7 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
             systemPossible(slip.items) ? 'grid-cols-3' : 'grid-cols-2',
           )}
           role="tablist"
-          aria-label="Wettart"
+          aria-label={t('Wettart')}
         >
           {(
             [
@@ -457,7 +459,7 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
                 mode === m ? 'bg-surface-3 text-fg' : 'text-fg-muted hover:text-fg',
               )}
             >
-              {MODE_LABELS[m]}
+              {t(MODE_LABELS[m])}
             </button>
           ))}
         </div>
@@ -478,8 +480,8 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
             <li key={item.selectionId} className="p-3" data-testid="slip-item">
               <div className="flex items-start gap-2">
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-fg">{item.selectionName}</p>
-                  <p className="truncate text-xs text-fg-muted">{item.marketName}</p>
+                  <p className="truncate text-sm font-medium text-fg">{t(item.selectionName)}</p>
+                  <p className="truncate text-xs text-fg-muted">{t(item.marketName)}</p>
                   <p className="truncate text-xs text-fg-subtle">
                     {item.isLive ? (
                       <span className="mr-1 font-semibold text-live">LIVE</span>
@@ -490,7 +492,7 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
                 <div className="text-right">
                   {item.status !== 'OPEN' ? (
                     <span className="inline-flex items-center gap-1 text-xs text-warning">
-                      <Lock className="size-3" /> Gesperrt
+                      <Lock className="size-3" /> {t('Gesperrt')}
                     </span>
                   ) : item.pendingOdds != null ? (
                     <span className="flex flex-col items-end">
@@ -513,7 +515,7 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
                 <button
                   onClick={() => slip.remove(item.selectionId)}
                   className="-mr-1 rounded p-1 text-fg-subtle transition-colors hover:bg-surface-3 hover:text-fg"
-                  aria-label={`${item.selectionName} entfernen`}
+                  aria-label={t('{0} entfernen', [t(item.selectionName)])}
                 >
                   <X className="size-3.5" />
                 </button>
@@ -522,7 +524,7 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
                 <StakeInput
                   value={slip.singleStakes[item.selectionId] ?? ''}
                   onChange={(v) => slip.setSingleStake(item.selectionId, v)}
-                  label={`Einsatz für ${item.selectionName}`}
+                  label={t('Einsatz für {0}', [item.selectionName])}
                 />
               ) : null}
             </li>
@@ -538,13 +540,20 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
             data-testid="odds-changed"
           >
             <p className="flex items-center gap-1.5 text-sm font-semibold text-warning">
-              <AlertTriangle className="size-4" /> Quote wurde aktualisiert.
+              <AlertTriangle className="size-4" /> {t('Quote wurde aktualisiert.')}
             </p>
             <p className="mt-1 text-xs text-fg-muted">
               {mode === 'BUILDER'
-                ? `Bet-Builder-Quote: ${formatOdds(seenOdds ?? 0)} → ${formatOdds(builderQuote ?? 0)}.`
-                : `${lowered.length === 1 ? 'Eine Quote hat' : `${lowered.length} Quoten haben`} sich geändert.`}{' '}
-              Bitte prüfe und bestätige.
+                ? t('Bet-Builder-Quote: {0} → {1}.', [
+                    formatOdds(seenOdds ?? 0),
+                    formatOdds(builderQuote ?? 0),
+                  ])
+                : t('{0} sich geändert.', [
+                    lowered.length === 1
+                      ? t('Eine Quote hat')
+                      : t('{0} Quoten haben', [lowered.length]),
+                  ])}{' '}
+              {t('Bitte prüfe und bestätige.')}
             </p>
             {ready ? (
               <Button
@@ -553,33 +562,34 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
                 onClick={() => void place(true)}
                 data-testid="accept-and-place"
               >
-                Neue Quoten übernehmen & platzieren
+                {t('Neue Quoten übernehmen & platzieren')}
               </Button>
             ) : (
               <Button size="sm" variant="secondary" className="mt-2 w-full" onClick={acceptChanges}>
-                Neue Quoten übernehmen
+                {t('Neue Quoten übernehmen')}
               </Button>
             )}
           </div>
         ) : raised > 0 ? (
           <p className="rounded-md bg-up-soft p-2.5 text-xs text-up" data-testid="odds-raised">
-            Quote gestiegen – wird bei Annahme automatisch übernommen.
+            {t('Quote gestiegen – wird bei Annahme automatisch übernommen.')}
           </p>
         ) : null}
         {blocked.length > 0 ? (
           <p className="rounded-md bg-surface-2 p-2.5 text-xs text-fg-muted">
-            Gesperrte Auswahlen können nicht gewettet werden. Entferne sie oder warte, bis der Markt
-            wieder öffnet.
+            {t(
+              'Gesperrte Auswahlen können nicht gewettet werden. Entferne sie oder warte, bis der Markt wieder öffnet.',
+            )}
           </p>
         ) : null}
 
         {mode === 'SYSTEM' ? (
           <div className="space-y-1.5">
             <p className="text-xs text-fg-muted">
-              System: jede Kombination aus {systemSize} von {slip.items.length} Tipps ist eine
-              eigene Wette.
+              {t('System: jede Kombination aus')} {systemSize} von {slip.items.length}{' '}
+              {t('Tipps ist eine eigene Wette.')}
             </p>
-            <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="System">
+            <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label={t('System')}>
               {Array.from({ length: slip.items.length - 2 }, (_, i) => i + 2).map((k) => (
                 <button
                   key={k}
@@ -595,7 +605,7 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
                   )}
                   data-testid="system-size"
                 >
-                  {k} aus {slip.items.length} · {binomial(slip.items.length, k)} Wetten
+                  {k} aus {slip.items.length} · {binomial(slip.items.length, k)} {t('Wetten')}
                 </button>
               ))}
             </div>
@@ -606,7 +616,7 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
           <StakeInput
             value={slip.comboStake}
             onChange={slip.setComboStake}
-            label={mode === 'SYSTEM' ? 'Einsatz pro Wette' : 'Einsatz'}
+            label={mode === 'SYSTEM' ? t('Einsatz pro Wette') : t('Einsatz')}
             quick
             max={
               mode === 'SYSTEM'
@@ -620,17 +630,17 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
 
         <dl className="space-y-1.5 text-sm">
           <div className="flex justify-between text-fg-muted">
-            <dt>Auswahlen</dt>
+            <dt>{t('Auswahlen')}</dt>
             <dd className="tabular">{slip.items.length}</dd>
           </div>
           {mode !== 'SINGLES' ? (
             <div className="flex justify-between text-fg-muted">
               <dt>
                 {mode === 'BUILDER'
-                  ? 'Bet-Builder-Quote'
+                  ? t('Bet-Builder-Quote')
                   : mode === 'SYSTEM'
-                    ? 'Ø Quote pro Wette'
-                    : 'Gesamtquote'}
+                    ? t('Ø Quote pro Wette')
+                    : t('Gesamtquote')}
               </dt>
               <dd className="tabular font-semibold text-fg" data-testid="total-odds">
                 {totalOdds > 0 ? formatOdds(totalOdds) : '–'}
@@ -638,12 +648,12 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
             </div>
           ) : null}
           <div className="flex justify-between text-fg-muted">
-            <dt>{mode === 'SYSTEM' ? `Einsatz (${systemLines} Wetten)` : 'Einsatz'}</dt>
+            <dt>{mode === 'SYSTEM' ? t('Einsatz ({0} Wetten)', [systemLines]) : t('Einsatz')}</dt>
             <dd className="tabular">{formatMoney(totalStake)}</dd>
           </div>
           <div className="flex justify-between">
             <dt className="text-fg-muted">
-              {mode === 'SYSTEM' ? 'Möglicher Gewinn (alle richtig)' : 'Möglicher Gewinn'}
+              {mode === 'SYSTEM' ? t('Möglicher Gewinn (alle richtig)') : t('Möglicher Gewinn')}
             </dt>
             <dd className="tabular font-semibold text-up" data-testid="potential-return">
               {formatMoney(potentialReturn)}
@@ -655,14 +665,18 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
           checked={slip.acceptHigher}
           onChange={(e) => slip.setAcceptHigher(e.target.checked)}
           label={
-            <span className="text-xs">Höhere Quoten automatisch akzeptieren (max. +10 %)</span>
+            <span className="text-xs">
+              {t('Höhere Quoten automatisch akzeptieren (max. +10 %)')}
+            </span>
           }
         />
 
         {issues.length > 0 || insufficient || error ? (
           <div className="space-y-1" role="alert">
             {insufficient ? (
-              <p className="text-xs text-down">Dein verfügbares Demo-Guthaben reicht nicht aus.</p>
+              <p className="text-xs text-down">
+                {t('Dein verfügbares Demo-Guthaben reicht nicht aus.')}
+              </p>
             ) : null}
             {issues.map((i, n) => (
               <p key={`${i.code}-${n}`} className="text-xs text-down">
@@ -686,22 +700,26 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
             onClick={() => void place()}
             data-testid="place-bet"
           >
-            {totalStake > 0 ? `Wette platzieren · ${formatMoney(totalStake)}` : 'Einsatz eingeben'}
+            {totalStake > 0
+              ? t('Wette platzieren · {0}', [formatMoney(totalStake)])
+              : t('Einsatz eingeben')}
           </Button>
         ) : (
           <Button className="w-full" size="lg" asChild>
-            <Link href={`/login?next=${encodeURIComponent(pathname)}`}>Anmelden, um zu wetten</Link>
+            <Link href={`/login?next=${encodeURIComponent(pathname)}`}>
+              {t('Anmelden, um zu wetten')}
+            </Link>
           </Button>
         )}
         <div className="flex items-center justify-between text-xs text-fg-subtle">
-          <span>Nur Demo-Guthaben · kein Echtgeld</span>
+          <span>{t('Nur Demo-Guthaben · kein Echtgeld')}</span>
           <span className="flex items-center gap-3">
             <ShareButton selectionIds={slip.items.map((i) => i.selectionId)} />
             <button
               onClick={() => slip.clear()}
               className="inline-flex items-center gap-1 hover:text-fg"
             >
-              <Trash2 className="size-3" /> Leeren
+              <Trash2 className="size-3" /> {t('Leeren')}
             </button>
           </span>
         </div>
@@ -784,6 +802,7 @@ function BuilderCard({
   onRemove: (selectionId: string) => void;
   onClear: () => void;
 }) {
+  const t = useT();
   const first = items[0]!;
   return (
     <div
@@ -792,9 +811,9 @@ function BuilderCard({
     >
       <div className="flex items-center gap-2 border-b border-border px-3 py-2">
         <SportIcon sport={first.sportKey} />
-        <span className="text-sm font-semibold text-accent-strong">Bet Builder</span>
+        <span className="text-sm font-semibold text-accent-strong">{t('Bet Builder')}</span>
         <span className="tabular rounded bg-surface-3 px-1.5 py-0.5 text-xs text-fg-muted">
-          {items.length} Tipps
+          {items.length} {t('Tipps')}
         </span>
         <span
           className="tabular ml-auto rounded-md bg-surface-3 px-2 py-1 text-sm font-semibold"
@@ -805,7 +824,7 @@ function BuilderCard({
         <button
           type="button"
           onClick={onClear}
-          aria-label="Bet Builder leeren"
+          aria-label={t('Bet Builder leeren')}
           className="rounded p-1.5 text-fg-subtle transition-colors hover:bg-surface-3 hover:text-fg"
         >
           <Trash2 className="size-4" />
@@ -816,7 +835,9 @@ function BuilderCard({
         {items.some((i) => i.isLive) ? (
           <span className="shrink-0 font-semibold text-live">LIVE</span>
         ) : (
-          <span className="tabular shrink-0 text-fg-muted">{formatKickoff(first.startTime)}</span>
+          <span className="tabular shrink-0 text-fg-muted">
+            {t(formatKickoff(first.startTime))}
+          </span>
         )}
       </div>
       <ol className="px-3 pb-2 pt-1.5">
@@ -827,17 +848,17 @@ function BuilderCard({
               {i < items.length - 1 ? <span className="w-px flex-1 bg-accent/40" /> : null}
             </span>
             <div className="min-w-0 flex-1 pb-2.5">
-              <p className="truncate text-sm font-semibold">{item.selectionName}</p>
-              <p className="truncate text-xs text-fg-muted">{item.marketName}</p>
+              <p className="truncate text-sm font-semibold">{t(item.selectionName)}</p>
+              <p className="truncate text-xs text-fg-muted">{t(item.marketName)}</p>
             </div>
             {item.status !== 'OPEN' ? (
-              <Lock className="mt-1 size-3.5 text-warning" aria-label="Gesperrt" />
+              <Lock className="mt-1 size-3.5 text-warning" aria-label={t('Gesperrt')} />
             ) : null}
             <button
               type="button"
               onClick={() => onRemove(item.selectionId)}
               className="-mr-1 h-fit rounded p-1 text-fg-subtle transition-colors hover:bg-surface-3 hover:text-fg"
-              aria-label={`${item.selectionName} entfernen`}
+              aria-label={t('{0} entfernen', [t(item.selectionName)])}
             >
               <X className="size-3.5" />
             </button>
@@ -848,8 +869,9 @@ function BuilderCard({
         className="border-t border-border px-3 py-2 text-[11px] text-fg-subtle"
         data-testid="builder-info"
       >
-        Alle Tipps müssen gewinnen – verliert einer, ist die Wette verloren. Nur wenn ein Tipp
-        annulliert wird (z. B. Spielabsage), gibt es den Einsatz zurück.
+        {t(
+          'Alle Tipps müssen gewinnen – verliert einer, ist die Wette verloren. Nur wenn ein Tipp annulliert wird (z. B. Spielabsage), gibt es den Einsatz zurück.',
+        )}
       </p>
     </div>
   );

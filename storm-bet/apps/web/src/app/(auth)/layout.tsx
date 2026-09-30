@@ -1,8 +1,10 @@
 import Link from 'next/link';
 import { Brand } from '@/components/shell/brand';
 import { DemoBanner } from '@/components/shell/demo-banner';
+import { getT } from '@/i18n/server';
 
-export default function AuthLayout({ children }: { children: React.ReactNode }) {
+export default async function AuthLayout({ children }: { children: React.ReactNode }) {
+  const t = await getT();
   return (
     <div className="flex min-h-dvh flex-col">
       <DemoBanner />
@@ -17,9 +19,9 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
           </div>
           {children}
           <p className="text-center text-xs text-fg-subtle">
-            Nur Demo-Guthaben · ab 18 Jahren ·{' '}
+            {t('Nur Demo-Guthaben · ab 18 Jahren ·')}{' '}
             <Link href="/responsible-gaming" className="underline underline-offset-2 hover:text-fg">
-              Verantwortungsvolles Spielen
+              {t('Verantwortungsvolles Spielen')}
             </Link>
           </p>
         </div>

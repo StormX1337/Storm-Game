@@ -1,8 +1,10 @@
 import { Skeleton } from '@storm-bet/ui';
+import { getT } from '@/i18n/server';
 
-export default function CasinoLoading() {
+export default async function CasinoLoading() {
+  const t = await getT();
   return (
-    <div className="space-y-6" aria-busy="true" aria-label="Lädt">
+    <div className="space-y-6" aria-busy="true" aria-label={t('Lädt')}>
       <Skeleton className="h-8 w-48" />
       <div className="flex gap-2">
         {Array.from({ length: 6 }, (_, i) => (

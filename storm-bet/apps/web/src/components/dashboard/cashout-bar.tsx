@@ -8,6 +8,7 @@ import { ApiError, api, errorMessage } from '@/lib/api-client';
 import { cashoutQuote } from '@/lib/cashout';
 import { formatMoney, parseStake } from '@/lib/format';
 import { announceWalletChange } from '../providers/session';
+import { useT } from '@/i18n/client';
 
 const REFRESH_MS = 10_000;
 const PARTS = [25, 50, 75];
@@ -17,6 +18,7 @@ const PARTS = [25, 50, 75];
  * stake — or automatically once it reaches a target. Two clicks, never one.
  */
 export function CashoutBar({ betId }: { betId: string }) {
+  const t = useT();
   const router = useRouter();
   const [quote, setQuote] = useState<CashoutQuoteDto | null>(null);
   /** The stake part being confirmed (null: all of it). */
@@ -46,20 +48,20 @@ export function CashoutBar({ betId }: { betId: string }) {
   const autoLine =
     quote.autoCashout !== null ? (
       <p className="flex items-center gap-2 text-xs text-fg-muted" data-testid="auto-cashout">
-        Auto-Cashout bei ≥ {formatMoney(quote.autoCashout)}
+        {t('Auto-Cashout bei ≥')} {formatMoney(quote.autoCashout)}
         <button
           type="button"
           className="text-fg-subtle underline hover:text-fg"
           onClick={() => void saveAuto(null)}
         >
-          Entfernen
+          {t('Entfernen')}
         </button>
       </p>
     ) : null;
   if (!quote.available || quote.amount === null) {
     return quote.reason || autoLine ? (
       <div className="space-y-1 border-t border-border px-4 py-2">
-        {quote.reason ? <p className="text-xs text-fg-subtle">{quote.reason}</p> : null}
+        {quote.reason ? <p className="text-xs text-fg-subtle">{t(quote.reason)}</p> : null}
         {autoLine}
       </div>
     ) : null;
@@ -73,7 +75,7 @@ export function CashoutBar({ betId }: { betId: string }) {
       await api(`/bets/${betId}/auto-cashout`, { method: 'PUT', body: { amount: value } });
       setAutoOpen(false);
       setAutoValue('');
-      toast.success(value === null ? 'Auto-Cashout entfernt' : 'Auto-Cashout gespeichert');
+      toast.success(value === null ? t('Auto-Cashout entfernt') : t('Auto-Cashout gespeichert'));
       void refresh();
     } catch (e) {
       setNote(errorMessage(e));
@@ -89,18 +91,20 @@ export function CashoutBar({ betId }: { betId: string }) {
         body: { amount: offer, ...(part ? { part } : {}) },
       });
       announceWalletChange(result.wallet);
-      toast.success(`${part ? 'Teil-Cashout' : 'Cashout'}: ${formatMoney(offer)} gutgeschrieben`);
+      toast.success(
+        `${part ? t('Teil-Cashout') : t('Cashout')}: ${formatMoney(offer)} gutgeschrieben`,
+      );
       setConfirming(null);
       router.refresh();
       void refresh();
     } catch (e) {
       const err = e instanceof ApiError ? e : null;
       if (err?.code === 'ODDS_CHANGED') {
-        setNote('Der Wert hat sich geändert. Bitte prüfe den neuen Betrag.');
+        setNote(t('Der Wert hat sich geändert. Bitte prüfe den neuen Betrag.'));
         setConfirming(null);
       } else {
         setConfirming(null);
-        setNote(err?.message ?? 'Cashout nicht möglich.');
+        setNote(err?.message ?? t('Cashout nicht möglich.'));
       }
       void refresh();
     } finally {
@@ -114,11 +118,11 @@ export function CashoutBar({ betId }: { betId: string }) {
       {confirming ? (
         <div className="flex items-center gap-2">
           <span className="flex-1 text-xs text-fg-muted">
-            {confirming.part ? 'Teil-Cashout' : 'Cashout'}:{' '}
+            {confirming.part ? t('Teil-Cashout') : t('Cashout')}:{' '}
             <span className="tabular font-semibold text-fg">{formatMoney(offer)}</span> auszahlen?
           </span>
           <Button size="sm" variant="ghost" onClick={() => setConfirming(null)} disabled={busy}>
-            Abbrechen
+            {t('Abbrechen')}
           </Button>
           <Button
             size="sm"
@@ -126,7 +130,7 @@ export function CashoutBar({ betId }: { betId: string }) {
             loading={busy}
             data-testid="cashout-confirm"
           >
-            Bestätigen
+            {t('Bestätigen')}
           </Button>
         </div>
       ) : (
@@ -138,10 +142,10 @@ export function CashoutBar({ betId }: { betId: string }) {
             onClick={() => setConfirming({ part: null })}
             data-testid="cashout-button"
           >
-            Cashout <span className="tabular ml-1 font-semibold">{formatMoney(amount)}</span>
+            {t('Cashout')} <span className="tabular ml-1 font-semibold">{formatMoney(amount)}</span>
           </Button>
           <div className="flex flex-wrap items-center gap-1.5 text-xs text-fg-muted">
-            <span>Teil-Cashout:</span>
+            <span>{t('Teil-Cashout:')}</span>
             {PARTS.map((pct) => {
               const part = Math.floor((quote.remainingStake * pct) / 100);
               if (part <= 0 || partValue(part) <= 0) return null;
@@ -163,7 +167,7 @@ export function CashoutBar({ betId }: { betId: string }) {
               className="ml-auto underline hover:text-fg"
               data-testid="auto-cashout-toggle"
             >
-              Auto-Cashout
+              {t('Auto-Cashout')}
             </button>
           </div>
           {autoOpen ? (
@@ -177,15 +181,15 @@ export function CashoutBar({ betId }: { betId: string }) {
             >
               <input
                 inputMode="decimal"
-                placeholder={`Zielwert, z. B. ${formatMoney(Math.ceil(amount * 1.2))}`}
+                placeholder={t('Zielwert, z. B. {0}', [formatMoney(Math.ceil(amount * 1.2))])}
                 value={autoValue}
                 onChange={(e) => setAutoValue(e.target.value)}
-                aria-label="Auto-Cashout-Zielwert"
+                aria-label={t('Auto-Cashout-Zielwert')}
                 className="tabular h-8 min-w-0 flex-1 rounded-md border border-border-strong bg-surface-2 px-2 text-xs focus-visible:border-accent focus-visible:outline-none"
                 data-testid="auto-cashout-input"
               />
               <Button size="sm" type="submit" data-testid="auto-cashout-save">
-                Speichern
+                {t('Speichern')}
               </Button>
             </form>
           ) : null}

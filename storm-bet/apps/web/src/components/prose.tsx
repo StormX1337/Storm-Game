@@ -1,4 +1,7 @@
+'use client';
+
 import { cn } from '@storm-bet/ui';
+import { useT } from '@/i18n/client';
 
 /** Long-form text (legal pages, help). Styled here instead of a typography plugin. */
 export function Prose({ children, className }: { children: React.ReactNode; className?: string }) {
@@ -19,5 +22,10 @@ export function Prose({ children, className }: { children: React.ReactNode; clas
 }
 
 export function Updated({ date }: { date: string }) {
-  return <p className="text-xs text-fg-subtle">Stand: {date}</p>;
+  const t = useT();
+  return (
+    <p className="text-xs text-fg-subtle">
+      {t('Stand:')} {date}
+    </p>
+  );
 }

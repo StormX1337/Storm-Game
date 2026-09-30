@@ -4,6 +4,7 @@ import { cn } from '@storm-bet/ui';
 import { Dices, Radio, Receipt, Trophy, UserRound } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useT } from '@/i18n/client';
 
 const TABS = [
   { href: '/sports', label: 'Sport', icon: Trophy, match: ['/sports', '/events'] },
@@ -15,6 +16,7 @@ const TABS = [
 
 /** Phone navigation; the header links take over from the md breakpoint. */
 export function MobileTabBar() {
+  const t = useT();
   const pathname = usePathname();
   const active = (tab: (typeof TABS)[number]) =>
     tab.href === '/dashboard'
@@ -27,7 +29,7 @@ export function MobileTabBar() {
       {/* Keeps the page end (footer) clear of the fixed bar. */}
       <div aria-hidden="true" className="h-[calc(3.5rem+env(safe-area-inset-bottom))] md:hidden" />
       <nav
-        aria-label="Schnellnavigation"
+        aria-label={t('Schnellnavigation')}
         className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-bg/90 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
       >
         <div className="grid h-14 grid-cols-5">
@@ -44,7 +46,7 @@ export function MobileTabBar() {
                 )}
               >
                 <tab.icon className="size-5" aria-hidden="true" />
-                {tab.label}
+                {t(tab.label)}
               </Link>
             );
           })}

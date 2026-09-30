@@ -6,6 +6,7 @@ import { RotateCcw } from 'lucide-react';
 import { useState } from 'react';
 import { formatMoney } from '@/lib/format';
 import { ChipPicker, Felt, GameShell, Hand, useCasinoPlay } from './controls';
+import { useT } from '@/i18n/client';
 
 const SIDES: { side: BaccaratSide; label: string; pays: string }[] = [
   { side: 'player', label: 'Spieler', pays: '1:1' },
@@ -19,6 +20,7 @@ const WINNER: Record<BaccaratSide, string> = {
 };
 
 export function BaccaratGame({ game, sessionId }: { game: CasinoGameDto; sessionId: string }) {
+  const t = useT();
   const { play, busy } = useCasinoPlay(game.id, sessionId);
   const [chip, setChip] = useState(100);
   const [stakes, setStakes] = useState<Partial<Record<BaccaratSide, number>>>({});
@@ -37,18 +39,18 @@ export function BaccaratGame({ game, sessionId }: { game: CasinoGameDto; session
     <Felt className="space-y-6">
       {last ? (
         <div className="grid gap-6 sm:grid-cols-2" data-testid="baccarat-table">
-          <Hand label="Spieler" cards={last.result.player} total={last.result.playerTotal} />
-          <Hand label="Bank" cards={last.result.banker} total={last.result.bankerTotal} />
+          <Hand label={t('Spieler')} cards={last.result.player} total={last.result.playerTotal} />
+          <Hand label={t('Bank')} cards={last.result.banker} total={last.result.bankerTotal} />
         </div>
       ) : (
         <p className="py-10 text-center text-white/70">
-          Setze auf Spieler, Bank oder Unentschieden.
+          {t('Setze auf Spieler, Bank oder Unentschieden.')}
         </p>
       )}
       {last ? (
         <p className="text-lg font-semibold text-yellow-300" aria-live="polite">
           {WINNER[last.result.winner]}
-          {last.payout > 0 ? ` · Auszahlung ${formatMoney(last.payout)}` : ''}
+          {last.payout > 0 ? t(' · Auszahlung {0}', [formatMoney(last.payout)]) : ''}
         </p>
       ) : null}
       <div className="grid grid-cols-3 gap-2">
@@ -66,7 +68,7 @@ export function BaccaratGame({ game, sessionId }: { game: CasinoGameDto; session
               last?.result.winner === side && 'bg-yellow-300/15',
             )}
           >
-            <span className="block text-sm font-semibold">{label}</span>
+            <span className="block text-sm font-semibold">{t(label)}</span>
             <span className="block text-[11px] text-white/60">zahlt {pays}</span>
             <span className="tabular mt-1 block text-xs text-yellow-300">
               {stakes[side] ? formatMoney(stakes[side]!) : ' '}
@@ -86,13 +88,13 @@ export function BaccaratGame({ game, sessionId }: { game: CasinoGameDto; session
         disabled={busy}
       />
       <div className="flex items-center justify-between text-sm">
-        <span className="text-fg-muted">Gesamteinsatz</span>
+        <span className="text-fg-muted">{t('Gesamteinsatz')}</span>
         <span className="tabular font-semibold" data-testid="stake">
           {formatMoney(total)}
         </span>
       </div>
       <Button variant="secondary" onClick={() => setStakes({})} disabled={busy || !total}>
-        <RotateCcw /> Einsätze leeren
+        <RotateCcw /> {t('Einsätze leeren')}
       </Button>
       <Button
         size="lg"
@@ -102,7 +104,7 @@ export function BaccaratGame({ game, sessionId }: { game: CasinoGameDto; session
         data-testid="deal"
         data-play
       >
-        {busy ? 'Teilt aus …' : 'Austeilen'}
+        {busy ? t('Teilt aus …') : t('Austeilen')}
       </Button>
     </>
   );

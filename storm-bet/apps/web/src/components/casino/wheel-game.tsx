@@ -5,6 +5,7 @@ import { Button } from '@storm-bet/ui';
 import { useMemo, useState } from 'react';
 import { formatMoney } from '@/lib/format';
 import { GameShell, StakeControl, useCasinoPlay } from './controls';
+import { useT } from '@/i18n/client';
 
 /** The server's 50 segments (display only), spread the same way. */
 const PRIZES = [7, 1.5, 2, 1.5, 3, 1.5, 2, 1.5, 5, 1.5, 2, 3, 1.5, 2, 1.5, 3, 2, 1.5, 2, 1.5, 1.5];
@@ -23,6 +24,7 @@ const COLORS: Record<number, string> = {
 };
 
 export function WheelGame({ game, sessionId }: { game: CasinoGameDto; sessionId: string }) {
+  const t = useT();
   const { play, busy } = useCasinoPlay(game.id, sessionId);
   const [stake, setStake] = useState(Math.max(game.minStake, 100));
   const [turn, setTurn] = useState(0);
@@ -44,7 +46,7 @@ export function WheelGame({ game, sessionId }: { game: CasinoGameDto; sessionId:
     // Land the segment's centre under the pointer at the top, after a few turns.
     const target = 360 - (result.segment * 7.2 + 3.6);
     setSpinning(true);
-    setTurn((t) => t - (t % 360) + 360 * 5 + target);
+    setTurn((deg) => deg - (deg % 360) + 360 * 5 + target);
     window.setTimeout(() => {
       setSpinning(false);
       setLast({ result, payout: res.round.payout });
@@ -79,12 +81,12 @@ export function WheelGame({ game, sessionId }: { game: CasinoGameDto; sessionId:
       </div>
       <p className="mt-4 text-sm text-white/70">
         {spinning
-          ? 'Das Rad dreht sich …'
+          ? t('Das Rad dreht sich …')
           : last
             ? last.payout > 0
-              ? `Gewonnen: ${formatMoney(last.payout)}`
-              : 'Leider nichts.'
-            : 'Bis zu 7-facher Einsatz.'}
+              ? t('Gewonnen: {0}', [formatMoney(last.payout)])
+              : t('Leider nichts.')
+            : t('Bis zu 7-facher Einsatz.')}
       </p>
     </div>
   );
@@ -114,7 +116,7 @@ export function WheelGame({ game, sessionId }: { game: CasinoGameDto; sessionId:
         data-testid="wheel-spin"
         data-play
       >
-        {busy || spinning ? 'Dreht …' : 'Drehen'}
+        {busy || spinning ? t('Dreht …') : t('Drehen')}
       </Button>
     </>
   );

@@ -8,10 +8,15 @@ import { TransactionsTable } from '@/components/dashboard/transactions-table';
 import { PageHeader } from '@/components/sportsbook/page-header';
 import { formatMoney } from '@/lib/format';
 import { serverApi } from '@/lib/server-api';
+import { getT } from '@/i18n/server';
 
-export const metadata: Metadata = { title: 'Guthaben' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return { title: t('Guthaben') };
+}
 
 export default async function WalletPage() {
+  const t = await getT();
   const [wallet, recent] = await Promise.all([
     serverApi<WalletDto>('/wallet'),
     serverApi<Paginated<TransactionDto>>('/transactions?limit=8'),
@@ -19,12 +24,12 @@ export default async function WalletPage() {
   return (
     <>
       <PageHeader
-        title="Demo-Guthaben"
-        description="Spielgeld ohne Geldwert – nicht einzahlbar, nicht auszahlbar."
+        title={t('Demo-Guthaben')}
+        description={t('Spielgeld ohne Geldwert – nicht einzahlbar, nicht auszahlbar.')}
         actions={<TopUpButton />}
       />
       <Card className="p-6">
-        <p className="text-xs font-medium text-fg-muted">Verfügbar</p>
+        <p className="text-xs font-medium text-fg-muted">{t('Verfügbar')}</p>
         <p
           className="tabular mt-1 text-4xl font-semibold tracking-tight"
           data-testid="wallet-available"
@@ -33,11 +38,11 @@ export default async function WalletPage() {
         </p>
         <div className="mt-5 grid gap-4 border-t border-border pt-4 sm:grid-cols-2">
           <div>
-            <p className="text-xs text-fg-muted">Kontostand gesamt</p>
+            <p className="text-xs text-fg-muted">{t('Kontostand gesamt')}</p>
             <p className="tabular text-lg font-semibold">{formatMoney(wallet.balance)}</p>
           </div>
           <div>
-            <p className="text-xs text-fg-muted">Reserviert für offene Wetten</p>
+            <p className="text-xs text-fg-muted">{t('Reserviert für offene Wetten')}</p>
             <p className="tabular text-lg font-semibold">{formatMoney(wallet.reserved)}</p>
           </div>
         </div>
@@ -45,17 +50,17 @@ export default async function WalletPage() {
       <div className="flex gap-3 rounded-lg border border-border bg-surface-2/60 p-4 text-sm text-fg-muted">
         <Info className="mt-0.5 size-4 shrink-0 text-accent" aria-hidden="true" />
         <p>
-          Beim Platzieren wird dein Einsatz <strong className="text-fg">reserviert</strong>. Bei der
-          Abrechnung wird er freigegeben: Gewinne werden gutgeschrieben, verlorene Einsätze
-          abgebucht, stornierte Einsätze erstattet. Aufladen ist einmal pro Tag möglich, wenn
-          weniger als 50 € verfügbar sind.
+          {t('Beim Platzieren wird dein Einsatz')} <strong className="text-fg">reserviert</strong>
+          {t(
+            '. Bei der Abrechnung wird er freigegeben: Gewinne werden gutgeschrieben, verlorene Einsätze abgebucht, stornierte Einsätze erstattet. Aufladen ist einmal pro Tag möglich, wenn weniger als 50 € verfügbar sind.',
+          )}
         </p>
       </div>
       <Card className="overflow-hidden">
         <CardHeader>
-          <CardTitle>Letzte Buchungen</CardTitle>
+          <CardTitle>{t('Letzte Buchungen')}</CardTitle>
           <Link href="/dashboard/transactions" className="text-sm text-accent hover:underline">
-            Alle anzeigen
+            {t('Alle anzeigen')}
           </Link>
         </CardHeader>
         <CardContent className="px-0 pb-0">

@@ -7,6 +7,7 @@ import { useRealtimeTopics } from '../providers/realtime';
 import { DemoDataBadge } from './live-indicator';
 import { EventRow } from './event-row';
 import { SportIcon } from './sport-icon';
+import { useT } from '@/i18n/client';
 
 function groupByLeague(events: EventSummaryDto[]) {
   const groups = new Map<
@@ -63,6 +64,7 @@ export function EventList({
   emptyTitle?: string;
   emptyDescription?: string;
 }) {
+  const t = useT();
   useRealtimeTopics([
     ...(subscribeLive ? ['live'] : []),
     ...events.slice(0, 48).map((e) => `event:${e.id}`),
@@ -70,7 +72,7 @@ export function EventList({
   if (events.length === 0) {
     return (
       <Card>
-        <EmptyState icon={<CalendarX />} title={emptyTitle} description={emptyDescription} />
+        <EmptyState icon={<CalendarX />} title={t(emptyTitle)} description={emptyDescription} />
       </Card>
     );
   }
@@ -97,8 +99,9 @@ export function EventList({
 }
 
 export function EventListSkeleton({ rows = 6 }: { rows?: number }) {
+  const t = useT();
   return (
-    <Card className="overflow-hidden" aria-busy="true" aria-label="Lädt">
+    <Card className="overflow-hidden" aria-busy="true" aria-label={t('Lädt')}>
       <div className="border-b border-border px-4 py-3">
         <div className="h-4 w-40 animate-pulse rounded bg-surface-3" />
       </div>

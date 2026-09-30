@@ -10,6 +10,7 @@ import { useLiveEvent } from './hooks';
 import { LiveBadge } from './live-indicator';
 import { OddsButton } from './odds-button';
 import { TeamBadge } from './team-badge';
+import { useT } from '@/i18n/client';
 
 export function eventName(e: Pick<EventSummaryDto, 'home' | 'away'>) {
   return `${e.home.name} – ${e.away.name}`;
@@ -22,6 +23,7 @@ export function EventRow({
   event: EventSummaryDto;
   showLeague?: boolean;
 }) {
+  const t = useT();
   const live = useLiveEvent(event);
   const market = event.mainMarket;
   const closed = live.status === 'FINISHED' || live.status === 'CANCELLED';
@@ -47,10 +49,10 @@ export function EventRow({
             </div>
           ) : closed ? (
             <span className="text-fg-subtle">
-              {live.status === 'CANCELLED' ? 'Abgesagt' : 'Beendet'}
+              {live.status === 'CANCELLED' ? t('Abgesagt') : t('Beendet')}
             </span>
           ) : (
-            <span className="tabular text-fg-muted">{formatKickoff(event.startTime)}</span>
+            <span className="tabular text-fg-muted">{t(formatKickoff(event.startTime))}</span>
           )}
         </div>
         <div className="min-w-0 flex-1 space-y-1">
@@ -85,7 +87,7 @@ export function EventRow({
             <OddsButton
               key={s.id}
               selection={s}
-              label={OUTCOME_LABELS[s.outcome]}
+              label={t(OUTCOME_LABELS[s.outcome])}
               layout="inline"
               className="min-h-10"
               context={{
@@ -103,13 +105,13 @@ export function EventRow({
         </div>
       ) : (
         <div className="hidden text-center text-xs text-fg-subtle md:block">
-          {closed ? 'Keine Wetten' : 'Keine Quoten'}
+          {closed ? t('Keine Wetten') : t('Keine Quoten')}
         </div>
       )}
       <Link
         href={`/events/${event.id}`}
         className="hidden items-center gap-0.5 justify-self-end rounded-md px-2 py-1 text-xs text-fg-muted transition-colors hover:bg-surface-3 hover:text-fg md:flex"
-        aria-label={`Alle Märkte für ${eventName(event)}`}
+        aria-label={t('Alle Märkte für {0}', [eventName(event)])}
       >
         +{Math.max(0, event.marketCount - 1)}
         <ChevronRight className="size-3.5" aria-hidden="true" />

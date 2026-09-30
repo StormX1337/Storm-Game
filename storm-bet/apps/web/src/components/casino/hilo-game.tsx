@@ -6,6 +6,7 @@ import { ArrowDown, ArrowUp, SkipForward } from 'lucide-react';
 import { useState } from 'react';
 import { formatMoney } from '@/lib/format';
 import { GameShell, PlayingCard, StakeControl, useCasinoPlay } from './controls';
+import { useT } from '@/i18n/client';
 
 const pct = (p: number) => `${Math.round(p * 1000) / 10} %`;
 
@@ -18,6 +19,7 @@ export function HiloGame({
   sessionId: string;
   openRound: CasinoRoundDto | null;
 }) {
+  const t = useT();
   const { play, busy } = useCasinoPlay(game.id, sessionId);
   const [stake, setStake] = useState(Math.max(game.minStake, 100));
   const [round, setRound] = useState<CasinoRoundDto | null>(openRound);
@@ -41,7 +43,7 @@ export function HiloGame({
         {result ? <PlayingCard card={result.current} /> : <PlayingCard card={null} />}
       </div>
       {result && result.history.length ? (
-        <div className="mt-4 flex gap-1 overflow-x-auto pb-1" aria-label="Bisherige Karten">
+        <div className="mt-4 flex gap-1 overflow-x-auto pb-1" aria-label={t('Bisherige Karten')}>
           {result.history.slice(-10).map((h, i) => (
             <span
               key={i}
@@ -62,12 +64,15 @@ export function HiloGame({
       ) : null}
       <p className="mt-4 text-center text-sm text-white/70" aria-live="polite">
         {!result
-          ? 'Starte eine Runde und rate: höher oder tiefer?'
+          ? t('Starte eine Runde und rate: höher oder tiefer?')
           : running
-            ? `Jetzt ${result.multiplier.toFixed(2)}×`
+            ? t('Jetzt {0}×', [result.multiplier.toFixed(2)])
             : result.outcome === 'lost'
-              ? 'Falsch geraten – Einsatz verloren.'
-              : `Ausgezahlt: ${result.multiplier.toFixed(2)}× · ${formatMoney(round!.payout)}`}
+              ? t('Falsch geraten – Einsatz verloren.')
+              : t('Ausgezahlt: {0}× · {1}', [
+                  result.multiplier.toFixed(2),
+                  formatMoney(round!.payout),
+                ])}
       </p>
     </div>
   );
@@ -102,14 +107,14 @@ export function HiloGame({
       </div>
       <div className="grid grid-cols-[auto_1fr] gap-2">
         <Button variant="ghost" onClick={() => void act('skip')} disabled={busy}>
-          <SkipForward /> Überspringen
+          <SkipForward /> {t('Überspringen')}
         </Button>
         <Button
           onClick={() => void act('cashout')}
           disabled={busy || !won}
           data-testid="hilo-cashout"
         >
-          Auszahlen ·{' '}
+          {t('Auszahlen ·')}{' '}
           {formatMoney(Math.floor((round!.stake * Math.round(result!.multiplier * 100)) / 100))}
         </Button>
       </div>
@@ -131,7 +136,7 @@ export function HiloGame({
         data-testid="hilo-start"
         data-play
       >
-        {busy ? 'Startet …' : 'Starten'}
+        {busy ? t('Startet …') : t('Starten')}
       </Button>
     </>
   );

@@ -19,6 +19,7 @@ import { useEffect, useState } from 'react';
 import { useForm, type FieldValues, type Path, type UseFormSetError } from 'react-hook-form';
 import { ApiError, api, errorMessage } from '@/lib/api-client';
 import { safeNext } from '@/lib/safe-next';
+import { useT } from '@/i18n/client';
 
 function applyServerErrors<T extends FieldValues>(
   error: unknown,
@@ -46,6 +47,7 @@ function FormError({ message }: { message: string | null }) {
 }
 
 export function LoginForm() {
+  const t = useT();
   const router = useRouter();
   const params = useSearchParams();
   const [error, setFormError] = useState<string | null>(null);
@@ -89,11 +91,11 @@ export function LoginForm() {
 
   return (
     <Card className="p-6">
-      <h1 className="text-lg font-semibold">Anmelden</h1>
-      <p className="mt-1 text-sm text-fg-muted">Willkommen zurück bei STORM BET.</p>
+      <h1 className="text-lg font-semibold">{t('Anmelden')}</h1>
+      <p className="mt-1 text-sm text-fg-muted">{t('Willkommen zurück bei STORM BET.')}</p>
       <form onSubmit={onSubmit} className="mt-6 space-y-4" noValidate>
         <FormError message={error} />
-        <Field label="E-Mail-Adresse" htmlFor="email" error={errors.email?.message}>
+        <Field label={t('E-Mail-Adresse')} htmlFor="email" error={t(errors.email?.message)}>
           <Input
             id="email"
             type="email"
@@ -102,7 +104,7 @@ export function LoginForm() {
             {...form.register('email')}
           />
         </Field>
-        <Field label="Passwort" htmlFor="password" error={errors.password?.message}>
+        <Field label={t('Passwort')} htmlFor="password" error={t(errors.password?.message)}>
           <Input
             id="password"
             type="password"
@@ -113,17 +115,17 @@ export function LoginForm() {
         </Field>
         <div className="flex justify-end">
           <Link href="/forgot-password" className="text-xs text-accent hover:underline">
-            Passwort vergessen?
+            {t('Passwort vergessen?')}
           </Link>
         </div>
         <Button type="submit" className="w-full" loading={isSubmitting} data-testid="login-submit">
-          Anmelden
+          {t('Anmelden')}
         </Button>
       </form>
       <p className="mt-6 text-center text-sm text-fg-muted">
-        Noch kein Konto?{' '}
+        {t('Noch kein Konto?')}{' '}
         <Link href="/register" className="text-accent hover:underline">
-          Jetzt registrieren
+          {t('Jetzt registrieren')}
         </Link>
       </p>
     </Card>
@@ -140,6 +142,7 @@ function TwoFactorStep({
   onDone: () => void;
   onRestart: () => void;
 }) {
+  const t = useT();
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -159,14 +162,15 @@ function TwoFactorStep({
   };
   return (
     <Card className="p-6">
-      <h1 className="text-lg font-semibold">Bestätigungscode</h1>
+      <h1 className="text-lg font-semibold">{t('Bestätigungscode')}</h1>
       <p className="mt-1 text-sm text-fg-muted">
-        Gib den 6-stelligen Code aus deiner Authenticator-App ein – oder einen deiner
-        Wiederherstellungscodes.
+        {t(
+          'Gib den 6-stelligen Code aus deiner Authenticator-App ein – oder einen deiner Wiederherstellungscodes.',
+        )}
       </p>
       <form onSubmit={submit} className="mt-6 space-y-4" noValidate>
         <FormError message={error} />
-        <Field label="Code" htmlFor="otp">
+        <Field label={t('Code')} htmlFor="otp">
           <Input
             id="otp"
             autoComplete="one-time-code"
@@ -186,7 +190,7 @@ function TwoFactorStep({
           disabled={code.trim().length < 6}
           data-testid="otp-submit"
         >
-          Bestätigen
+          {t('Bestätigen')}
         </Button>
       </form>
       <button
@@ -194,7 +198,7 @@ function TwoFactorStep({
         onClick={onRestart}
         className="mt-4 w-full text-center text-xs text-fg-muted hover:text-fg"
       >
-        Zurück zur Anmeldung
+        {t('Zurück zur Anmeldung')}
       </button>
     </Card>
   );
@@ -209,6 +213,7 @@ const COUNTRIES = [
 ];
 
 export function RegisterForm() {
+  const t = useT();
   const router = useRouter();
   const [error, setFormError] = useState<string | null>(null);
   const form = useForm<RegisterInput>({
@@ -230,13 +235,13 @@ export function RegisterForm() {
 
   return (
     <Card className="p-6">
-      <h1 className="text-lg font-semibold">Konto erstellen</h1>
+      <h1 className="text-lg font-semibold">{t('Konto erstellen')}</h1>
       <p className="mt-1 text-sm text-fg-muted">
-        Mit 1.000 € Spielgeld-Startguthaben – kostenlos und ohne Echtgeld.
+        {t('Mit 1.000 € Spielgeld-Startguthaben – kostenlos und ohne Echtgeld.')}
       </p>
       <form onSubmit={onSubmit} className="mt-6 space-y-4" noValidate>
         <FormError message={error} />
-        <Field label="E-Mail-Adresse" htmlFor="email" error={errors.email?.message}>
+        <Field label={t('E-Mail-Adresse')} htmlFor="email" error={t(errors.email?.message)}>
           <Input
             id="email"
             type="email"
@@ -245,7 +250,11 @@ export function RegisterForm() {
             {...form.register('email')}
           />
         </Field>
-        <Field label="Anzeigename" htmlFor="displayName" error={errors.displayName?.message}>
+        <Field
+          label={t('Anzeigename')}
+          htmlFor="displayName"
+          error={t(errors.displayName?.message)}
+        >
           <Input
             id="displayName"
             autoComplete="nickname"
@@ -254,10 +263,10 @@ export function RegisterForm() {
           />
         </Field>
         <Field
-          label="Passwort"
+          label={t('Passwort')}
           htmlFor="password"
-          error={errors.password?.message}
-          hint="Mindestens 10 Zeichen, mit Buchstaben und Ziffern."
+          error={t(errors.password?.message)}
+          hint={t('Mindestens 10 Zeichen, mit Buchstaben und Ziffern.')}
         >
           <Input
             id="password"
@@ -267,11 +276,11 @@ export function RegisterForm() {
             {...form.register('password')}
           />
         </Field>
-        <Field label="Land" htmlFor="country" error={errors.country?.message}>
+        <Field label={t('Land')} htmlFor="country" error={t(errors.country?.message)}>
           <NativeSelect id="country" {...form.register('country')}>
             {COUNTRIES.map((c) => (
               <option key={c.code} value={c.code}>
-                {c.name}
+                {t(c.name)}
               </option>
             ))}
           </NativeSelect>
@@ -279,31 +288,31 @@ export function RegisterForm() {
         <div className="space-y-2.5 pt-1">
           <Checkbox
             {...form.register('ageConfirmed')}
-            label="Ich bin mindestens 18 Jahre alt."
+            label={t('Ich bin mindestens 18 Jahre alt.')}
             data-testid="age-confirm"
           />
           {errors.ageConfirmed ? (
-            <p className="text-xs text-down">{errors.ageConfirmed.message}</p>
+            <p className="text-xs text-down">{t(errors.ageConfirmed.message)}</p>
           ) : null}
           <Checkbox
             {...form.register('termsAccepted')}
             data-testid="terms-accept"
             label={
               <>
-                Ich akzeptiere die{' '}
+                {t('Ich akzeptiere die')}{' '}
                 <Link href="/terms" className="text-accent hover:underline">
-                  Nutzungsbedingungen
+                  {t('Nutzungsbedingungen')}
                 </Link>{' '}
-                und habe die{' '}
+                {t('und habe die')}{' '}
                 <Link href="/privacy" className="text-accent hover:underline">
-                  Datenschutzhinweise
+                  {t('Datenschutzhinweise')}
                 </Link>{' '}
                 gelesen.
               </>
             }
           />
           {errors.termsAccepted ? (
-            <p className="text-xs text-down">{errors.termsAccepted.message}</p>
+            <p className="text-xs text-down">{t(errors.termsAccepted.message)}</p>
           ) : null}
         </div>
         <Button
@@ -312,13 +321,13 @@ export function RegisterForm() {
           loading={isSubmitting}
           data-testid="register-submit"
         >
-          Registrieren
+          {t('Registrieren')}
         </Button>
       </form>
       <p className="mt-6 text-center text-sm text-fg-muted">
-        Bereits registriert?{' '}
+        {t('Bereits registriert?')}{' '}
         <Link href="/login" className="text-accent hover:underline">
-          Anmelden
+          {t('Anmelden')}
         </Link>
       </p>
     </Card>
@@ -326,6 +335,7 @@ export function RegisterForm() {
 }
 
 export function ForgotPasswordForm() {
+  const t = useT();
   const [sent, setSent] = useState(false);
   const [error, setFormError] = useState<string | null>(null);
   const form = useForm<ForgotPasswordInput>({
@@ -346,24 +356,27 @@ export function ForgotPasswordForm() {
     return (
       <Card className="p-6 text-center">
         <MailCheck className="mx-auto size-8 text-accent" aria-hidden="true" />
-        <h1 className="mt-3 text-lg font-semibold">E-Mail unterwegs</h1>
+        <h1 className="mt-3 text-lg font-semibold">{t('E-Mail unterwegs')}</h1>
         <p className="mt-2 text-sm text-fg-muted">
-          Falls ein Konto mit dieser Adresse existiert, haben wir dir einen Link zum Zurücksetzen
-          gesendet. Er ist 30 Minuten gültig.
+          {t(
+            'Falls ein Konto mit dieser Adresse existiert, haben wir dir einen Link zum Zurücksetzen gesendet. Er ist 30 Minuten gültig.',
+          )}
         </p>
         <Button variant="outline" className="mt-5 w-full" asChild>
-          <Link href="/login">Zurück zur Anmeldung</Link>
+          <Link href="/login">{t('Zurück zur Anmeldung')}</Link>
         </Button>
       </Card>
     );
   }
   return (
     <Card className="p-6">
-      <h1 className="text-lg font-semibold">Passwort vergessen</h1>
-      <p className="mt-1 text-sm text-fg-muted">Wir senden dir einen Link zum Zurücksetzen.</p>
+      <h1 className="text-lg font-semibold">{t('Passwort vergessen')}</h1>
+      <p className="mt-1 text-sm text-fg-muted">
+        {t('Wir senden dir einen Link zum Zurücksetzen.')}
+      </p>
       <form onSubmit={onSubmit} className="mt-6 space-y-4" noValidate>
         <FormError message={error} />
-        <Field label="E-Mail-Adresse" htmlFor="email" error={errors.email?.message}>
+        <Field label={t('E-Mail-Adresse')} htmlFor="email" error={t(errors.email?.message)}>
           <Input
             id="email"
             type="email"
@@ -373,7 +386,7 @@ export function ForgotPasswordForm() {
           />
         </Field>
         <Button type="submit" className="w-full" loading={isSubmitting}>
-          Link senden
+          {t('Link senden')}
         </Button>
       </form>
     </Card>
@@ -381,6 +394,7 @@ export function ForgotPasswordForm() {
 }
 
 export function ResetPasswordForm() {
+  const t = useT();
   const params = useSearchParams();
   const token = params.get('token') ?? '';
   const [done, setDone] = useState(false);
@@ -403,32 +417,33 @@ export function ResetPasswordForm() {
     return (
       <Card className="p-6 text-center">
         <CheckCircle2 className="mx-auto size-8 text-up" aria-hidden="true" />
-        <h1 className="mt-3 text-lg font-semibold">Passwort geändert</h1>
+        <h1 className="mt-3 text-lg font-semibold">{t('Passwort geändert')}</h1>
         <p className="mt-2 text-sm text-fg-muted">
-          Aus Sicherheitsgründen wurden alle Sitzungen beendet. Melde dich mit dem neuen Passwort
-          an.
+          {t(
+            'Aus Sicherheitsgründen wurden alle Sitzungen beendet. Melde dich mit dem neuen Passwort an.',
+          )}
         </p>
         <Button className="mt-5 w-full" asChild>
-          <Link href="/login">Anmelden</Link>
+          <Link href="/login">{t('Anmelden')}</Link>
         </Button>
       </Card>
     );
   }
   return (
     <Card className="p-6">
-      <h1 className="text-lg font-semibold">Neues Passwort festlegen</h1>
+      <h1 className="text-lg font-semibold">{t('Neues Passwort festlegen')}</h1>
       <form onSubmit={onSubmit} className="mt-6 space-y-4" noValidate>
         <FormError
           message={
             error ??
-            (errors.token ? 'Der Link ist unvollständig. Bitte fordere einen neuen an.' : null)
+            (errors.token ? t('Der Link ist unvollständig. Bitte fordere einen neuen an.') : null)
           }
         />
         <Field
-          label="Neues Passwort"
+          label={t('Neues Passwort')}
           htmlFor="password"
-          error={errors.password?.message}
-          hint="Mindestens 10 Zeichen, mit Buchstaben und Ziffern."
+          error={t(errors.password?.message)}
+          hint={t('Mindestens 10 Zeichen, mit Buchstaben und Ziffern.')}
         >
           <Input
             id="password"
@@ -439,7 +454,7 @@ export function ResetPasswordForm() {
           />
         </Field>
         <Button type="submit" className="w-full" loading={isSubmitting}>
-          Passwort speichern
+          {t('Passwort speichern')}
         </Button>
       </form>
     </Card>
@@ -447,6 +462,7 @@ export function ResetPasswordForm() {
 }
 
 export function VerifyEmail() {
+  const t = useT();
   const params = useSearchParams();
   const token = params.get('token');
   const [state, setState] = useState<'pending' | 'ok' | 'error'>('pending');
@@ -454,7 +470,7 @@ export function VerifyEmail() {
   useEffect(() => {
     if (!token) {
       setState('error');
-      setMessage('Der Bestätigungslink ist unvollständig.');
+      setMessage(t('Der Bestätigungslink ist unvollständig.'));
       return;
     }
     api('/auth/verify-email', { body: { token } })
@@ -463,27 +479,27 @@ export function VerifyEmail() {
         setState('error');
         setMessage(errorMessage(e));
       });
-  }, [token]);
+  }, [token, t]);
   return (
     <Card className="p-6 text-center">
       {state === 'pending' ? (
-        <p className="text-sm text-fg-muted">E-Mail-Adresse wird bestätigt …</p>
+        <p className="text-sm text-fg-muted">{t('E-Mail-Adresse wird bestätigt …')}</p>
       ) : null}
       {state === 'ok' ? (
         <>
           <CheckCircle2 className="mx-auto size-8 text-up" aria-hidden="true" />
-          <h1 className="mt-3 text-lg font-semibold">E-Mail-Adresse bestätigt</h1>
+          <h1 className="mt-3 text-lg font-semibold">{t('E-Mail-Adresse bestätigt')}</h1>
           <Button className="mt-5 w-full" asChild>
-            <Link href="/dashboard">Zum Konto</Link>
+            <Link href="/dashboard">{t('Zum Konto')}</Link>
           </Button>
         </>
       ) : null}
       {state === 'error' ? (
         <>
-          <h1 className="text-lg font-semibold">Bestätigung fehlgeschlagen</h1>
+          <h1 className="text-lg font-semibold">{t('Bestätigung fehlgeschlagen')}</h1>
           <p className="mt-2 text-sm text-fg-muted">{message}</p>
           <Button variant="outline" className="mt-5 w-full" asChild>
-            <Link href="/dashboard/profile">Neuen Link anfordern</Link>
+            <Link href="/dashboard/profile">{t('Neuen Link anfordern')}</Link>
           </Button>
         </>
       ) : null}

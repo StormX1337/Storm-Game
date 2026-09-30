@@ -10,6 +10,7 @@ import { Button, cn } from '@storm-bet/ui';
 import { useEffect, useState } from 'react';
 import { formatMoney } from '@/lib/format';
 import { GameShell, PlayingCard, StakeControl, useCasinoPlay } from './controls';
+import { useT } from '@/i18n/client';
 
 /** The server's 8/5 Jacks or Better table (display only). */
 const PAYTABLE: [Exclude<VideoPokerHand, 'nothing'>, string, number][] = [
@@ -34,6 +35,7 @@ export function PokerGame({
   sessionId: string;
   openRound: CasinoRoundDto | null;
 }) {
+  const t = useT();
   const { play, busy } = useCasinoPlay(game.id, sessionId);
   const [stake, setStake] = useState(Math.max(game.minStake, 100));
   const [round, setRound] = useState<CasinoRoundDto | null>(openRound);
@@ -77,7 +79,7 @@ export function PokerGame({
                   isHeld ? 'bg-amber-400 text-slate-900' : 'text-transparent',
                 )}
               >
-                Halten
+                {t('Halten')}
               </span>
             </button>
           );
@@ -85,14 +87,14 @@ export function PokerGame({
       </div>
       <p className="mt-3 text-center text-sm text-white/70" aria-live="polite">
         {!result
-          ? 'Geben, Karten halten, ziehen.'
+          ? t('Geben, Karten halten, ziehen.')
           : running
             ? result.handName !== 'nothing'
-              ? `Auf der Hand: ${NAMES[result.handName]} – tippe Karten zum Halten.`
-              : 'Tippe die Karten an, die du halten willst.'
+              ? t('Auf der Hand: {0} – tippe Karten zum Halten.', [NAMES[result.handName]])
+              : t('Tippe die Karten an, die du halten willst.')
             : result.handName !== 'nothing' && result.multiplier
               ? `${NAMES[result.handName]} · ${result.multiplier}× · ${formatMoney(round!.payout)}`
-              : 'Keine Gewinnhand.'}
+              : t('Keine Gewinnhand.')}
       </p>
     </div>
   );
@@ -121,7 +123,7 @@ export function PokerGame({
           disabled={busy}
           data-testid="poker-draw"
         >
-          {busy ? 'Zieht …' : `Ziehen (${5 - held.length} neue Karten)`}
+          {busy ? t('Zieht …') : t('Ziehen ({0} neue Karten)', [5 - held.length])}
         </Button>
       ) : (
         <>
@@ -140,7 +142,7 @@ export function PokerGame({
             data-testid="poker-deal"
             data-play
           >
-            {busy ? 'Gibt …' : 'Geben'}
+            {busy ? t('Gibt …') : t('Geben')}
           </Button>
         </>
       )}

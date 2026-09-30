@@ -8,8 +8,10 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { api, errorMessage } from '@/lib/api-client';
 import { useSession } from './providers/session';
+import { useT } from '@/i18n/client';
 
 export function ContactForm() {
+  const t = useT();
   const { user } = useSession();
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -36,9 +38,9 @@ export function ContactForm() {
     return (
       <Card className="p-6 text-center">
         <CheckCircle2 className="mx-auto size-8 text-up" aria-hidden="true" />
-        <p className="mt-3 font-semibold">Nachricht gesendet</p>
+        <p className="mt-3 font-semibold">{t('Nachricht gesendet')}</p>
         <p className="mt-1 text-sm text-fg-muted">
-          Danke! Wir antworten an die angegebene E-Mail-Adresse.
+          {t('Danke! Wir antworten an die angegebene E-Mail-Adresse.')}
         </p>
       </Card>
     );
@@ -51,10 +53,10 @@ export function ContactForm() {
             {error}
           </p>
         ) : null}
-        <Field label="Name" htmlFor="name" error={errors.name?.message}>
+        <Field label={t('Name')} htmlFor="name" error={t(errors.name?.message)}>
           <Input id="name" autoComplete="name" invalid={!!errors.name} {...form.register('name')} />
         </Field>
-        <Field label="E-Mail-Adresse" htmlFor="email" error={errors.email?.message}>
+        <Field label={t('E-Mail-Adresse')} htmlFor="email" error={t(errors.email?.message)}>
           <Input
             id="email"
             type="email"
@@ -64,17 +66,17 @@ export function ContactForm() {
           />
         </Field>
         <Field
-          label="Betreff"
+          label={t('Betreff')}
           htmlFor="subject"
-          error={errors.subject?.message}
+          error={t(errors.subject?.message)}
           className="sm:col-span-2"
         >
           <Input id="subject" invalid={!!errors.subject} {...form.register('subject')} />
         </Field>
         <Field
-          label="Nachricht"
+          label={t('Nachricht')}
           htmlFor="message"
-          error={errors.message?.message}
+          error={t(errors.message?.message)}
           className="sm:col-span-2"
         >
           <Textarea
@@ -86,7 +88,7 @@ export function ContactForm() {
         </Field>
         <div className="sm:col-span-2">
           <Button type="submit" loading={isSubmitting}>
-            Nachricht senden
+            {t('Nachricht senden')}
           </Button>
         </div>
       </form>

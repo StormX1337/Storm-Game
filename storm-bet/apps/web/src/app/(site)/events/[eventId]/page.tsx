@@ -7,6 +7,7 @@ import { EventMarkets } from '@/components/sportsbook/event-markets';
 import { MatchInfo } from '@/components/sportsbook/match-info';
 import { Scoreboard } from '@/components/sportsbook/scoreboard';
 import { serverApi, ServerApiError } from '@/lib/server-api';
+import { getT } from '@/i18n/server';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,13 +38,14 @@ export async function generateMetadata({
 export default async function EventPage({ params }: { params: Promise<{ eventId: string }> }) {
   const { eventId } = await params;
   const event = await load(eventId);
+  const t = await getT();
   return (
     <div className="space-y-4">
       <Link
         href={`/sports/${event.sport.key}`}
         className="inline-flex items-center gap-1 text-sm text-fg-muted hover:text-fg"
       >
-        <ChevronLeft className="size-4" aria-hidden="true" /> {event.sport.name}
+        <ChevronLeft className="size-4" aria-hidden="true" /> {t(event.sport.name)}
       </Link>
       <Scoreboard event={event} />
       <MatchInfo event={event} />

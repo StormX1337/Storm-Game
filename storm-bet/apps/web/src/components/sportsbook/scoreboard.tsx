@@ -10,15 +10,17 @@ import { DemoDataBadge, LiveBadge } from './live-indicator';
 import { MatchField } from './match-field';
 import { TeamBadge } from './team-badge';
 import { SportIcon } from './sport-icon';
+import { useT } from '@/i18n/client';
 
 export function Scoreboard({ event }: { event: EventDetailDto }) {
+  const t = useT();
   const live = useLiveEvent(event);
   const stats = live.statistics ?? event.statistics;
   const started = live.score !== null;
   const firstHalf =
     stats?.sport === 'football' || stats?.sport === 'basketball' ? stats.firstHalf : undefined;
   const statusLine = [
-    PERIOD_LABELS[live.liveState?.period ?? ''] ?? live.liveState?.period,
+    t(PERIOD_LABELS[live.liveState?.period ?? ''] ?? live.liveState?.period),
     live.liveState?.clock,
   ]
     .filter(Boolean)
@@ -27,12 +29,12 @@ export function Scoreboard({ event }: { event: EventDetailDto }) {
     <Card className="overflow-hidden">
       <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2.5 text-xs text-fg-muted">
         <SportIcon sport={event.sport.key} />
-        <span>{event.sport.name}</span>
+        <span>{t(event.sport.name)}</span>
         <span className="text-fg-subtle">/</span>
         <span className="truncate">{event.league.name}</span>
         <span className="ml-auto flex items-center gap-2">
           {event.dataSource.isSimulated ? <DemoDataBadge /> : null}
-          {live.isLive ? <LiveBadge /> : <span>{EVENT_STATUS_LABELS[live.status]}</span>}
+          {live.isLive ? <LiveBadge /> : <span>{t(EVENT_STATUS_LABELS[live.status])}</span>}
         </span>
       </div>
       {started &&
@@ -45,8 +47,8 @@ export function Scoreboard({ event }: { event: EventDetailDto }) {
           score={live.score}
           live={live.isLive}
           status={[
-            live.isLive ? statusLine : EVENT_STATUS_LABELS[live.status],
-            firstHalf ? `HZ ${firstHalf.home}:${firstHalf.away}` : null,
+            live.isLive ? statusLine : t(EVENT_STATUS_LABELS[live.status]),
+            firstHalf ? t('HZ {0}:{1}', [firstHalf.home, firstHalf.away]) : null,
           ]
             .filter(Boolean)
             .join(' · ')}
@@ -65,23 +67,25 @@ export function Scoreboard({ event }: { event: EventDetailDto }) {
                 {live.score.away}
               </p>
             ) : (
-              <p className="text-sm font-medium text-fg-muted">{formatKickoff(event.startTime)}</p>
+              <p className="text-sm font-medium text-fg-muted">
+                {t(formatKickoff(event.startTime))}
+              </p>
             )}
             <p className={cn('mt-1 text-xs', live.isLive ? 'text-live' : 'text-fg-subtle')}>
               {live.isLive
                 ? [
-                    PERIOD_LABELS[live.liveState?.period ?? ''] ?? live.liveState?.period,
+                    t(PERIOD_LABELS[live.liveState?.period ?? ''] ?? live.liveState?.period),
                     live.liveState?.clock,
                   ]
                     .filter(Boolean)
                     .join(' · ')
                 : started
-                  ? EVENT_STATUS_LABELS[live.status]
+                  ? t(EVENT_STATUS_LABELS[live.status])
                   : formatDateTime(event.startTime)}
             </p>
             {firstHalf ? (
               <p className="tabular mt-0.5 text-xs text-fg-subtle">
-                Halbzeit {firstHalf.home}:{firstHalf.away}
+                {t('Halbzeit')} {firstHalf.home}:{firstHalf.away}
               </p>
             ) : null}
           </div>
@@ -126,6 +130,7 @@ function StatBar({
   value: Pair;
   percent?: boolean;
 }) {
+  const t = useT();
   const total = value.home + value.away || 1;
   const homeShare = (value.home / total) * 100;
   return (
@@ -135,7 +140,7 @@ function StatBar({
           {value.home}
           {percent ? '%' : ''}
         </span>
-        <span className="text-fg-muted">{label}</span>
+        <span className="text-fg-muted">{t(label)}</span>
         <span className="tabular font-semibold">
           {value.away}
           {percent ? '%' : ''}
@@ -158,6 +163,7 @@ function StatisticsPanel({
   home: string;
   away: string;
 }) {
+  const t = useT();
   if (stats.sport === 'football') {
     const cards =
       stats.yellowCards && stats.redCards
@@ -167,10 +173,10 @@ function StatisticsPanel({
           }
         : null;
     const bars: [string, Pair | null | undefined, boolean][] = [
-      ['Ballbesitz', stats.possession, true],
-      ['Schüsse aufs Tor', stats.shotsOnTarget, false],
-      ['Ecken', stats.corners, false],
-      ['Karten (Gelb/Rot)', cards, false],
+      [t('Ballbesitz'), stats.possession, true],
+      [t('Schüsse aufs Tor'), stats.shotsOnTarget, false],
+      [t('Ecken'), stats.corners, false],
+      [t('Karten (Gelb/Rot)'), cards, false],
     ];
     const available = [
       ...bars.filter((b): b is [string, Pair, boolean] => !!b[1]),
@@ -189,9 +195,9 @@ function StatisticsPanel({
         ) : null}
         {stats.goalEvents ? (
           <div>
-            <p className="mb-2 text-xs font-medium text-fg-muted">Tore</p>
+            <p className="mb-2 text-xs font-medium text-fg-muted">{t('Tore')}</p>
             {stats.goalEvents.length === 0 ? (
-              <p className="text-xs text-fg-subtle">Noch keine Tore.</p>
+              <p className="text-xs text-fg-subtle">{t('Noch keine Tore.')}</p>
             ) : (
               <ol className="space-y-1.5 text-sm">
                 {stats.goalEvents.map((g, i) => (
@@ -222,13 +228,13 @@ function StatisticsPanel({
         <table className="w-full text-sm">
           <thead>
             <tr className="text-xs text-fg-subtle">
-              <th className="py-1 text-left font-medium">Spieler</th>
+              <th className="py-1 text-left font-medium">{t('Spieler')}</th>
               {stats.sets.map((_, i) => (
                 <th key={i} className="w-10 py-1 text-center font-medium">
                   S{i + 1}
                 </th>
               ))}
-              <th className="w-14 py-1 text-center font-medium">Punkte</th>
+              <th className="w-14 py-1 text-center font-medium">{t('Punkte')}</th>
             </tr>
           </thead>
           <tbody>
@@ -239,7 +245,7 @@ function StatisticsPanel({
                   {stats.server === (side === 'home' ? 'HOME' : 'AWAY') ? (
                     <span
                       className="ml-1.5 inline-block size-1.5 rounded-full bg-warning"
-                      title="Aufschlag"
+                      title={t('Aufschlag')}
                     />
                   ) : null}
                 </td>
@@ -266,14 +272,14 @@ function StatisticsPanel({
         <table className="w-full text-sm">
           <thead>
             <tr className="text-xs text-fg-subtle">
-              <th className="py-1 text-left font-medium">Team</th>
+              <th className="py-1 text-left font-medium">{t('Team')}</th>
               {stats.periods.map((_, i) => (
                 <th key={i} className="w-10 py-1 text-center font-medium">
                   {periodLabel(stats.sport, i)}
                 </th>
               ))}
               {stats.sport === 'basketball' ? (
-                <th className="w-12 py-1 text-center font-medium">Fouls</th>
+                <th className="w-12 py-1 text-center font-medium">{t('Fouls')}</th>
               ) : null}
             </tr>
           </thead>

@@ -11,6 +11,7 @@ import { Cherry, Citrus, Clover, Crown, Gem, Star, Zap } from 'lucide-react';
 import { useState } from 'react';
 import { formatMoney } from '@/lib/format';
 import { GameShell, StakeControl, useCasinoPlay } from './controls';
+import { useT } from '@/i18n/client';
 
 const SYMBOL: Record<SlotSymbol, { icon: typeof Zap; color: string }> = {
   bolt: { icon: Zap, color: 'text-yellow-300' },
@@ -31,6 +32,7 @@ const START: SlotSymbol[][] = [
 ];
 
 export function SlotGame({ game, sessionId }: { game: CasinoGameDto; sessionId: string }) {
+  const t = useT();
   const { play, busy } = useCasinoPlay(game.id, sessionId);
   const [stake, setStake] = useState(Math.max(game.minStake, 100));
   const [last, setLast] = useState<{ result: SlotResult; payout: number; stake: number } | null>(
@@ -79,14 +81,18 @@ export function SlotGame({ game, sessionId }: { game: CasinoGameDto; sessionId: 
         {last ? (
           last.payout > 0 ? (
             <p className="text-lg font-semibold text-yellow-300">
-              Gewinn {formatMoney(last.payout)} · {last.result.wins.length} Linie
+              {t('Gewinn')} {formatMoney(last.payout)} · {last.result.wins.length} {t('Linie')}
               {last.result.wins.length === 1 ? '' : 'n'}
             </p>
           ) : (
-            <p className="text-sm text-white/60">Kein Gewinn – viel Glück beim nächsten Dreh.</p>
+            <p className="text-sm text-white/60">
+              {t('Kein Gewinn – viel Glück beim nächsten Dreh.')}
+            </p>
           )
         ) : (
-          <p className="text-sm text-white/60">10 Gewinnlinien · Gewinne von links nach rechts</p>
+          <p className="text-sm text-white/60">
+            {t('10 Gewinnlinien · Gewinne von links nach rechts')}
+          </p>
         )}
       </div>
     </div>
@@ -109,7 +115,7 @@ export function SlotGame({ game, sessionId }: { game: CasinoGameDto; sessionId: 
         data-testid="spin"
         data-play
       >
-        {busy ? 'Dreht …' : 'Drehen'}
+        {busy ? t('Dreht …') : t('Drehen')}
       </Button>
     </>
   );

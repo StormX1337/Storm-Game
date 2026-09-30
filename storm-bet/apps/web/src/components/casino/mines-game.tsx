@@ -6,6 +6,7 @@ import { Bomb, Gem } from 'lucide-react';
 import { useState } from 'react';
 import { formatMoney } from '@/lib/format';
 import { GameShell, StakeControl, useCasinoPlay } from './controls';
+import { useT } from '@/i18n/client';
 
 const MINE_CHOICES = [1, 3, 5, 10, 24];
 
@@ -18,6 +19,7 @@ export function MinesGame({
   sessionId: string;
   openRound: CasinoRoundDto | null;
 }) {
+  const t = useT();
   const { play, busy } = useCasinoPlay(game.id, sessionId);
   const [stake, setStake] = useState(Math.max(game.minStake, 100));
   const [mines, setMines] = useState(3);
@@ -58,7 +60,7 @@ export function MinesGame({
                       : 'border-red-400/30 bg-red-500/10'
                     : 'border-white/10 bg-white/5 enabled:hover:bg-white/15',
               )}
-              aria-label={safe ? 'Sicher' : mine ? 'Mine' : `Feld ${tile + 1}`}
+              aria-label={safe ? t('Sicher') : mine ? t('Mine') : t('Feld {0}', [tile + 1])}
               data-testid="mines-tile"
             >
               {safe ? (
@@ -72,12 +74,18 @@ export function MinesGame({
       </div>
       <p className="mt-4 text-center text-sm text-white/70" aria-live="polite">
         {!result
-          ? 'Wähle Minen und Einsatz, dann Felder aufdecken.'
+          ? t('Wähle Minen und Einsatz, dann Felder aufdecken.')
           : running
-            ? `Jetzt ${result.multiplier.toFixed(2)}× · nächstes Feld ${result.nextMultiplier?.toFixed(2) ?? '–'}×`
+            ? t('Jetzt {0}× · nächstes Feld {1}×', [
+                result.multiplier.toFixed(2),
+                result.nextMultiplier?.toFixed(2) ?? '–',
+              ])
             : result.outcome === 'mine'
-              ? 'Mine getroffen – Einsatz verloren.'
-              : `Ausgezahlt: ${result.multiplier.toFixed(2)}× · ${formatMoney(round!.payout)}`}
+              ? t('Mine getroffen – Einsatz verloren.')
+              : t('Ausgezahlt: {0}× · {1}', [
+                  result.multiplier.toFixed(2),
+                  formatMoney(round!.payout),
+                ])}
       </p>
     </div>
   );
@@ -90,7 +98,7 @@ export function MinesGame({
       disabled={busy}
       data-testid="mines-cashout"
     >
-      Auszahlen ·{' '}
+      {t('Auszahlen ·')}{' '}
       {formatMoney(Math.floor((round!.stake * Math.round(result!.multiplier * 100)) / 100))}
     </Button>
   ) : (
@@ -103,7 +111,7 @@ export function MinesGame({
         disabled={busy}
       />
       <div className="space-y-2">
-        <p className="text-xs text-fg-muted">Minen</p>
+        <p className="text-xs text-fg-muted">{t('Minen')}</p>
         <div className="grid grid-cols-5 gap-1.5">
           {MINE_CHOICES.map((m) => (
             <button
@@ -130,7 +138,7 @@ export function MinesGame({
         data-testid="mines-start"
         data-play
       >
-        {busy ? 'Startet …' : 'Starten'}
+        {busy ? t('Startet …') : t('Starten')}
       </Button>
     </>
   );

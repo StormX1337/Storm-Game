@@ -1,8 +1,12 @@
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
 import { RegisterForm } from '@/components/auth/forms';
+import { getT } from '@/i18n/server';
 
-export const metadata: Metadata = { title: 'Registrieren' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return { title: t('Registrieren') };
+}
 
 export default function Page() {
   return (

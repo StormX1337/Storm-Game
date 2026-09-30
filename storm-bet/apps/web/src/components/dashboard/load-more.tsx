@@ -4,6 +4,7 @@ import type { Paginated } from '@storm-bet/types';
 import { Button, toast } from '@storm-bet/ui';
 import { useState } from 'react';
 import { api, errorMessage } from '@/lib/api-client';
+import { useT } from '@/i18n/client';
 
 /**
  * Cursor pagination for server-rendered lists: the first page arrives with the
@@ -21,6 +22,7 @@ export function LoadMore<T>({
   /** Render the button inside a table row (for use within <tbody>). */
   asRow?: boolean;
 }) {
+  const t = useT();
   const [items, setItems] = useState<T[]>([]);
   const [cursor, setCursor] = useState(initialCursor);
   const [loading, setLoading] = useState(false);
@@ -47,14 +49,14 @@ export function LoadMore<T>({
           <tr>
             <td colSpan={99} className="py-3 text-center">
               <Button variant="outline" onClick={() => void load()} loading={loading}>
-                Mehr laden
+                {t('Mehr laden')}
               </Button>
             </td>
           </tr>
         ) : (
           <div className="flex justify-center">
             <Button variant="outline" onClick={() => void load()} loading={loading}>
-              Mehr laden
+              {t('Mehr laden')}
             </Button>
           </div>
         )

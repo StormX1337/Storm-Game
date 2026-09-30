@@ -5,6 +5,7 @@ import { Button } from '@storm-bet/ui';
 import { useState } from 'react';
 import { formatMoney } from '@/lib/format';
 import { Felt, GameShell, Hand, StakeControl, useCasinoPlay } from './controls';
+import { useT } from '@/i18n/client';
 
 const OUTCOME: Record<NonNullable<BlackjackResult['outcome']>, string> = {
   blackjack: 'Blackjack!',
@@ -23,6 +24,7 @@ export function BlackjackGame({
   sessionId: string;
   openRound: CasinoRoundDto | null;
 }) {
+  const t = useT();
   const { play, busy } = useCasinoPlay(game.id, sessionId);
   const [stake, setStake] = useState(Math.max(game.minStake, 100));
   const [round, setRound] = useState<CasinoRoundDto | null>(openRound);
@@ -43,8 +45,8 @@ export function BlackjackGame({
     <Felt>
       {hand ? (
         <div className="space-y-6" data-testid="blackjack-table">
-          <Hand label="Dealer" cards={hand.dealer} total={hand.dealerTotal} />
-          <Hand label="Du" cards={hand.player} total={hand.playerTotal} />
+          <Hand label={t('Dealer')} cards={hand.dealer} total={hand.dealerTotal} />
+          <Hand label={t('Du')} cards={hand.player} total={hand.playerTotal} />
           <div aria-live="polite" className="min-h-7">
             {hand.outcome ? (
               <p className="text-lg font-semibold text-yellow-300">
@@ -53,7 +55,7 @@ export function BlackjackGame({
               </p>
             ) : (
               <p className="text-sm text-white/70">
-                Einsatz {formatMoney(round?.stake ?? 0)} – Karte oder stehen bleiben?
+                {t('Einsatz')} {formatMoney(round?.stake ?? 0)} {t('– Karte oder stehen bleiben?')}
               </p>
             )}
           </div>
@@ -61,7 +63,9 @@ export function BlackjackGame({
       ) : (
         <div className="grid min-h-[280px] place-items-center text-center text-white/70">
           <p>
-            Dealer steht auf Soft 17 · Blackjack zahlt 3:2 · Verdoppeln auf die ersten zwei Karten
+            {t(
+              'Dealer steht auf Soft 17 · Blackjack zahlt 3:2 · Verdoppeln auf die ersten zwei Karten',
+            )}
           </p>
         </div>
       )}
@@ -71,21 +75,21 @@ export function BlackjackGame({
   const controls = open ? (
     <div className="grid grid-cols-3 gap-2">
       <Button onClick={() => act('hit')} disabled={busy || !hand?.actions.includes('hit')}>
-        Karte
+        {t('Karte')}
       </Button>
       <Button
         variant="secondary"
         onClick={() => act('stand')}
         disabled={busy || !hand?.actions.includes('stand')}
       >
-        Stehen
+        {t('Stehen')}
       </Button>
       <Button
         variant="secondary"
         onClick={() => act('double')}
         disabled={busy || !hand?.actions.includes('double')}
       >
-        Verdoppeln
+        {t('Verdoppeln')}
       </Button>
     </div>
   ) : (
@@ -105,7 +109,7 @@ export function BlackjackGame({
         data-testid="deal"
         data-play
       >
-        {busy ? 'Teilt aus …' : round ? 'Neue Hand' : 'Austeilen'}
+        {busy ? t('Teilt aus …') : round ? t('Neue Hand') : t('Austeilen')}
       </Button>
     </>
   );

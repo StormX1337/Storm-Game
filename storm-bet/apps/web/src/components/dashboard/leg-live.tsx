@@ -7,6 +7,7 @@ import { BarChart3, Flag, RectangleVertical, Zap } from 'lucide-react';
 import { formatKickoff } from '@/lib/format';
 import { useRealtimeTopics } from '../providers/realtime';
 import { useLiveEvent } from '../sportsbook/hooks';
+import { useT } from '@/i18n/client';
 
 type Leg = BetDto['selections'][number];
 
@@ -32,6 +33,7 @@ const sum = (p: Pair | null) => (p ? p.home + p.away : null);
  * decided on.
  */
 export function LegLive({ leg }: { leg: Leg }) {
+  const t = useT();
   useRealtimeTopics([`event:${leg.eventId}`]);
   const live = useLiveEvent({
     id: leg.eventId,
@@ -43,15 +45,15 @@ export function LegLive({ leg }: { leg: Leg }) {
   const { corners, cards } = figures(live.statistics, leg);
   const stat =
     leg.marketType === 'TOTAL_CORNERS'
-      ? { icon: Flag, value: sum(corners), label: 'Ecken' }
+      ? { icon: Flag, value: sum(corners), label: t('Ecken') }
       : leg.marketType === 'TOTAL_CARDS'
-        ? { icon: RectangleVertical, value: sum(cards), label: 'Karten' }
+        ? { icon: RectangleVertical, value: sum(cards), label: t('Karten') }
         : null;
   const statBadge =
     stat && stat.value !== null ? (
       <span
         className="tabular inline-flex items-center gap-1 text-[11px] font-semibold text-fg-muted"
-        title={stat.label}
+        title={t(stat.label)}
       >
         <stat.icon className="size-3" aria-hidden="true" /> {stat.value}
       </span>
@@ -59,7 +61,8 @@ export function LegLive({ leg }: { leg: Leg }) {
 
   if (live.isLive) {
     const period = live.liveState?.period;
-    const clock = live.liveState?.clock ?? (period ? (PERIOD_LABELS[period] ?? period) : 'Live');
+    const clock =
+      live.liveState?.clock ?? (period ? t(PERIOD_LABELS[period] ?? period) : t('Live'));
     return (
       <div className="flex shrink-0 items-center gap-2" data-testid="leg-live">
         {statBadge}
@@ -80,7 +83,7 @@ export function LegLive({ leg }: { leg: Leg }) {
       <div className="flex shrink-0 items-center gap-2">
         {statBadge}
         <span className="tabular inline-flex items-center gap-1 rounded-full bg-surface-3 px-2 py-0.5 text-[11px] font-semibold text-fg-muted">
-          <BarChart3 className="size-3" aria-hidden="true" /> Ergebnis {live.score.home}:
+          <BarChart3 className="size-3" aria-hidden="true" /> {t('Ergebnis')} {live.score.home}:
           {live.score.away}
         </span>
       </div>
@@ -89,12 +92,12 @@ export function LegLive({ leg }: { leg: Leg }) {
   if (live.status === 'CANCELLED' || live.status === 'POSTPONED')
     return (
       <span className="text-[11px] text-fg-subtle">
-        {live.status === 'CANCELLED' ? 'Abgesagt' : 'Verschoben'}
+        {live.status === 'CANCELLED' ? t('Abgesagt') : t('Verschoben')}
       </span>
     );
   return (
     <span className={cn('tabular shrink-0 text-[11px] text-fg-subtle')}>
-      {formatKickoff(leg.startTime)}
+      {t(formatKickoff(leg.startTime))}
     </span>
   );
 }

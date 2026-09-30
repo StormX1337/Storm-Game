@@ -10,9 +10,11 @@ import { formatKickoff, formatMoney, formatOdds, parseStake } from '@/lib/format
 import { uuid } from '@/lib/uuid';
 import { announceWalletChange, useSession } from '../providers/session';
 import { SportIcon } from './sport-icon';
+import { useT } from '@/i18n/client';
 
 /** Today's odds boosts: one pick at a raised price, limited stake, once per player. */
 export function BoostList() {
+  const t = useT();
   const { user } = useSession();
   const [boosts, setBoosts] = useState<BoostDto[]>([]);
   const load = useCallback(async () => {
@@ -30,7 +32,7 @@ export function BoostList() {
   return (
     <section className="space-y-3" aria-labelledby="boosts-title" data-testid="boosts">
       <h2 id="boosts-title" className="flex items-center gap-2 text-base font-semibold">
-        <Rocket className="size-4 text-accent-strong" aria-hidden="true" /> Quoten-Boosts
+        <Rocket className="size-4 text-accent-strong" aria-hidden="true" /> {t('Quoten-Boosts')}
       </h2>
       <div className="grid gap-3 md:grid-cols-3">
         {boosts.map((b) => (
@@ -50,6 +52,7 @@ function BoostCard({
   loggedIn: boolean;
   onChange: () => Promise<void>;
 }) {
+  const t = useT();
   const [stake, setStake] = useState((boost.maxStake / 100).toFixed(2).replace('.', ','));
   const [busy, setBusy] = useState(false);
   const place = async () => {
@@ -67,14 +70,14 @@ function BoostCard({
         },
       });
       announceWalletChange(result.wallet);
-      toast.success(`Boost platziert · ${result.bets[0]?.reference ?? ''}`);
+      toast.success(t('Boost platziert · {0}', [result.bets[0]?.reference ?? '']));
     } catch (e) {
       toast.error(
         e instanceof ApiError && e.code === 'ODDS_CHANGED'
-          ? 'Die Quote hat sich geändert – bitte prüfe den neuen Boost.'
+          ? t('Die Quote hat sich geändert – bitte prüfe den neuen Boost.')
           : e instanceof ApiError
             ? e.message
-            : 'Der Boost konnte nicht platziert werden.',
+            : t('Der Boost konnte nicht platziert werden.'),
       );
     } finally {
       setBusy(false);
@@ -87,9 +90,9 @@ function BoostCard({
       <div className="flex items-start gap-2">
         <SportIcon sport={boost.sportKey} className="mt-0.5 text-fg-muted" />
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold">{boost.title}</p>
+          <p className="truncate text-sm font-semibold">{t(boost.title)}</p>
           <p className="truncate text-xs text-fg-muted">
-            {boost.eventName} · {formatKickoff(boost.startTime)}
+            {boost.eventName} · {t(formatKickoff(boost.startTime))}
           </p>
         </div>
         <span className="rounded bg-accent-soft px-1.5 py-0.5 text-[10px] font-bold text-accent-strong">
@@ -107,15 +110,15 @@ function BoostCard({
       </p>
       {!loggedIn ? (
         <Button variant="secondary" asChild>
-          <Link href="/login">Anmelden, um zu wetten</Link>
+          <Link href="/login">{t('Anmelden, um zu wetten')}</Link>
         </Button>
       ) : boost.used ? (
         <Button variant="secondary" disabled>
-          Bereits genutzt
+          {t('Bereits genutzt')}
         </Button>
       ) : !boost.open ? (
         <Button variant="secondary" disabled>
-          Gerade nicht verfügbar
+          {t('Gerade nicht verfügbar')}
         </Button>
       ) : (
         <div className="flex gap-2">
@@ -123,7 +126,7 @@ function BoostCard({
             inputMode="decimal"
             value={stake}
             onChange={(e) => setStake(e.target.value)}
-            aria-label="Einsatz"
+            aria-label={t('Einsatz')}
             className="tabular h-10 w-24 rounded-md border border-border-strong bg-surface-2 px-2 text-right text-sm font-semibold focus-visible:border-accent focus-visible:outline-none"
           />
           <Button
@@ -132,7 +135,7 @@ function BoostCard({
             loading={busy}
             data-testid="boost-place"
           >
-            Boost wetten
+            {t('Boost wetten')}
           </Button>
         </div>
       )}

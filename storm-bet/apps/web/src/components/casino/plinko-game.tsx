@@ -5,6 +5,7 @@ import { Button, cn } from '@storm-bet/ui';
 import { useEffect, useState } from 'react';
 import { formatMoney } from '@/lib/format';
 import { GameShell, StakeControl, useCasinoPlay } from './controls';
+import { useT } from '@/i18n/client';
 
 const ROWS = 12;
 /** Must match the server's tables (packages/casino/src/games/plinko.ts). */
@@ -21,6 +22,7 @@ const RISKS: [PlinkoRisk, string][] = [
 ];
 
 export function PlinkoGame({ game, sessionId }: { game: CasinoGameDto; sessionId: string }) {
+  const t = useT();
   const { play, busy } = useCasinoPlay(game.id, sessionId);
   const [stake, setStake] = useState(Math.max(game.minStake, 100));
   const [risk, setRisk] = useState<PlinkoRisk>('medium');
@@ -94,12 +96,12 @@ export function PlinkoGame({ game, sessionId }: { game: CasinoGameDto; sessionId
         </div>
         <p className="pt-2 text-center text-sm text-white/70" aria-live="polite">
           {!last
-            ? 'Die Kugel fällt zufällig nach links oder rechts.'
+            ? t('Die Kugel fällt zufällig nach links oder rechts.')
             : !landed
-              ? 'Fällt …'
+              ? t('Fällt …')
               : last.payout > 0
                 ? `${last.result.multiplier}× · ${formatMoney(last.payout)}`
-                : `${last.result.multiplier}× – kein Gewinn`}
+                : t('{0}× – kein Gewinn', [last.result.multiplier])}
         </p>
       </div>
     </div>
@@ -114,7 +116,7 @@ export function PlinkoGame({ game, sessionId }: { game: CasinoGameDto; sessionId
         max={game.maxStake}
         disabled={busy}
       />
-      <div className="grid grid-cols-3 gap-1.5" role="radiogroup" aria-label="Risiko">
+      <div className="grid grid-cols-3 gap-1.5" role="radiogroup" aria-label={t('Risiko')}>
         {RISKS.map(([key, label]) => (
           <button
             key={key}
@@ -129,7 +131,7 @@ export function PlinkoGame({ game, sessionId }: { game: CasinoGameDto; sessionId
                 : 'border-border text-fg-muted hover:text-fg',
             )}
           >
-            {label}
+            {t(label)}
           </button>
         ))}
       </div>
@@ -141,7 +143,7 @@ export function PlinkoGame({ game, sessionId }: { game: CasinoGameDto; sessionId
         data-testid="plinko-drop"
         data-play
       >
-        {busy ? 'Fällt …' : 'Kugel fallen lassen'}
+        {busy ? t('Fällt …') : t('Kugel fallen lassen')}
       </Button>
     </>
   );

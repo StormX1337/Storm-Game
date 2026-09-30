@@ -7,8 +7,12 @@ import { BetCard } from '@/components/dashboard/bet-card';
 import { MoreBets } from '@/components/dashboard/bet-list';
 import { PageHeader } from '@/components/sportsbook/page-header';
 import { serverApi } from '@/lib/server-api';
+import { getT } from '@/i18n/server';
 
-export const metadata: Metadata = { title: 'Meine Wetten' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return { title: t('Meine Wetten') };
+}
 
 const FILTERS = [
   { key: 'all', label: 'Alle' },
@@ -23,16 +27,17 @@ export default async function BetsPage({
 }: {
   searchParams: Promise<{ status?: string }>;
 }) {
+  const t = await getT();
   const { status: raw } = await searchParams;
   const status = FILTERS.some((f) => f.key === raw) ? (raw as string) : 'all';
   const page = await serverApi<Paginated<BetDto>>(`/bets?status=${status}&limit=10`);
   return (
     <>
       <PageHeader
-        title="Meine Wetten"
-        description="Alle Wetten mit Einsatz, Quote zum Annahmezeitpunkt und Ergebnis."
+        title={t('Meine Wetten')}
+        description={t('Alle Wetten mit Einsatz, Quote zum Annahmezeitpunkt und Ergebnis.')}
       />
-      <nav className="scrollbar-none flex gap-1 overflow-x-auto" aria-label="Filter">
+      <nav className="scrollbar-none flex gap-1 overflow-x-auto" aria-label={t('Filter')}>
         {FILTERS.map((f) => (
           <Link
             key={f.key}
@@ -43,13 +48,13 @@ export default async function BetsPage({
             )}
             aria-current={status === f.key ? 'page' : undefined}
           >
-            {f.label}
+            {t(f.label)}
           </Link>
         ))}
       </nav>
       {page.items.length === 0 ? (
         <Card>
-          <EmptyState icon={<Receipt />} title="Keine Wetten in dieser Ansicht" />
+          <EmptyState icon={<Receipt />} title={t('Keine Wetten in dieser Ansicht')} />
         </Card>
       ) : (
         <div className="space-y-3">

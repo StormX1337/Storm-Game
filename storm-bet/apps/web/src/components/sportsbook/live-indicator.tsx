@@ -1,4 +1,7 @@
+'use client';
+
 import { cn } from '@storm-bet/ui';
+import { useT } from '@/i18n/client';
 
 export function LiveDot({ className }: { className?: string }) {
   return (
@@ -10,6 +13,7 @@ export function LiveDot({ className }: { className?: string }) {
 }
 
 export function LiveBadge({ label = 'Live', className }: { label?: string; className?: string }) {
+  const t = useT();
   return (
     <span
       className={cn(
@@ -18,21 +22,22 @@ export function LiveBadge({ label = 'Live', className }: { label?: string; class
       )}
     >
       <LiveDot />
-      {label}
+      {t(label)}
     </span>
   );
 }
 
 export function DemoDataBadge({ className }: { className?: string }) {
+  const t = useT();
   return (
     <span
       className={cn(
         'inline-flex items-center whitespace-nowrap rounded-sm border border-warning/30 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.02em] text-warning',
         className,
       )}
-      title="Simulierte Daten – keine echten Spiele oder Quoten"
+      title={t('Simulierte Daten – keine echten Spiele oder Quoten')}
     >
-      Demo
+      {t('Demo')}
     </span>
   );
 }

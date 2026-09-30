@@ -16,6 +16,7 @@ import { cursorArgs, page } from '../lib/pagination';
 import { parse } from '../lib/validate';
 import { authenticated, requireSession } from '../plugins/auth';
 import { enforceRateLimit, RATE_LIMITS } from '../plugins/rate-limit';
+import { toEnglish, wantsEnglish } from '../lib/i18n';
 
 const FILTERS: Record<string, BetStatus[] | undefined> = {
   all: undefined,
@@ -31,7 +32,12 @@ export function betRoutes(ctx: AppContext) {
     app.post('/bets/validate', async (request, reply) => {
       await enforceRateLimit(ctx.redis, RATE_LIMITS.validateSlip, request.ip, reply);
       const input = parse(validateSlipSchema, request.body);
-      return ctx.placement.validate(request.session?.userId ?? null, input);
+      const result = await ctx.placement.validate(request.session?.userId ?? null, input);
+      if (!wantsEnglish(request)) return result;
+      return {
+        ...result,
+        issues: result.issues.map((i) => ({ ...i, message: toEnglish(i.message) })),
+      };
     });
 
     app.post('/bets/place', { preHandler: authenticated }, async (request, reply) => {

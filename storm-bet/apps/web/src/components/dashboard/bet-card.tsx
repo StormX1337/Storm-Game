@@ -1,3 +1,5 @@
+'use client';
+
 import type { BetDto } from '@storm-bet/types';
 import { Badge, Card, cn } from '@storm-bet/ui';
 import { CheckCircle2, ChevronRight, Circle, MinusCircle, XCircle } from 'lucide-react';
@@ -8,18 +10,20 @@ import { ShareButton } from '../betslip/share-button';
 import { TeamBadge } from '../sportsbook/team-badge';
 import { CashoutBar } from './cashout-bar';
 import { LegLive } from './leg-live';
+import { useT } from '@/i18n/client';
 
 type Leg = BetDto['selections'][number];
 
 /** ✓ won, ✗ lost, – void, ○ open. */
 function ResultIcon({ result }: { result: Leg['result'] }) {
+  const t = useT();
   if (result === 'WON')
-    return <CheckCircle2 className="size-4 shrink-0 text-up" aria-label="Gewonnen" />;
+    return <CheckCircle2 className="size-4 shrink-0 text-up" aria-label={t('Gewonnen')} />;
   if (result === 'LOST')
-    return <XCircle className="size-4 shrink-0 text-down" aria-label="Verloren" />;
+    return <XCircle className="size-4 shrink-0 text-down" aria-label={t('Verloren')} />;
   if (result === 'VOID')
-    return <MinusCircle className="size-4 shrink-0 text-warning" aria-label="Storniert" />;
-  return <Circle className="size-4 shrink-0 text-fg-subtle" aria-label="Offen" />;
+    return <MinusCircle className="size-4 shrink-0 text-warning" aria-label={t('Storniert')} />;
+  return <Circle className="size-4 shrink-0 text-fg-subtle" aria-label={t('Offen')} />;
 }
 
 function Teams({ leg }: { leg: Leg }) {
@@ -36,6 +40,7 @@ function Teams({ leg }: { leg: Leg }) {
 }
 
 function Legs({ bet }: { bet: BetDto }) {
+  const t = useT();
   return (
     <ul className="divide-y divide-border/60">
       {bet.selections.map((leg) => (
@@ -43,11 +48,11 @@ function Legs({ bet }: { bet: BetDto }) {
           <div className="flex items-start gap-2">
             <ResultIcon result={leg.result} />
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold">{leg.selectionName}</p>
-              <p className="truncate text-xs text-fg-muted">{leg.marketName}</p>
+              <p className="truncate text-sm font-semibold">{t(leg.selectionName)}</p>
+              <p className="truncate text-xs text-fg-muted">{t(leg.marketName)}</p>
               {leg.earlyPayout ? (
                 <p className="text-[11px] font-semibold text-up">
-                  Frühe Auszahlung · 2 Tore Vorsprung
+                  {t('Frühe Auszahlung · 2 Tore Vorsprung')}
                 </p>
               ) : null}
             </div>
@@ -65,6 +70,7 @@ function Legs({ bet }: { bet: BetDto }) {
 
 /** One match, its picks as a chain. */
 function BuilderLegs({ bet }: { bet: BetDto }) {
+  const t = useT();
   const first = bet.selections[0];
   if (!first) return null;
   return (
@@ -83,8 +89,8 @@ function BuilderLegs({ bet }: { bet: BetDto }) {
               ) : null}
             </span>
             <div className="min-w-0 flex-1 pb-2.5">
-              <p className="truncate text-sm font-semibold">{leg.selectionName}</p>
-              <p className="truncate text-xs text-fg-muted">{leg.marketName}</p>
+              <p className="truncate text-sm font-semibold">{t(leg.selectionName)}</p>
+              <p className="truncate text-xs text-fg-muted">{t(leg.marketName)}</p>
             </div>
           </li>
         ))}
@@ -94,6 +100,7 @@ function BuilderLegs({ bet }: { bet: BetDto }) {
 }
 
 export function BetCard({ bet, href }: { bet: BetDto; href?: string }) {
+  const t = useT();
   const payout =
     bet.payout ??
     (bet.status === 'PENDING'
@@ -102,12 +109,12 @@ export function BetCard({ bet, href }: { bet: BetDto; href?: string }) {
   const content = (
     <>
       <div className="flex items-center gap-2 border-b border-border px-4 py-2.5">
-        <Badge variant={betStatusVariant(bet.status)}>{BET_STATUS_LABELS[bet.status]}</Badge>
+        <Badge variant={betStatusVariant(bet.status)}>{t(BET_STATUS_LABELS[bet.status])}</Badge>
         <span className="truncate text-sm font-semibold">
-          {BET_TYPE_LABELS[bet.type]}
+          {t(BET_TYPE_LABELS[bet.type])}
           {bet.system ? (
             <span className="ml-1 font-normal text-fg-muted">
-              {bet.system.size} aus {bet.selections.length} · {bet.system.lines} Wetten
+              {bet.system.size} aus {bet.selections.length} · {bet.system.lines} {t('Wetten')}
             </span>
           ) : null}
         </span>
@@ -130,16 +137,16 @@ export function BetCard({ bet, href }: { bet: BetDto; href?: string }) {
       {bet.type === 'BET_BUILDER' ? <BuilderLegs bet={bet} /> : <Legs bet={bet} />}
       <dl className="grid grid-cols-3 gap-2 border-t border-border bg-surface-2/50 px-4 py-2.5 text-xs">
         <div>
-          <dt className="text-fg-subtle">Einsatz</dt>
+          <dt className="text-fg-subtle">{t('Einsatz')}</dt>
           <dd className="tabular font-semibold">{formatMoney(bet.stake)}</dd>
         </div>
         <div>
-          <dt className="text-fg-subtle">{bet.system ? 'Ø Quote' : 'Quote'}</dt>
+          <dt className="text-fg-subtle">{bet.system ? t('Ø Quote') : t('Quote')}</dt>
           <dd className="tabular font-semibold">{formatOdds(bet.totalOdds)}</dd>
         </div>
         <div className="text-right">
           <dt className="text-fg-subtle">
-            {bet.status === 'PENDING' ? 'Möglicher Gewinn' : 'Auszahlung'}
+            {bet.status === 'PENDING' ? t('Möglicher Gewinn') : t('Auszahlung')}
           </dt>
           <dd
             className={cn(
@@ -154,11 +161,11 @@ export function BetCard({ bet, href }: { bet: BetDto; href?: string }) {
       </dl>
       {bet.partialCashouts.length ? (
         <p className="border-t border-border px-4 py-2 text-xs text-fg-muted">
-          Teil-Cashouts:{' '}
+          {t('Teil-Cashouts:')}{' '}
           {bet.partialCashouts
-            .map((c) => `${formatMoney(c.amount)} (Einsatz ${formatMoney(c.stake)})`)
+            .map((c) => t('{0} (Einsatz {1})', [formatMoney(c.amount), formatMoney(c.stake)]))
             .join(' · ')}
-          {bet.status === 'PENDING' ? ` · offen: ${formatMoney(bet.remainingStake)}` : ''}
+          {bet.status === 'PENDING' ? t(' · offen: {0}', [formatMoney(bet.remainingStake)]) : ''}
         </p>
       ) : null}
     </>
@@ -179,7 +186,10 @@ export function BetCard({ bet, href }: { bet: BetDto; href?: string }) {
         <CashoutBar betId={bet.id} />
       ) : null}
       <div className="flex justify-end border-t border-border px-4 py-1.5">
-        <ShareButton selectionIds={bet.selections.map((s) => s.selectionId)} label="Tipp teilen" />
+        <ShareButton
+          selectionIds={bet.selections.map((s) => s.selectionId)}
+          label={t('Tipp teilen')}
+        />
       </div>
     </Card>
   );

@@ -15,6 +15,8 @@ import { formatOdds } from '@/lib/format';
 import { useBetSlip } from '@/stores/bet-slip';
 import { eventName } from './event-row';
 import { useLiveEvent } from './hooks';
+import { useT } from '@/i18n/client';
+import type { T } from '@/i18n/translate';
 
 interface Pick {
   type: MarketType;
@@ -29,35 +31,40 @@ interface Suggestion {
 }
 
 /** Common combinations for this match, priced like any Bet Builder. */
-function presets(markets: MarketDto[], home: string, away: string): Omit<Suggestion, 'odds'>[] {
+function presets(
+  markets: MarketDto[],
+  home: string,
+  away: string,
+  t: T,
+): Omit<Suggestion, 'odds'>[] {
   const result = markets.find((m) => m.type === 'MATCH_RESULT');
   const price = (o: Outcome) => result?.selections.find((s) => s.outcome === o)?.odds ?? Infinity;
   const fav: 'HOME' | 'AWAY' = price('HOME') <= price('AWAY') ? 'HOME' : 'AWAY';
   const favName = fav === 'HOME' ? home : away;
   const list: { title: string; picks: Pick[] }[] = [
     {
-      title: `${favName} gewinnt & über 1,5 Tore`,
+      title: t('{0} gewinnt & über 1,5 Tore', [favName]),
       picks: [
         { type: 'MATCH_RESULT', outcome: fav },
         { type: 'TOTAL_GOALS', line: 1.5, outcome: 'OVER' },
       ],
     },
     {
-      title: 'Beide treffen & über 2,5 Tore',
+      title: t('Beide treffen & über 2,5 Tore'),
       picks: [
         { type: 'BOTH_TEAMS_TO_SCORE', outcome: 'YES' },
         { type: 'TOTAL_GOALS', line: 2.5, outcome: 'OVER' },
       ],
     },
     {
-      title: `${favName} gewinnt & beide treffen`,
+      title: t('{0} gewinnt & beide treffen', [favName]),
       picks: [
         { type: 'MATCH_RESULT', outcome: fav },
         { type: 'BOTH_TEAMS_TO_SCORE', outcome: 'YES' },
       ],
     },
     {
-      title: `${favName} oder Unentschieden & unter 3,5 Tore`,
+      title: t('{0} oder Unentschieden & unter 3,5 Tore', [favName]),
       picks: [
         { type: 'DOUBLE_CHANCE', outcome: fav === 'HOME' ? 'HOME_OR_DRAW' : 'DRAW_OR_AWAY' },
         { type: 'TOTAL_GOALS', line: 3.5, outcome: 'UNDER' },
@@ -80,14 +87,15 @@ function presets(markets: MarketDto[], home: string, away: string): Omit<Suggest
 }
 
 export function BuilderSuggestions({ event }: { event: EventDetailDto }) {
+  const t = useT();
   const live = useLiveEvent(event);
   const replaceEvent = useBetSlip((s) => s.replaceEvent);
   const setOpen = useBetSlip((s) => s.setOpen);
   const eligible =
     event.sport.key === 'football' && (live.status === 'SCHEDULED' || live.status === 'LIVE');
   const base = useMemo(
-    () => (eligible ? presets(event.markets, event.home.name, event.away.name) : []),
-    [eligible, event.markets, event.home.name, event.away.name],
+    () => (eligible ? presets(event.markets, event.home.name, event.away.name, t) : []),
+    [eligible, event.markets, event.home.name, event.away.name, t],
   );
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
 
@@ -145,7 +153,7 @@ export function BuilderSuggestions({ event }: { event: EventDetailDto }) {
     <Card className="overflow-hidden" data-testid="builder-suggestions">
       <div className="flex items-center gap-2 border-b border-border px-4 py-2.5">
         <Sparkles className="size-4 text-accent-strong" aria-hidden="true" />
-        <h3 className="text-sm font-semibold">Bet-Builder-Vorschläge</h3>
+        <h3 className="text-sm font-semibold">{t('Bet-Builder-Vorschläge')}</h3>
         {live.isLive ? <span className="text-xs font-semibold text-live">LIVE</span> : null}
       </div>
       <ul className="grid gap-2 p-3 sm:grid-cols-2">
@@ -160,7 +168,7 @@ export function BuilderSuggestions({ event }: { event: EventDetailDto }) {
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-medium">{s.title}</span>
                 <span className="block truncate text-xs text-fg-muted">
-                  {s.legs.map((l) => l.selection.name).join(' · ')}
+                  {s.legs.map((l) => t(l.selection.name)).join(' · ')}
                 </span>
               </span>
               <span className="tabular rounded bg-surface-3 px-2 py-1 text-sm font-semibold">

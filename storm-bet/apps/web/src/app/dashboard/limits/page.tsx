@@ -4,10 +4,15 @@ import Link from 'next/link';
 import { LimitsCard, SelfExclusionCard } from '@/components/dashboard/account-forms';
 import { PageHeader } from '@/components/sportsbook/page-header';
 import { serverApi } from '@/lib/server-api';
+import { getT } from '@/i18n/server';
 
-export const metadata: Metadata = { title: 'Limits' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return { title: t('Limits') };
+}
 
 export default async function LimitsPage() {
+  const t = await getT();
   const [limits, exclusion] = await Promise.all([
     serverApi<LimitDto[]>('/account/limits'),
     serverApi<SelfExclusionDto>('/account/self-exclusion'),
@@ -15,12 +20,12 @@ export default async function LimitsPage() {
   return (
     <>
       <PageHeader
-        title="Limits & Selbstsperre"
+        title={t('Limits & Selbstsperre')}
         description={
           <>
-            Werkzeuge für verantwortungsvolles Spielen.{' '}
+            {t('Werkzeuge für verantwortungsvolles Spielen.')}{' '}
             <Link href="/responsible-gaming" className="text-accent hover:underline">
-              Mehr erfahren
+              {t('Mehr erfahren')}
             </Link>
           </>
         }

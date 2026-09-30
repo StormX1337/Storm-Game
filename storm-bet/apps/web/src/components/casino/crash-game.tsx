@@ -5,6 +5,7 @@ import { Button, cn } from '@storm-bet/ui';
 import { useEffect, useRef, useState } from 'react';
 import { formatMoney } from '@/lib/format';
 import { GameShell, StakeControl, useCasinoPlay } from './controls';
+import { useT } from '@/i18n/client';
 
 const TARGETS = [1.5, 2, 3, 5, 10];
 
@@ -28,6 +29,7 @@ function useClimb(to: number | null) {
 }
 
 export function CrashGame({ game, sessionId }: { game: CasinoGameDto; sessionId: string }) {
+  const t = useT();
   const { play, busy } = useCasinoPlay(game.id, sessionId);
   const [stake, setStake] = useState(Math.max(game.minStake, 100));
   const [target, setTarget] = useState('2.00');
@@ -63,12 +65,21 @@ export function CrashGame({ game, sessionId }: { game: CasinoGameDto; sessionId:
         </p>
         <p className="mt-3 text-sm text-white/70">
           {!last
-            ? `Ziel: ${valid ? targetValue.toFixed(2) : '–'}× · Auszahlung, wenn der Kurs das Ziel erreicht`
+            ? t('Ziel: {0}× · Auszahlung, wenn der Kurs das Ziel erreicht', [
+                valid ? targetValue.toFixed(2) : '–',
+              ])
             : !done
-              ? 'Steigt …'
+              ? t('Steigt …')
               : last.result.won
-                ? `Ausgestiegen bei ${last.result.target.toFixed(2)}× · Gewinn ${formatMoney(last.payout)} (Crash bei ${last.result.crashPoint.toFixed(2)}×)`
-                : `Crash bei ${last.result.crashPoint.toFixed(2)}× – Ziel ${last.result.target.toFixed(2)}× nicht erreicht`}
+                ? t('Ausgestiegen bei {0}× · Gewinn {1} (Crash bei {2}×)', [
+                    last.result.target.toFixed(2),
+                    formatMoney(last.payout),
+                    last.result.crashPoint.toFixed(2),
+                  ])
+                : t('Crash bei {0}× – Ziel {1}× nicht erreicht', [
+                    last.result.crashPoint.toFixed(2),
+                    last.result.target.toFixed(2),
+                  ])}
         </p>
       </div>
     </div>
@@ -88,7 +99,7 @@ export function CrashGame({ game, sessionId }: { game: CasinoGameDto; sessionId:
           className="flex items-center justify-between text-xs text-fg-muted"
           htmlFor="crash-target"
         >
-          Aussteigen bei <span>1,01× – 100×</span>
+          {t('Aussteigen bei')} <span>1,01× – 100×</span>
         </label>
         <input
           id="crash-target"
@@ -99,14 +110,14 @@ export function CrashGame({ game, sessionId }: { game: CasinoGameDto; sessionId:
           data-testid="crash-target"
         />
         <div className="flex flex-wrap gap-1.5">
-          {TARGETS.map((t) => (
+          {TARGETS.map((quick) => (
             <button
-              key={t}
+              key={quick}
               type="button"
-              onClick={() => setTarget(t.toFixed(2))}
+              onClick={() => setTarget(quick.toFixed(2))}
               className="tabular rounded-md border border-border bg-surface-2 px-2 py-1 text-xs text-fg-muted hover:text-fg"
             >
-              {t}×
+              {quick}×
             </button>
           ))}
         </div>
@@ -119,7 +130,7 @@ export function CrashGame({ game, sessionId }: { game: CasinoGameDto; sessionId:
         data-testid="crash-play"
         data-play
       >
-        {busy ? 'Startet …' : 'Starten'}
+        {busy ? t('Startet …') : t('Starten')}
       </Button>
     </>
   );

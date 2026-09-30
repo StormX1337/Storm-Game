@@ -6,8 +6,10 @@ import { Home, Radio, Trophy } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { SportIcon } from '../sportsbook/sport-icon';
+import { useT } from '@/i18n/client';
 
 export function Sidebar({ sports }: { sports: SportDto[] }) {
+  const t = useT();
   const pathname = usePathname();
   const liveTotal = sports.reduce((s, x) => s + x.liveCount, 0);
   const item = (href: string, active: boolean) =>
@@ -16,13 +18,13 @@ export function Sidebar({ sports }: { sports: SportDto[] }) {
       active ? 'bg-surface-3 text-fg' : 'text-fg-muted hover:bg-surface-2 hover:text-fg',
     );
   return (
-    <nav aria-label="Sportarten" className="space-y-6">
+    <nav aria-label={t('Sportarten')} className="space-y-6">
       <div className="space-y-0.5">
         <Link href="/" className={item('/', pathname === '/')}>
-          <Home className="size-4" aria-hidden="true" /> Start
+          <Home className="size-4" aria-hidden="true" /> {t('Start')}
         </Link>
         <Link href="/live" className={item('/live', pathname === '/live')}>
-          <Radio className="size-4 text-live" aria-hidden="true" /> Live
+          <Radio className="size-4 text-live" aria-hidden="true" /> {t('Live')}
           {liveTotal ? (
             <span className="tabular ml-auto rounded bg-live-soft px-1.5 text-xs font-semibold text-live">
               {liveTotal}
@@ -30,12 +32,12 @@ export function Sidebar({ sports }: { sports: SportDto[] }) {
           ) : null}
         </Link>
         <Link href="/sports" className={item('/sports', pathname === '/sports')}>
-          <Trophy className="size-4" aria-hidden="true" /> Alle Sportarten
+          <Trophy className="size-4" aria-hidden="true" /> {t('Alle Sportarten')}
         </Link>
       </div>
       <div>
         <p className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-wider text-fg-subtle">
-          Sportarten
+          {t('Sportarten')}
         </p>
         <div className="space-y-0.5">
           {sports.map((sport) => {
@@ -43,7 +45,7 @@ export function Sidebar({ sports }: { sports: SportDto[] }) {
             return (
               <Link key={sport.key} href={href} className={item(href, pathname.startsWith(href))}>
                 <SportIcon sport={sport.key} />
-                {sport.name}
+                {t(sport.name)}
                 <span className="tabular ml-auto text-xs text-fg-subtle">{sport.eventCount}</span>
               </Link>
             );
@@ -56,6 +58,7 @@ export function Sidebar({ sports }: { sports: SportDto[] }) {
 
 /** Horizontal sport tabs for small screens, where there is no sidebar. */
 export function SportTabs({ sports }: { sports: SportDto[] }) {
+  const t = useT();
   const pathname = usePathname();
   const tab = (href: string, active: boolean) =>
     cn(
@@ -67,7 +70,7 @@ export function SportTabs({ sports }: { sports: SportDto[] }) {
   return (
     <div className="scrollbar-none -mx-4 flex gap-2 overflow-x-auto px-4 pb-1 xl:hidden">
       <Link href="/live" className={tab('/live', pathname === '/live')}>
-        <span className="size-1.5 rounded-full bg-live" /> Live
+        <span className="size-1.5 rounded-full bg-live" /> {t('Live')}
       </Link>
       {sports.map((s) => (
         <Link
@@ -75,7 +78,7 @@ export function SportTabs({ sports }: { sports: SportDto[] }) {
           href={`/sports/${s.key}`}
           className={tab(`/sports/${s.key}`, pathname.startsWith(`/sports/${s.key}`))}
         >
-          <SportIcon sport={s.key} /> {s.name}
+          <SportIcon sport={s.key} /> {t(s.name)}
         </Link>
       ))}
     </div>

@@ -52,3 +52,13 @@ test('two-factor login: set up with an authenticator, then log in with a code', 
   await expect(other.getByTestId('user-menu')).toBeVisible();
   await fresh.close();
 });
+
+test('the language switch turns the site English and back', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'Demnächst' })).toBeVisible();
+  await page.getByTestId('lang-en').first().click();
+  await expect(page.getByRole('heading', { name: 'Coming up' })).toBeVisible();
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+  await page.getByTestId('lang-de').first().click();
+  await expect(page.getByRole('heading', { name: 'Demnächst' })).toBeVisible();
+});

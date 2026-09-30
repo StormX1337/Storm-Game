@@ -17,6 +17,7 @@ import { LiveDot } from '@/components/sportsbook/live-indicator';
 import { SectionTitle } from '@/components/sportsbook/page-header';
 import { SportIcon } from '@/components/sportsbook/sport-icon';
 import { getPlatformMeta, getSessionUser, tryServerApi } from '@/lib/server-api';
+import { getT } from '@/i18n/server';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,6 +45,7 @@ const FEATURES = [
 ];
 
 export default async function HomePage() {
+  const t = await getT();
   const { odds } = await getPlatformMeta();
   // Real fixtures are days apart; the simulator fills every hour.
   const within = odds.isSimulated ? 24 : 72;
@@ -69,36 +71,37 @@ export default async function HomePage() {
         />
         <div className="relative max-w-2xl space-y-4">
           <span className="inline-flex items-center gap-2 rounded-full border border-border-strong bg-surface-2 px-3 py-1 text-xs text-fg-muted">
-            <Sparkles className="size-3.5 text-accent" aria-hidden="true" /> Demo-Plattform · kein
-            Echtgeld
+            <Sparkles className="size-3.5 text-accent" aria-hidden="true" />{' '}
+            {t('Demo-Plattform · kein Echtgeld')}
           </span>
           <h1 className="text-2xl font-semibold leading-tight tracking-tight sm:text-5xl">
-            Sportwetten, <span className="text-accent-strong">präzise</span> gebaut.
+            {t('Sportwetten,')} <span className="text-accent-strong">{t('präzise')}</span> gebaut.
           </h1>
           <p className="max-w-xl text-sm leading-relaxed text-fg-muted sm:text-base">
-            Live-Quoten, Bet Builder, Cashout und nachvollziehbare Abrechnung – vollständig mit
-            Demo-Guthaben
+            {t(
+              'Live-Quoten, Bet Builder, Cashout und nachvollziehbare Abrechnung – vollständig mit Demo-Guthaben',
+            )}
             {odds.isSimulated
-              ? ' und simulierten Spielen'
-              : ` auf echte Spiele (Quoten: ${odds.name})`}
+              ? t(' und simulierten Spielen')
+              : t(' auf echte Spiele (Quoten: {0})', [odds.name])}
             .
           </p>
           <div className="flex flex-wrap gap-3">
             {user ? (
               <Button size="lg" asChild>
                 <Link href="/live">
-                  Zu den Live-Events <ArrowRight />
+                  {t('Zu den Live-Events')} <ArrowRight />
                 </Link>
               </Button>
             ) : (
               <Button size="lg" asChild>
                 <Link href="/register">
-                  Kostenlos testen <ArrowRight />
+                  {t('Kostenlos testen')} <ArrowRight />
                 </Link>
               </Button>
             )}
             <Button size="lg" variant="outline" asChild>
-              <Link href="/sports">Alle Sportarten</Link>
+              <Link href="/sports">{t('Alle Sportarten')}</Link>
             </Button>
           </div>
         </div>
@@ -110,23 +113,23 @@ export default async function HomePage() {
         <SectionTitle
           action={
             <Link href="/live" className="text-sm text-accent hover:underline">
-              Alle Live-Events
+              {t('Alle Live-Events')}
             </Link>
           }
         >
-          <LiveDot /> <span id="live-title">Jetzt live</span>
+          <LiveDot /> <span id="live-title">{t('Jetzt live')}</span>
         </SectionTitle>
         <EventList
           events={live?.items ?? []}
           subscribeLive
-          emptyTitle="Gerade läuft kein Event"
-          emptyDescription="Schau gleich wieder vorbei – neue Spiele beginnen laufend."
+          emptyTitle={t('Gerade läuft kein Event')}
+          emptyDescription={t('Schau gleich wieder vorbei – neue Spiele beginnen laufend.')}
         />
       </section>
 
       <section className="space-y-3" aria-labelledby="sports-title">
         <SectionTitle>
-          <span id="sports-title">Sportarten</span>
+          <span id="sports-title">{t('Sportarten')}</span>
         </SectionTitle>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 lg:grid-cols-4">
           {(sports ?? []).map((sport) => (
@@ -139,9 +142,9 @@ export default async function HomePage() {
                 <SportIcon sport={sport.key} className="size-5" />
               </span>
               <div className="min-w-0">
-                <p className="font-semibold">{sport.name}</p>
+                <p className="font-semibold">{t(sport.name)}</p>
                 <p className="text-xs text-fg-muted">
-                  {sport.eventCount} Events
+                  {sport.eventCount} {t('Events')}
                   {sport.liveCount ? (
                     <span className="ml-2 inline-flex items-center gap-1 text-live">
                       <LiveDot /> {sport.liveCount} live
@@ -162,31 +165,36 @@ export default async function HomePage() {
         <SectionTitle
           action={
             <Link href="/sports" className="text-sm text-accent hover:underline">
-              Mehr anzeigen
+              {t('Mehr anzeigen')}
             </Link>
           }
         >
-          <span id="upcoming-title">Demnächst</span>
+          <span id="upcoming-title">{t('Demnächst')}</span>
         </SectionTitle>
-        <EventList events={upcoming?.items ?? []} emptyTitle="Keine anstehenden Events" />
+        <EventList events={upcoming?.items ?? []} emptyTitle={t('Keine anstehenden Events')} />
       </section>
 
-      <section className="grid gap-4 lg:grid-cols-[1.1fr_1fr]" aria-label="Demo-Bonus und Hinweise">
+      <section
+        className="grid gap-4 lg:grid-cols-[1.1fr_1fr]"
+        aria-label={t('Demo-Bonus und Hinweise')}
+      >
         <Card className="relative overflow-hidden p-6">
           <div
             aria-hidden="true"
             className="pointer-events-none absolute -bottom-16 -right-10 size-56 rounded-full bg-up/10 blur-3xl"
           />
-          <p className="text-xs font-semibold uppercase tracking-wider text-up">Demo-Bonus</p>
-          <p className="mt-2 text-3xl font-semibold tracking-tight">1.000 € Startguthaben</p>
+          <p className="text-xs font-semibold uppercase tracking-wider text-up">
+            {t('Demo-Bonus')}
+          </p>
+          <p className="mt-2 text-3xl font-semibold tracking-tight">{t('1.000 € Startguthaben')}</p>
           <p className="mt-2 max-w-md text-sm text-fg-muted">
-            Jedes neue Konto startet mit 1.000 € Spielgeld. Es hat keinen Geldwert, kann nicht
-            ausgezahlt werden und dient nur zum Ausprobieren. Ist es fast aufgebraucht, kannst du es
-            einmal täglich aufladen.
+            {t(
+              'Jedes neue Konto startet mit 1.000 € Spielgeld. Es hat keinen Geldwert, kann nicht ausgezahlt werden und dient nur zum Ausprobieren. Ist es fast aufgebraucht, kannst du es einmal täglich aufladen.',
+            )}
           </p>
           {!user ? (
             <Button className="mt-5" asChild>
-              <Link href="/register">Konto erstellen</Link>
+              <Link href="/register">{t('Konto erstellen')}</Link>
             </Button>
           ) : null}
         </Card>
@@ -196,17 +204,17 @@ export default async function HomePage() {
               <HeartHandshake className="size-5" aria-hidden="true" />
             </span>
             <div className="space-y-2">
-              <p className="font-semibold">Verantwortungsvoll spielen</p>
+              <p className="font-semibold">{t('Verantwortungsvoll spielen')}</p>
               <p className="text-sm text-fg-muted">
-                Wetten sollen unterhalten, nicht belasten. Nutze Einsatzlimits und die Selbstsperre
-                in deinem Konto. Teilnahme ab 18 Jahren. Hilfe bei Glücksspielproblemen:
-                BZgA-Hotline 0800 1 37 27 00.
+                {t(
+                  'Wetten sollen unterhalten, nicht belasten. Nutze Einsatzlimits und die Selbstsperre in deinem Konto. Teilnahme ab 18 Jahren. Hilfe bei Glücksspielproblemen: BZgA-Hotline 0800 1 37 27 00.',
+                )}
               </p>
               <Link
                 href="/responsible-gaming"
                 className="inline-flex items-center gap-1 text-sm text-accent hover:underline"
               >
-                Mehr erfahren <ArrowRight className="size-3.5" aria-hidden="true" />
+                {t('Mehr erfahren')} <ArrowRight className="size-3.5" aria-hidden="true" />
               </Link>
             </div>
           </div>
@@ -215,20 +223,20 @@ export default async function HomePage() {
 
       <section className="space-y-3" aria-labelledby="features-title">
         <SectionTitle>
-          <span id="features-title">Warum STORM BET</span>
+          <span id="features-title">{t('Warum STORM BET')}</span>
         </SectionTitle>
         <div className="grid gap-3 sm:grid-cols-2">
           {FEATURES.map((f) => (
             <Card key={f.title} className="p-5">
               <f.icon className="size-5 text-accent" aria-hidden="true" />
-              <p className="mt-3 font-semibold">{f.title}</p>
-              <p className="mt-1 text-sm leading-relaxed text-fg-muted">{f.text}</p>
+              <p className="mt-3 font-semibold">{t(f.title)}</p>
+              <p className="mt-1 text-sm leading-relaxed text-fg-muted">{t(f.text)}</p>
             </Card>
           ))}
         </div>
         <p className="flex items-center gap-2 text-xs text-fg-subtle">
-          <Lock className="size-3.5" aria-hidden="true" /> Keine Einzahlungen, keine Auszahlungen,
-          keine Gewinnversprechen.
+          <Lock className="size-3.5" aria-hidden="true" />{' '}
+          {t('Keine Einzahlungen, keine Auszahlungen, keine Gewinnversprechen.')}
         </p>
       </section>
     </div>

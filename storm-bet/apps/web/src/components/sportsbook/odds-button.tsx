@@ -6,6 +6,7 @@ import { Lock } from 'lucide-react';
 import { formatOdds } from '@/lib/format';
 import { useBetSlip } from '@/stores/bet-slip';
 import { useLiveMarketStatus, useLiveSelection } from './hooks';
+import { useT } from '@/i18n/client';
 
 export interface OddsContext {
   eventId: string;
@@ -34,12 +35,13 @@ export function OddsButton({
   className?: string;
   layout?: 'stacked' | 'inline';
 }) {
+  const t = useT();
   const live = useLiveSelection(selection);
   const marketStatus = useLiveMarketStatus(context.marketId, context.marketStatus);
   const selected = useBetSlip((s) => s.items.some((i) => i.selectionId === selection.id));
   const toggle = useBetSlip((s) => s.toggle);
   const available = live.status === 'OPEN' && marketStatus === 'OPEN';
-  const text = label ?? selection.name;
+  const text = label ?? t(selection.name);
 
   return (
     <button
@@ -48,7 +50,7 @@ export function OddsButton({
       aria-pressed={selected}
       data-testid="odds-button"
       data-selection-id={selection.id}
-      title={`${context.marketName}: ${selection.name}`}
+      title={`${t(context.marketName)}: ${t(selection.name)}`}
       onClick={() =>
         toggle({
           selectionId: selection.id,
@@ -98,7 +100,7 @@ export function OddsButton({
           {formatOdds(live.odds)}
         </span>
       ) : (
-        <Lock className="mx-auto size-3.5 text-fg-subtle" aria-label="Gesperrt" />
+        <Lock className="mx-auto size-3.5 text-fg-subtle" aria-label={t('Gesperrt')} />
       )}
     </button>
   );

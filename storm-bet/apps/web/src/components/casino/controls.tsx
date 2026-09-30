@@ -8,6 +8,7 @@ import { api, ApiError, errorMessage } from '@/lib/api-client';
 import { formatMoney } from '@/lib/format';
 import { uuid } from '@/lib/uuid';
 import { announceWalletChange } from '../providers/session';
+import { useT } from '@/i18n/client';
 
 /**
  * Sends one round request. The server decides the outcome; the client only
@@ -102,12 +103,13 @@ export function StakeControl({
   disabled?: boolean;
   label?: string;
 }) {
+  const t = useT();
   const clamp = (v: number) => Math.min(max, Math.max(min, v));
   const chips = CHIPS.filter((c) => c >= min && c <= max);
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between text-xs text-fg-muted">
-        <span>{label}</span>
+        <span>{t(label)}</span>
         <span>
           {formatMoney(min)} – {formatMoney(max)}
         </span>
@@ -116,7 +118,7 @@ export function StakeControl({
         <Button
           variant="secondary"
           size="icon"
-          aria-label="Einsatz halbieren"
+          aria-label={t('Einsatz halbieren')}
           disabled={disabled || value <= min}
           onClick={() => onChange(clamp(Math.floor(value / 2)))}
         >
@@ -128,7 +130,7 @@ export function StakeControl({
         <Button
           variant="secondary"
           size="icon"
-          aria-label="Einsatz verdoppeln"
+          aria-label={t('Einsatz verdoppeln')}
           disabled={disabled || value >= max}
           onClick={() => onChange(clamp(value * 2))}
         >
@@ -151,8 +153,9 @@ export function ChipPicker({
   onChange: (v: number) => void;
   disabled?: boolean;
 }) {
+  const t = useT();
   return (
-    <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Chip-Wert">
+    <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label={t('Chip-Wert')}>
       {values.map((c) => (
         <button
           key={c}
@@ -177,11 +180,12 @@ export function ChipPicker({
 const SUIT = { S: '♠', H: '♥', D: '♦', C: '♣' } as const;
 
 export function PlayingCard({ card, index = 0 }: { card: PlayingCardDto | null; index?: number }) {
+  const t = useT();
   if (!card) {
     return (
       <div
         className="h-24 w-16 rounded-lg border border-white/10 bg-[repeating-linear-gradient(45deg,#1d4ed8,#1d4ed8_6px,#1e3a8a_6px,#1e3a8a_12px)] shadow-md sm:h-28 sm:w-20"
-        aria-label="Verdeckte Karte"
+        aria-label={t('Verdeckte Karte')}
       />
     );
   }
@@ -217,10 +221,11 @@ export function Hand({
   cards: (PlayingCardDto | null)[];
   total: number | null;
 }) {
+  const t = useT();
   return (
     <div className="space-y-2">
       <p className="text-xs font-medium uppercase tracking-wide text-white/70">
-        {label}
+        {t(label)}
         {total !== null ? <span className="tabular ml-2 text-white">{total}</span> : null}
       </p>
       <div className="flex min-h-24 gap-2 sm:min-h-28">

@@ -6,11 +6,16 @@ import { LiveDot } from '@/components/sportsbook/live-indicator';
 import { PageHeader, SectionTitle } from '@/components/sportsbook/page-header';
 import { SportIcon } from '@/components/sportsbook/sport-icon';
 import { getPlatformMeta, tryServerApi } from '@/lib/server-api';
+import { getT } from '@/i18n/server';
 
-export const metadata: Metadata = { title: 'Sportarten' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return { title: t('Sportarten') };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function SportsPage() {
+  const t = await getT();
   const { odds } = await getPlatformMeta();
   const within = odds.isSimulated ? 12 : 72;
   const [sports, upcoming] = await Promise.all([
@@ -22,10 +27,10 @@ export default async function SportsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Sportarten"
-        description={`Alle verfügbaren Sportarten und die nächsten Events. ${
-          odds.isSimulated ? 'Sämtliche Daten sind simuliert.' : `Quoten: ${odds.name}.`
-        }`}
+        title={t('Sportarten')}
+        description={t('Alle verfügbaren Sportarten und die nächsten Events. {0}', [
+          odds.isSimulated ? t('Sämtliche Daten sind simuliert.') : t('Quoten: {0}.', [odds.name]),
+        ])}
       />
       <div className="grid gap-3 sm:grid-cols-3">
         {(sports ?? []).map((s) => (
@@ -35,9 +40,9 @@ export default async function SportsPage() {
             className="rounded-lg border border-border bg-surface p-4 transition-colors hover:border-border-strong hover:bg-surface-2"
           >
             <SportIcon sport={s.key} className="size-5 text-accent" />
-            <p className="mt-3 font-semibold">{s.name}</p>
+            <p className="mt-3 font-semibold">{t(s.name)}</p>
             <p className="mt-0.5 text-xs text-fg-muted">
-              {s.eventCount} Events
+              {s.eventCount} {t('Events')}
               {s.liveCount ? (
                 <span className="ml-2 inline-flex items-center gap-1 text-live">
                   <LiveDot /> {s.liveCount} live
@@ -47,8 +52,8 @@ export default async function SportsPage() {
           </Link>
         ))}
       </div>
-      <SectionTitle>Die nächsten Events</SectionTitle>
-      <EventList events={upcoming?.items ?? []} emptyTitle="Keine anstehenden Events" />
+      <SectionTitle>{t('Die nächsten Events')}</SectionTitle>
+      <EventList events={upcoming?.items ?? []} emptyTitle={t('Keine anstehenden Events')} />
     </div>
   );
 }

@@ -13,8 +13,12 @@ import {
   EVENT_STATUS_LABELS,
 } from '@/lib/labels';
 import { serverApi, ServerApiError } from '@/lib/server-api';
+import { getT } from '@/i18n/server';
 
-export const metadata: Metadata = { title: 'Wettdetails' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return { title: t('Wettdetails') };
+}
 
 const LEG_RESULT = {
   PENDING: 'Offen',
@@ -24,6 +28,7 @@ const LEG_RESULT = {
 } as const;
 
 export default async function BetDetailPage({ params }: { params: Promise<{ betId: string }> }) {
+  const t = await getT();
   const { betId } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(betId)) notFound();
   let bet: BetDto;
@@ -39,52 +44,57 @@ export default async function BetDetailPage({ params }: { params: Promise<{ betI
         href="/dashboard/bets"
         className="inline-flex items-center gap-1 text-sm text-fg-muted hover:text-fg"
       >
-        <ChevronLeft className="size-4" aria-hidden="true" /> Meine Wetten
+        <ChevronLeft className="size-4" aria-hidden="true" /> {t('Meine Wetten')}
       </Link>
       <PageHeader
-        title={`${BET_TYPE_LABELS[bet.type]} ${bet.reference}`}
-        description={`Platziert am ${formatDateTime(bet.placedAt)}${bet.settledAt ? ` · abgerechnet am ${formatDateTime(bet.settledAt)}` : ''}`}
+        title={`${t(BET_TYPE_LABELS[bet.type])} ${bet.reference}`}
+        description={t('Platziert am {0}{1}', [
+          formatDateTime(bet.placedAt),
+          bet.settledAt ? t(' · abgerechnet am {0}', [formatDateTime(bet.settledAt)]) : '',
+        ])}
         actions={
-          <Badge variant={betStatusVariant(bet.status)}>{BET_STATUS_LABELS[bet.status]}</Badge>
+          <Badge variant={betStatusVariant(bet.status)}>{t(BET_STATUS_LABELS[bet.status])}</Badge>
         }
       />
       <div className="grid gap-3 sm:grid-cols-4">
         {[
-          ['Einsatz', formatMoney(bet.stake)],
-          [bet.system ? 'Ø Quote pro Wette' : 'Gesamtquote', formatOdds(bet.totalOdds)],
-          ['Möglicher Gewinn', formatMoney(bet.potentialReturn)],
-          ['Auszahlung', bet.payout == null ? '—' : formatMoney(bet.payout)],
+          [t('Einsatz'), formatMoney(bet.stake)],
+          [bet.system ? t('Ø Quote pro Wette') : t('Gesamtquote'), formatOdds(bet.totalOdds)],
+          [t('Möglicher Gewinn'), formatMoney(bet.potentialReturn)],
+          [t('Auszahlung'), bet.payout == null ? '—' : formatMoney(bet.payout)],
         ].map(([label, value]) => (
           <Card key={label} className="p-4">
-            <p className="text-xs text-fg-muted">{label}</p>
+            <p className="text-xs text-fg-muted">{t(label)}</p>
             <p className="tabular mt-1 text-lg font-semibold">{value}</p>
           </Card>
         ))}
       </div>
       {bet.settlementNote ? (
-        <p className="text-sm text-fg-muted">Hinweis: {bet.settlementNote}</p>
+        <p className="text-sm text-fg-muted">
+          {t('Hinweis:')} {t(bet.settlementNote)}
+        </p>
       ) : null}
       <Card>
         <CardHeader>
-          <CardTitle>Auswahlen & Quoten-Snapshot</CardTitle>
+          <CardTitle>{t('Auswahlen & Quoten-Snapshot')}</CardTitle>
         </CardHeader>
         <CardContent className="px-0 pb-0">
           <Table>
             <thead>
               <tr>
-                <Th>Auswahl</Th>
-                <Th>Event</Th>
-                <Th className="text-right">Quote</Th>
-                <Th>Snapshot bei Annahme</Th>
-                <Th>Ergebnis</Th>
+                <Th>{t('Auswahl')}</Th>
+                <Th>{t('Event')}</Th>
+                <Th className="text-right">{t('Quote')}</Th>
+                <Th>{t('Snapshot bei Annahme')}</Th>
+                <Th>{t('Ergebnis')}</Th>
               </tr>
             </thead>
             <tbody>
               {bet.selections.map((leg) => (
                 <tr key={leg.id}>
                   <Td>
-                    <p className="font-medium">{leg.selectionName}</p>
-                    <p className="text-xs text-fg-muted">{leg.marketName}</p>
+                    <p className="font-medium">{t(leg.selectionName)}</p>
+                    <p className="text-xs text-fg-muted">{t(leg.marketName)}</p>
                   </Td>
                   <Td>
                     <Link href={`/events/${leg.eventId}`} className="hover:text-accent">
@@ -96,13 +106,14 @@ export default async function BetDetailPage({ params }: { params: Promise<{ betI
                   <Td className="text-xs text-fg-muted">
                     {leg.snapshot ? (
                       <>
-                        Quote {formatOdds(leg.snapshot.odds)} (v{leg.snapshot.oddsVersion}) ·{' '}
-                        {EVENT_STATUS_LABELS[leg.snapshot.eventStatus]}
+                        {t('Quote')} {formatOdds(leg.snapshot.odds)} (v{leg.snapshot.oddsVersion}) ·{' '}
+                        {t(EVENT_STATUS_LABELS[leg.snapshot.eventStatus])}
                         {leg.snapshot.score
                           ? ` · ${leg.snapshot.score.home}:${leg.snapshot.score.away}`
                           : ''}
                         <br />
-                        {formatDateTime(leg.snapshot.capturedAt)} · Quelle: {leg.snapshot.source}
+                        {formatDateTime(leg.snapshot.capturedAt)} {t('· Quelle:')}{' '}
+                        {leg.snapshot.source}
                       </>
                     ) : (
                       '—'

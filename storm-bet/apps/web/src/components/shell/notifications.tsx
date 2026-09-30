@@ -17,6 +17,8 @@ import { api } from '@/lib/api-client';
 import { formatMoney, formatRelative } from '@/lib/format';
 import { BET_STATUS_LABELS } from '@/lib/labels';
 import { announceWalletChange } from '../providers/session';
+import { useT } from '@/i18n/client';
+import type { T } from '@/i18n/translate';
 
 const SEEN_KEY = 'storm-bet:notifications-seen';
 const POLL_MS = 30_000;
@@ -29,10 +31,14 @@ function readSeen(): number {
   }
 }
 
-function message(bet: BetDto): string {
-  if (bet.status === 'WON') return `Gewonnen: ${formatMoney(bet.payout ?? 0)} gutgeschrieben`;
-  if (bet.status === 'LOST') return 'Leider verloren';
-  return `${BET_STATUS_LABELS[bet.status]}: Einsatz ${formatMoney(bet.stake)} erstattet`;
+function message(bet: BetDto, t: T): string {
+  if (bet.status === 'WON')
+    return t('Gewonnen: {0} gutgeschrieben', [formatMoney(bet.payout ?? 0)]);
+  if (bet.status === 'LOST') return t('Leider verloren');
+  return t('{0}: Einsatz {1} erstattet', [
+    t(BET_STATUS_LABELS[bet.status]),
+    formatMoney(bet.stake),
+  ]);
 }
 
 /**
@@ -41,6 +47,7 @@ function message(bet: BetDto): string {
  * timestamp. A newly settled bet also raises a toast.
  */
 export function NotificationBell() {
+  const t = useT();
   const [items, setItems] = useState<BetDto[]>([]);
   const [seen, setSeen] = useState(0);
   const known = useRef<Set<string> | null>(null);
@@ -52,7 +59,7 @@ export function NotificationBell() {
       if (known.current) {
         const arrived = fresh.filter((b) => !known.current!.has(b.id));
         for (const bet of arrived) {
-          toast(`Wette ${bet.reference} abgerechnet`, { description: message(bet) });
+          toast(t('Wette {0} abgerechnet', [bet.reference]), { description: message(bet, t) });
         }
         if (arrived.length) announceWalletChange();
       }
@@ -61,7 +68,7 @@ export function NotificationBell() {
     } catch {
       // Keep the last list; the bell is not critical.
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     setSeen(readSeen());
@@ -88,7 +95,7 @@ export function NotificationBell() {
       <DropdownMenuTrigger asChild>
         <button
           className="relative grid size-9 place-items-center rounded-full text-fg-muted transition-colors hover:bg-surface-2 hover:text-fg"
-          aria-label={unread ? `${unread} neue Benachrichtigungen` : 'Benachrichtigungen'}
+          aria-label={unread ? t('{0} neue Benachrichtigungen', [unread]) : t('Benachrichtigungen')}
         >
           <Bell className="size-4" />
           {unread ? (
@@ -99,11 +106,11 @@ export function NotificationBell() {
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-80">
-        <DropdownMenuLabel>Abrechnungen</DropdownMenuLabel>
+        <DropdownMenuLabel>{t('Abrechnungen')}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         {items.length === 0 ? (
           <p className="px-2.5 py-4 text-center text-sm text-fg-muted">
-            Noch keine abgerechneten Wetten.
+            {t('Noch keine abgerechneten Wetten.')}
           </p>
         ) : (
           items.map((bet) => (
@@ -112,13 +119,13 @@ export function NotificationBell() {
                 <span className="flex w-full items-center justify-between gap-2">
                   <span className="font-mono text-xs text-fg">{bet.reference}</span>
                   <span className="text-[11px] text-fg-subtle">
-                    {bet.settledAt ? formatRelative(bet.settledAt) : ''}
+                    {bet.settledAt ? t(formatRelative(bet.settledAt)) : ''}
                   </span>
                 </span>
                 <span
                   className={bet.status === 'WON' ? 'text-xs text-up' : 'text-xs text-fg-muted'}
                 >
-                  {message(bet)}
+                  {message(bet, t)}
                 </span>
               </Link>
             </DropdownMenuItem>
