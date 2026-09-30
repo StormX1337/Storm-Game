@@ -102,11 +102,20 @@ export interface MarketDefinition {
   outcomes: readonly Outcome[];
   /** Lower numbers render first. */
   sortOrder: number;
+  /** Sport-specific names (e.g. "Runs Über/Unter" in baseball). */
+  sportLabels?: Partial<Record<SportKey, string>>;
 }
 
 const FOOTBALL = [SportKey.FOOTBALL] as const;
 const TENNIS = [SportKey.TENNIS] as const;
 const BASKETBALL = [SportKey.BASKETBALL] as const;
+/** Head-to-head sports priced as winner, handicap and total of the score. */
+const SCORE_SPORTS = [
+  SportKey.AMERICAN_FOOTBALL,
+  SportKey.BASEBALL,
+  SportKey.ICE_HOCKEY,
+  SportKey.HANDBALL,
+] as const;
 
 const half = (
   type: MarketType,
@@ -154,7 +163,7 @@ export const MARKET_DEFINITIONS: Record<MarketType, MarketDefinition> = {
   MATCH_RESULT: {
     type: 'MATCH_RESULT',
     label: 'Ergebnis (1X2)',
-    sports: FOOTBALL,
+    sports: [SportKey.FOOTBALL, SportKey.HANDBALL],
     metric: 'score',
     period: 'FULL',
     kind: 'THREE_WAY',
@@ -253,7 +262,18 @@ export const MARKET_DEFINITIONS: Record<MarketType, MarketDefinition> = {
   MATCH_WINNER: {
     type: 'MATCH_WINNER',
     label: 'Sieger',
-    sports: [SportKey.TENNIS, SportKey.BASKETBALL],
+    sports: [
+      SportKey.TENNIS,
+      SportKey.BASKETBALL,
+      SportKey.AMERICAN_FOOTBALL,
+      SportKey.BASEBALL,
+      SportKey.ICE_HOCKEY,
+      SportKey.MMA,
+    ],
+    sportLabels: {
+      hockey: 'Sieger (inkl. Verlängerung)',
+      baseball: 'Sieger (inkl. Extra-Innings)',
+    },
     metric: 'score',
     period: 'FULL',
     kind: 'TWO_WAY',
@@ -308,7 +328,12 @@ export const MARKET_DEFINITIONS: Record<MarketType, MarketDefinition> = {
   TOTAL_POINTS: {
     type: 'TOTAL_POINTS',
     label: 'Punkte Über/Unter',
-    sports: BASKETBALL,
+    sports: [SportKey.BASKETBALL, ...SCORE_SPORTS],
+    sportLabels: {
+      hockey: 'Tore Über/Unter',
+      handball: 'Tore Über/Unter',
+      baseball: 'Runs Über/Unter',
+    },
     metric: 'score',
     period: 'FULL',
     kind: 'TOTAL',
@@ -319,7 +344,8 @@ export const MARKET_DEFINITIONS: Record<MarketType, MarketDefinition> = {
   POINT_SPREAD: {
     type: 'POINT_SPREAD',
     label: 'Handicap (Punkte)',
-    sports: BASKETBALL,
+    sports: [SportKey.BASKETBALL, ...SCORE_SPORTS],
+    sportLabels: { hockey: 'Puck Line', baseball: 'Run Line', handball: 'Handicap (Tore)' },
     metric: 'score',
     period: 'FULL',
     kind: 'HANDICAP',
@@ -396,6 +422,12 @@ export const MARKET_DEFINITIONS: Record<MarketType, MarketDefinition> = {
   PLAYER_REBOUNDS: playerTotal('PLAYER_REBOUNDS', 'Spieler – Rebounds Über/Unter', 'rebounds', 210),
   PLAYER_ASSISTS: playerTotal('PLAYER_ASSISTS', 'Spieler – Assists Über/Unter', 'assists', 220),
 };
+
+/** A market's name in a sport. */
+export function marketLabel(type: MarketType, sport?: SportKey): string {
+  const definition = MARKET_DEFINITIONS[type];
+  return (sport && definition.sportLabels?.[sport]) ?? definition.label;
+}
 
 export function getMarketDefinition(type: MarketType): MarketDefinition {
   return MARKET_DEFINITIONS[type];

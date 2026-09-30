@@ -57,7 +57,20 @@ const GROUPS: Record<SportKey, { key: string; label: string; types: MarketType[]
       types: ['PLAYER_POINTS', 'PLAYER_REBOUNDS', 'PLAYER_ASSISTS'],
     },
   ],
+  hockey: scoreGroups('Tore'),
+  american_football: scoreGroups('Punkte'),
+  baseball: scoreGroups('Runs'),
+  handball: scoreGroups('Tore'),
+  mma: [{ key: 'main', label: 'Sieger', types: ['MATCH_WINNER'] }],
 };
+
+function scoreGroups(totals: string) {
+  return [
+    { key: 'main', label: 'Sieger', types: ['MATCH_WINNER', 'MATCH_RESULT'] as MarketType[] },
+    { key: 'spread', label: 'Handicap', types: ['POINT_SPREAD'] as MarketType[] },
+    { key: 'totals', label: totals, types: ['TOTAL_POINTS'] as MarketType[] },
+  ];
+}
 
 const THREE_WAY_SHORT: MarketType[] = [
   'MATCH_RESULT',

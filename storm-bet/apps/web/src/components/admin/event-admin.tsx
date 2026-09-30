@@ -5,6 +5,7 @@ import type {
   AdminMarketDto,
   AdminSelectionDto,
   EventStatistics,
+  ScoreSport,
 } from '@storm-bet/types';
 import { hasPermission, MARKET_DEFINITIONS, Permission } from '@storm-bet/types';
 import {
@@ -359,6 +360,13 @@ export function ResultForm({ event }: { event: AdminEventDto }) {
       currentGame: null,
       server: null,
       aces: { home: 0, away: 0 },
+    };
+  } else if (event.sport.key !== 'basketball') {
+    // Score-only sports: the final score (handball: regular time).
+    statistics = {
+      sport: event.sport.key as ScoreSport,
+      score: { home: num(f.home), away: num(f.away) },
+      periods: [],
     };
   } else {
     const points = { home: num(f.home), away: num(f.away) };

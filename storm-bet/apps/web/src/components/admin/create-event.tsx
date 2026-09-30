@@ -29,6 +29,11 @@ const DEFAULTS: Record<SportKey, { type: MarketType; line?: string }[]> = {
   ],
   tennis: [{ type: 'MATCH_WINNER' }, { type: 'TOTAL_GAMES', line: '22.5' }],
   basketball: [{ type: 'MATCH_WINNER' }, { type: 'TOTAL_POINTS', line: '165.5' }],
+  hockey: [{ type: 'MATCH_WINNER' }, { type: 'TOTAL_POINTS', line: '5.5' }],
+  american_football: [{ type: 'MATCH_WINNER' }, { type: 'TOTAL_POINTS', line: '44.5' }],
+  baseball: [{ type: 'MATCH_WINNER' }, { type: 'TOTAL_POINTS', line: '8.5' }],
+  handball: [{ type: 'MATCH_RESULT' }, { type: 'TOTAL_POINTS', line: '55.5' }],
+  mma: [{ type: 'MATCH_WINNER' }],
 };
 
 const draft = (type: MarketType, line = ''): MarketDraft => ({

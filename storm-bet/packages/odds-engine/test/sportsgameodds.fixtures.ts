@@ -12,6 +12,7 @@ export const LEAGUES = [
   { leagueID: 'NBA', sportID: 'BASKETBALL', name: 'NBA', enabled: true },
   { leagueID: 'ATP', sportID: 'TENNIS', name: 'ATP', enabled: true },
   { leagueID: 'NFL', sportID: 'FOOTBALL', name: 'NFL', enabled: true },
+  { leagueID: 'PGA_MEN', sportID: 'GOLF', name: 'PGA', enabled: true },
 ];
 
 type Side = { odds: string; spread?: string; overUnder?: string; available?: boolean };
@@ -232,6 +233,25 @@ export function events(): Record<string, unknown>[] {
         odd('points-home-reg-ml3way-home', { odds: '-250' }),
         odd('points-all-reg-ml3way-draw', { odds: '+320' }),
         odd('points-away-reg-ml3way-away', { odds: '+800' }),
+      ),
+    },
+    {
+      eventID: 'nfl-1',
+      sportID: 'FOOTBALL',
+      leagueID: 'NFL',
+      type: 'match',
+      teams: {
+        home: team('KANSAS_CITY_CHIEFS_NFL', 'Kansas City Chiefs', 'KC'),
+        away: team('BUFFALO_BILLS_NFL', 'Buffalo Bills', 'BUF'),
+      },
+      status: status(iso(300)),
+      odds: odds(
+        odd('points-home-game-ml-home', { odds: '-150' }),
+        odd('points-away-game-ml-away', { odds: '+130' }),
+        odd('points-home-game-sp-home', { odds: '-110', spread: '-3.5' }),
+        odd('points-away-game-sp-away', { odds: '-110', spread: '3.5' }),
+        odd('points-all-game-ou-over', { odds: '-110', overUnder: '47.5' }),
+        odd('points-all-game-ou-under', { odds: '-110', overUnder: '47.5' }),
       ),
     },
     {

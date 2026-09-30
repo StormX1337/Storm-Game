@@ -3,6 +3,7 @@ import type {
   EventStatistics,
   FootballStatistics,
   LiveState,
+  ScoreStatistics,
   TennisStatistics,
 } from '@storm-bet/types';
 import { z } from 'zod';
@@ -28,6 +29,10 @@ const playerLines = z
   )
   .max(80);
 
+const teamStats = z
+  .array(z.object({ key: z.string().max(40), home: z.number(), away: z.number() }))
+  .max(40);
+
 export const footballStatisticsSchema = z.object({
   sport: z.literal('football'),
   goals: pair,
@@ -50,6 +55,7 @@ export const footballStatisticsSchema = z.object({
   firstHalf: pair.optional(),
   secondHalf: pair.optional(),
   players: playerLines.optional(),
+  teamStats: teamStats.optional(),
 });
 
 export const tennisStatisticsSchema = z.object({
@@ -68,12 +74,21 @@ export const basketballStatisticsSchema = z.object({
   fouls: pair.optional(),
   firstHalf: pair.optional(),
   players: playerLines.optional(),
+  teamStats: teamStats.optional(),
 });
 
-export const eventStatisticsSchema = z.discriminatedUnion('sport', [
+export const scoreStatisticsSchema = z.object({
+  sport: z.enum(['hockey', 'american_football', 'baseball', 'handball', 'mma']),
+  score: pair,
+  periods: z.array(pair).max(20),
+  teamStats: teamStats.optional(),
+});
+
+export const eventStatisticsSchema = z.union([
   footballStatisticsSchema,
   tennisStatisticsSchema,
   basketballStatisticsSchema,
+  scoreStatisticsSchema,
 ]);
 
 export const liveStateSchema = z.object({
@@ -87,7 +102,8 @@ const _football: Equals<z.infer<typeof footballStatisticsSchema>, FootballStatis
 const _tennis: Equals<z.infer<typeof tennisStatisticsSchema>, TennisStatistics> = true;
 const _basketball: Equals<z.infer<typeof basketballStatisticsSchema>, BasketballStatistics> = true;
 const _live: Equals<z.infer<typeof liveStateSchema>, LiveState> = true;
-void [_football, _tennis, _basketball, _live];
+const _score: Equals<z.infer<typeof scoreStatisticsSchema>, ScoreStatistics> = true;
+void [_football, _tennis, _basketball, _score, _live];
 
 /** Parses statistics read back from a JSON column; corrupt data yields null, never a crash. */
 export function parseStatistics(value: unknown): EventStatistics | null {

@@ -74,14 +74,15 @@ describe('SportsGameOddsProvider', () => {
     const { provider: p, api } = provider();
     expect(p.isSimulated).toBe(false);
     const leagues = await p.getLeagues();
-    // NFL is American football: not a sport this book offers.
     expect(leagues.map((l) => l.externalId)).toEqual([
       'BUNDESLIGA',
       'UEFA_CHAMPIONS_LEAGUE',
       'NBA',
       'ATP',
+      'NFL',
     ]);
     expect((await p.getSports()).map((s) => s.key).sort()).toEqual([
+      'american_football',
       'basketball',
       'football',
       'tennis',
@@ -97,9 +98,11 @@ describe('SportsGameOddsProvider', () => {
       'UEFA_CHAMPIONS_LEAGUE',
       'NBA',
       'ATP',
+      'NFL',
     ]);
-    const nfl = (await p.availableLeagues()).find((l) => l.id === 'NFL');
-    expect(nfl).toMatchObject({ supported: false, active: false });
+    // Golf has no head-to-head markets: not a sport this book offers.
+    const golf = (await p.availableLeagues()).find((l) => l.id === 'PGA_MEN');
+    expect(golf).toMatchObject({ supported: false, active: false });
   });
 
   it('falls back to the built-in league list when the leagues endpoint fails', async () => {
@@ -109,6 +112,18 @@ describe('SportsGameOddsProvider', () => {
       ['UEFA_CHAMPIONS_LEAGUE', 'football'],
       ['NBA', 'basketball'],
       ['ATP', 'tennis'],
+      ['NFL', 'american_football'],
+    ]);
+  });
+
+  it("maps American football as winner, handicap and total with the sport's names", async () => {
+    const { provider: p } = provider();
+    await p.getEvents(window);
+    const markets = await p.getMarkets('nfl-1');
+    expect(markets.map((m) => m.name)).toEqual([
+      'Sieger',
+      'Handicap (Punkte) -3.5',
+      'Punkte Über/Unter 47.5',
     ]);
   });
 
@@ -404,7 +419,7 @@ describe('SportsGameOddsProvider', () => {
     expect(eventCalls()).toHaveLength(2); // snapshot + the one running game
     expect(eventCalls()[0]!.params.get('finalized')).toBe('false');
     expect(eventCalls()[0]!.params.get('leagueID')).toBe(
-      'BUNDESLIGA,UEFA_CHAMPIONS_LEAGUE,NBA,ATP',
+      'BUNDESLIGA,UEFA_CHAMPIONS_LEAGUE,NBA,ATP,NFL',
     );
     expect(eventCalls()[1]!.params.get('eventIDs')).toBe('sgo-live,sgo-completed');
     expect(eventCalls()[1]!.params.get('expandResults')).toBe('true');

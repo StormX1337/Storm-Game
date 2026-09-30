@@ -154,6 +154,11 @@ export const SportKey = {
   FOOTBALL: 'football',
   TENNIS: 'tennis',
   BASKETBALL: 'basketball',
+  ICE_HOCKEY: 'hockey',
+  AMERICAN_FOOTBALL: 'american_football',
+  BASEBALL: 'baseball',
+  HANDBALL: 'handball',
+  MMA: 'mma',
 } as const;
 export type SportKey = (typeof SportKey)[keyof typeof SportKey];
 export const SPORT_KEYS = values(SportKey);

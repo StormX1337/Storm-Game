@@ -462,3 +462,26 @@ describe('cashoutValue', () => {
     ).toBe(false);
   });
 });
+
+describe('score-only sports', () => {
+  it('settles winner, handicap and total from the score', () => {
+    const hockey = { sport: 'hockey' as const, score: { home: 3, away: 2 }, periods: [] };
+    const leg = (
+      marketType: 'MATCH_WINNER' | 'POINT_SPREAD' | 'TOTAL_POINTS',
+      line: number | null,
+      outcome: 'HOME' | 'AWAY' | 'OVER',
+    ) => resolveSelection({ marketType, line, outcome, playerId: null }, 'FINISHED', hockey);
+    expect(leg('MATCH_WINNER', null, 'HOME')).toBe('WON');
+    expect(leg('POINT_SPREAD', -1.5, 'HOME')).toBe('LOST');
+    expect(leg('TOTAL_POINTS', 5.5, 'OVER')).toBe('LOST');
+    // A drawn NFL game voids the winner bet.
+    const tie = { sport: 'american_football' as const, score: { home: 20, away: 20 }, periods: [] };
+    expect(
+      resolveSelection(
+        { marketType: 'MATCH_WINNER', line: null, outcome: 'HOME', playerId: null },
+        'FINISHED',
+        tie,
+      ),
+    ).toBe('VOID');
+  });
+});

@@ -49,6 +49,8 @@ function metric(stats: EventStatistics, which: 'score' | 'corners' | 'cards' | '
     case 'basketball':
       if (which === 'score') return stats.points;
       break;
+    default:
+      if (which === 'score') return stats.score;
   }
   throw new SettlementDataError(`metric "${which}" is not recorded for ${stats.sport}`);
 }
@@ -130,7 +132,7 @@ export function resolveSelection(
   }
   const { outcome } = selection;
   if (definition.kind === 'PLAYER_TOTAL') {
-    if (stats.sport === 'tennis' || !definition.playerStat) {
+    if ((stats.sport !== 'football' && stats.sport !== 'basketball') || !definition.playerStat) {
       throw new SettlementDataError(`${selection.marketType} has no player figures`);
     }
     if (!selection.playerId) throw new SettlementDataError('player market without a player');

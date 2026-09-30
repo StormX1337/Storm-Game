@@ -37,7 +37,8 @@ export interface MockProviderOptions {
 
 type AnyModel = SportModel<unknown>;
 
-const MODELS: Record<SportKey, AnyModel> = {
+/** The simulation covers these sports; real feeds add others. */
+const MODELS: Partial<Record<SportKey, AnyModel>> = {
   football: footballModel as AnyModel,
   tennis: tennisModel as AnyModel,
   basketball: basketballModel as AnyModel,
@@ -186,7 +187,7 @@ export class MockOddsProvider implements OddsProvider {
       timeScale: this.options.timeScale,
       cancelled: createRng(this.options.seed, externalId, 'cancel').next() < CANCELLATION_RATE,
     };
-    const model = MODELS[league.sport];
+    const model = MODELS[league.sport]!;
     const fixture: Fixture = { ctx, model, plan: model.plan(ctx) };
     // Bounded memo: the rolling window never needs more than a few thousand.
     if (this.fixtures.size > 5_000) this.fixtures.clear();

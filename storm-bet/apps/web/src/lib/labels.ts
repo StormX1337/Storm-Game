@@ -13,6 +13,11 @@ export const SPORT_LABELS: Record<SportKey, string> = {
   football: 'Fußball',
   tennis: 'Tennis',
   basketball: 'Basketball',
+  hockey: 'Eishockey',
+  american_football: 'American Football',
+  baseball: 'Baseball',
+  handball: 'Handball',
+  mma: 'MMA',
 };
 
 export const BET_STATUS_LABELS: Record<BetStatus, string> = {

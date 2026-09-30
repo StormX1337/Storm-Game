@@ -4,6 +4,7 @@ import type {
   EventStatus,
   FootballStatistics,
   LiveState,
+  ScoreStatistics,
   MarketType,
   Pair,
   PlayerStatLine,
@@ -185,6 +186,11 @@ const SPORT_FOR: Record<string, SportKey> = {
   SOCCER: 'football',
   BASKETBALL: 'basketball',
   TENNIS: 'tennis',
+  HOCKEY: 'hockey',
+  FOOTBALL: 'american_football',
+  BASEBALL: 'baseball',
+  HANDBALL: 'handball',
+  MMA: 'mma',
 };
 
 /** Used when the leagues endpoint is unavailable. */
@@ -202,6 +208,11 @@ const KNOWN_LEAGUES: Record<string, { sportID: string; name: string }> = {
   NCAAB: { sportID: 'BASKETBALL', name: 'NCAA Basketball' },
   ATP: { sportID: 'TENNIS', name: 'ATP' },
   WTA: { sportID: 'TENNIS', name: 'WTA' },
+  NHL: { sportID: 'HOCKEY', name: 'NHL' },
+  NFL: { sportID: 'FOOTBALL', name: 'NFL' },
+  NCAAF: { sportID: 'FOOTBALL', name: 'NCAA Football' },
+  MLB: { sportID: 'BASEBALL', name: 'MLB' },
+  UFC: { sportID: 'MMA', name: 'UFC' },
 };
 
 /** periodIDs of the halves (the feed's docs use both spellings). */
@@ -213,6 +224,20 @@ const QUARTERS = [
   ['3q', 'q3'],
   ['4q', 'q4'],
 ];
+
+const SCORE_GAME_MARKETS: { type: MarketType; betType: string; periods: string[] }[] = [
+  { type: 'MATCH_WINNER', betType: 'ml', periods: ['game'] },
+  { type: 'POINT_SPREAD', betType: 'sp', periods: ['game'] },
+  { type: 'TOTAL_POINTS', betType: 'ou', periods: ['game'] },
+];
+
+/** Period ids whose scores make up the period table, per sport, in order. */
+const PERIOD_IDS: Partial<Record<SportKey, string[][]>> = {
+  hockey: [['1p'], ['2p'], ['3p'], ['ot']],
+  american_football: QUARTERS,
+  baseball: Array.from({ length: 9 }, (_, i) => [`${i + 1}i`]),
+  handball: [H1, H2],
+};
 
 /**
  * Team markets per sport: the feed's bet type and the periods it is read
@@ -238,6 +263,17 @@ const TEAM_MARKETS: Record<SportKey, { type: MarketType; betType: string; period
     { type: 'FIRST_HALF_TOTAL_POINTS', betType: 'ou', periods: H1 },
   ],
   tennis: [{ type: 'MATCH_WINNER', betType: 'ml', periods: ['game'] }],
+  // Winner incl. overtime/extra innings, handicap and total on the whole game.
+  hockey: SCORE_GAME_MARKETS,
+  american_football: SCORE_GAME_MARKETS,
+  baseball: SCORE_GAME_MARKETS,
+  // Handball is settled on regular time, like football.
+  handball: [
+    { type: 'MATCH_RESULT', betType: 'ml3way', periods: ['reg', 'game'] },
+    { type: 'POINT_SPREAD', betType: 'sp', periods: ['reg', 'game'] },
+    { type: 'TOTAL_POINTS', betType: 'ou', periods: ['reg', 'game'] },
+  ],
+  mma: [{ type: 'MATCH_WINNER', betType: 'ml', periods: ['game'] }],
 };
 
 /** Basketball player over/under markets by the feed's statID. */
@@ -248,7 +284,7 @@ const PLAYER_TOTALS: [string, MarketType][] = [
 ];
 
 /** Player figures kept from the official result, per sport. */
-const PLAYER_FIGURES: Record<SportKey, ('goals' | 'points' | 'rebounds' | 'assists')[]> = {
+const PLAYER_FIGURES: Partial<Record<SportKey, ('goals' | 'points' | 'rebounds' | 'assists')[]>> = {
   football: ['goals'],
   basketball: ['points', 'rebounds', 'assists'],
   tennis: [],
@@ -271,6 +307,9 @@ const LIVE_PERIODS: Record<string, string> = {
   '3q': 'Q3',
   '4q': 'Q4',
   ot: 'OT',
+  '1p': 'P1',
+  '2p': 'P2',
+  '3p': 'P3',
   '1s': 'S1',
   '2s': 'S2',
   '3s': 'S3',
@@ -754,6 +793,7 @@ export class SportsGameOddsProvider implements OddsProvider {
     const results = event.results ?? {};
     const period = (id: string) => pairOf(results[id]?.home?.points, results[id]?.away?.points);
     const teams = pairOf(event.teams?.home?.score, event.teams?.away?.score);
+    if (sport === 'handball') return period('reg') ?? period('game') ?? teams;
     if (sport !== 'football') return period('game') ?? teams;
     const periods = [
       ...(event.status?.periods?.started ?? []),
@@ -765,7 +805,9 @@ export class SportsGameOddsProvider implements OddsProvider {
   }
 
   private liveState(sport: SportKey, st: SgoStatus): LiveState {
-    const period = LIVE_PERIODS[(st.currentPeriodID ?? '').toLowerCase()] ?? 'LIVE';
+    const id = (st.currentPeriodID ?? '').toLowerCase();
+    const inning = /^(\d+)i$/.exec(id);
+    const period = LIVE_PERIODS[id] ?? (inning ? `${inning[1]}. Inning` : 'LIVE');
     const raw = st.clock === undefined || st.clock === null ? '' : String(st.clock).trim();
     let clock: string | null = raw ? raw.slice(0, 8) : null;
     // Football clocks are minutes.
@@ -805,11 +847,16 @@ export class SportsGameOddsProvider implements OddsProvider {
 
   /** Named figures into their fields, the rest into `teamStats`. */
   private addTeamStats(
-    stats: FootballStatistics | BasketballStatistics,
+    stats: FootballStatistics | BasketballStatistics | ScoreStatistics,
     results: NonNullable<SgoEvent['results']>,
   ) {
     const figures = this.teamFigures(results);
-    const named = stats.sport === 'football' ? FOOTBALL_TEAM_STATS : BASKETBALL_TEAM_STATS;
+    const named =
+      stats.sport === 'football'
+        ? FOOTBALL_TEAM_STATS
+        : stats.sport === 'basketball'
+          ? BASKETBALL_TEAM_STATS
+          : [];
     const used = new Set<string>();
     for (const [field, ids] of named) {
       const id = ids.find((i) => figures.has(i));
@@ -856,7 +903,25 @@ export class SportsGameOddsProvider implements OddsProvider {
       this.addTeamStats(basketball, results);
       return basketball;
     }
-    return stats;
+    return this.scoreSportStatistics(stats, results);
+  }
+
+  /** Period scores so far and team figures for the score-only sports. */
+  private scoreSportStatistics(
+    stats: EventStatistics,
+    results: NonNullable<SgoEvent['results']>,
+  ): EventStatistics {
+    if (stats.sport === 'football' || stats.sport === 'basketball' || stats.sport === 'tennis')
+      return stats;
+    const out: ScoreStatistics = { ...stats, periods: [] };
+    for (const ids of PERIOD_IDS[stats.sport] ?? []) {
+      let pair: Pair | null = null;
+      for (const id of ids) pair ??= pairOf(results[id]?.home?.points, results[id]?.away?.points);
+      if (!pair) break;
+      out.periods.push(pair);
+    }
+    this.addTeamStats(out, results);
+    return out;
   }
 
   /** Official figures: the score, the halves and player stat lines — only what the feed reports. */
@@ -892,7 +957,7 @@ export class SportsGameOddsProvider implements OddsProvider {
       if (players) basketball.players = players;
       return basketball;
     }
-    return stats;
+    return this.scoreSportStatistics(stats, results);
   }
 
   /**
@@ -900,7 +965,7 @@ export class SportsGameOddsProvider implements OddsProvider {
    * with extra time never gets here). Undefined when the feed reports none.
    */
   private playerLines(sport: SportKey, event: SgoEvent): PlayerStatLine[] | undefined {
-    const figures = PLAYER_FIGURES[sport];
+    const figures = PLAYER_FIGURES[sport] ?? [];
     const game = event.results?.game ?? event.results?.reg;
     if (!game || figures.length === 0) return undefined;
     const roster = this.roster(event);
@@ -937,7 +1002,7 @@ export class SportsGameOddsProvider implements OddsProvider {
       for (const periodID of periods) {
         const inPeriod = odds.filter((o) => o.betTypeID === betType && o.periodID === periodID);
         const raw = this.rawMarket(betType, inPeriod, bookmaker);
-        const market = raw ? buildMarket(type, raw, names, gate) : null;
+        const market = raw ? buildMarket(type, raw, names, gate, sport) : null;
         if (market) {
           markets.push(market);
           break;

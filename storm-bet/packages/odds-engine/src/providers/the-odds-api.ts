@@ -122,6 +122,11 @@ const GROUP_TO_SPORT: Record<string, SportKey> = {
   Soccer: 'football',
   Tennis: 'tennis',
   Basketball: 'basketball',
+  'Ice Hockey': 'hockey',
+  'American Football': 'american_football',
+  Baseball: 'baseball',
+  Handball: 'handball',
+  'Mixed Martial Arts': 'mma',
 };
 
 /** Markets requested per sport. Tennis handicaps/totals count games, which the scores feed cannot settle. */
@@ -129,12 +134,22 @@ const API_MARKETS: Record<SportKey, string[]> = {
   football: ['h2h', 'spreads', 'totals'],
   basketball: ['h2h', 'spreads', 'totals'],
   tennis: ['h2h'],
+  hockey: ['h2h', 'spreads', 'totals'],
+  american_football: ['h2h', 'spreads', 'totals'],
+  baseball: ['h2h', 'spreads', 'totals'],
+  handball: ['h2h', 'spreads', 'totals'],
+  mma: ['h2h'],
 };
 
 const MARKET_FOR: Record<SportKey, Partial<Record<string, MarketType>>> = {
   football: { h2h: 'MATCH_RESULT', spreads: 'ASIAN_HANDICAP', totals: 'TOTAL_GOALS' },
   basketball: { h2h: 'MATCH_WINNER', spreads: 'POINT_SPREAD', totals: 'TOTAL_POINTS' },
   tennis: { h2h: 'MATCH_WINNER' },
+  hockey: { h2h: 'MATCH_WINNER', spreads: 'POINT_SPREAD', totals: 'TOTAL_POINTS' },
+  american_football: { h2h: 'MATCH_WINNER', spreads: 'POINT_SPREAD', totals: 'TOTAL_POINTS' },
+  baseball: { h2h: 'MATCH_WINNER', spreads: 'POINT_SPREAD', totals: 'TOTAL_POINTS' },
+  handball: { h2h: 'MATCH_RESULT', spreads: 'POINT_SPREAD', totals: 'TOTAL_POINTS' },
+  mma: { h2h: 'MATCH_WINNER' },
 };
 
 export class TheOddsApiProvider implements OddsProvider {
@@ -419,7 +434,7 @@ export class TheOddsApiProvider implements OddsProvider {
     for (const apiMarket of bookmaker.markets) {
       const type = MARKET_FOR[sport][apiMarket.key];
       const raw = type ? this.rawMarket(apiMarket, event) : null;
-      const market = type && raw ? buildMarket(type, raw, names, gate) : null;
+      const market = type && raw ? buildMarket(type, raw, names, gate, sport) : null;
       if (market) markets.push(market);
     }
     if (sport === 'football' && status === 'SCHEDULED')

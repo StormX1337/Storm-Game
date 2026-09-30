@@ -14,6 +14,8 @@ export function Scoreboard({ event }: { event: EventDetailDto }) {
   const live = useLiveEvent(event);
   const stats = live.statistics ?? event.statistics;
   const started = live.score !== null;
+  const firstHalf =
+    stats?.sport === 'football' || stats?.sport === 'basketball' ? stats.firstHalf : undefined;
   const statusLine = [
     PERIOD_LABELS[live.liveState?.period ?? ''] ?? live.liveState?.period,
     live.liveState?.clock,
@@ -32,7 +34,9 @@ export function Scoreboard({ event }: { event: EventDetailDto }) {
           {live.isLive ? <LiveBadge /> : <span>{EVENT_STATUS_LABELS[live.status]}</span>}
         </span>
       </div>
-      {started && live.score && event.sport.key !== 'tennis' ? (
+      {started &&
+      live.score &&
+      (event.sport.key === 'football' || event.sport.key === 'basketball') ? (
         <MatchField
           sport={event.sport.key}
           home={event.home.name}
@@ -41,9 +45,7 @@ export function Scoreboard({ event }: { event: EventDetailDto }) {
           live={live.isLive}
           status={[
             live.isLive ? statusLine : EVENT_STATUS_LABELS[live.status],
-            stats && stats.sport !== 'tennis' && stats.firstHalf
-              ? `HZ ${stats.firstHalf.home}:${stats.firstHalf.away}`
-              : null,
+            firstHalf ? `HZ ${firstHalf.home}:${firstHalf.away}` : null,
           ]
             .filter(Boolean)
             .join(' · ')}
@@ -76,9 +78,9 @@ export function Scoreboard({ event }: { event: EventDetailDto }) {
                   ? EVENT_STATUS_LABELS[live.status]
                   : formatDateTime(event.startTime)}
             </p>
-            {stats && stats.sport !== 'tennis' && stats.firstHalf ? (
+            {firstHalf ? (
               <p className="tabular mt-0.5 text-xs text-fg-subtle">
-                Halbzeit {stats.firstHalf.home}:{stats.firstHalf.away}
+                Halbzeit {firstHalf.home}:{firstHalf.away}
               </p>
             ) : null}
           </div>
@@ -268,10 +270,12 @@ function StatisticsPanel({
               <th className="py-1 text-left font-medium">Team</th>
               {stats.periods.map((_, i) => (
                 <th key={i} className="w-10 py-1 text-center font-medium">
-                  {i < 4 ? `Q${i + 1}` : 'OT'}
+                  {periodLabel(stats.sport, i)}
                 </th>
               ))}
-              <th className="w-12 py-1 text-center font-medium">Fouls</th>
+              {stats.sport === 'basketball' ? (
+                <th className="w-12 py-1 text-center font-medium">Fouls</th>
+              ) : null}
             </tr>
           </thead>
           <tbody>
@@ -283,9 +287,11 @@ function StatisticsPanel({
                     {p[side]}
                   </td>
                 ))}
-                <td className="tabular py-1.5 text-center text-fg-muted">
-                  {stats.fouls?.[side] ?? '–'}
-                </td>
+                {stats.sport === 'basketball' ? (
+                  <td className="tabular py-1.5 text-center text-fg-muted">
+                    {stats.fouls?.[side] ?? '–'}
+                  </td>
+                ) : null}
               </tr>
             ))}
           </tbody>
@@ -350,4 +356,12 @@ function extraBars(teamStats: TeamStat[] | undefined): [string, Pair, boolean][]
     { home: s.home, away: s.away },
     /percent|possession|pct/i.test(s.key),
   ]);
+}
+
+/** Column heading of the i-th period of a sport. */
+function periodLabel(sport: string, i: number): string {
+  if (sport === 'hockey') return i < 3 ? `${i + 1}.` : 'OT';
+  if (sport === 'baseball') return String(i + 1);
+  if (sport === 'handball') return `HZ${i + 1}`;
+  return i < 4 ? `Q${i + 1}` : 'OT';
 }

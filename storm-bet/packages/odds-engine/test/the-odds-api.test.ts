@@ -42,12 +42,14 @@ describe('TheOddsApiProvider', () => {
     expect(p.isSimulated).toBe(false);
     const leagues = await p.getLeagues();
     expect(leagues.map((l) => l.externalId).sort()).toEqual([
+      'americanfootball_nfl',
       'basketball_nba',
       'soccer_germany_bundesliga',
       'tennis_atp_paris',
     ]);
     expect(leagues.find((l) => l.externalId === 'tennis_atp_paris')?.sportKey).toBe('tennis');
     expect((await p.getSports()).map((s) => s.key).sort()).toEqual([
+      'american_football',
       'basketball',
       'football',
       'tennis',
@@ -145,12 +147,12 @@ describe('TheOddsApiProvider', () => {
     await p.getMarkets('bl-upcoming');
     await p.getEvent('nba-1');
     const odds = api.calls.filter((c) => c.path.endsWith('/odds'));
-    expect(odds).toHaveLength(3); // bundesliga, nba, tennis
+    expect(odds).toHaveLength(4); // bundesliga, nba, tennis, nfl
     const scores = api.calls.filter((c) => c.path.endsWith('/scores'));
     expect(scores.map((c) => c.path)).toEqual(['/sports/soccer_germany_bundesliga/scores']); // only there a game is running
     now += 601_000;
     await p.getEvents({ ...window });
-    expect(api.calls.filter((c) => c.path.endsWith('/odds'))).toHaveLength(6);
+    expect(api.calls.filter((c) => c.path.endsWith('/odds'))).toHaveLength(8);
     expect(p.getQuota()).toMatchObject({ exhausted: false });
     expect(p.getQuota().remaining).toBeLessThan(480);
   });

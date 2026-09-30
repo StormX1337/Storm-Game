@@ -97,6 +97,8 @@ function scoreFrom(stats: EventStatistics): { home: number; away: number } {
       return stats.setsWon;
     case 'basketball':
       return stats.points;
+    default:
+      return stats.score;
   }
 }
 

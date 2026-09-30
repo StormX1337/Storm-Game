@@ -83,7 +83,23 @@ export interface BasketballStatistics {
   teamStats?: TeamStat[];
 }
 
-export type EventStatistics = FootballStatistics | TennisStatistics | BasketballStatistics;
+/** Sports recorded by their score alone (plus period scores and team figures). */
+export type ScoreSport = 'hockey' | 'american_football' | 'baseball' | 'handball' | 'mma';
+
+export interface ScoreStatistics {
+  sport: ScoreSport;
+  /** The score bets are settled on (handball: regular time). */
+  score: Pair;
+  /** Score per period (thirds, quarters, innings, halves), as far as reported. */
+  periods: Pair[];
+  teamStats?: TeamStat[];
+}
+
+export type EventStatistics =
+  | FootballStatistics
+  | TennisStatistics
+  | BasketballStatistics
+  | ScoreStatistics;
 
 export interface LiveState {
   /** PRE, 1H, HT, 2H, FT · Q1–Q4, OT · S1–S3 */
@@ -104,6 +120,9 @@ export const PERIOD_LABELS: Record<string, string> = {
   Q3: '3. Viertel',
   Q4: '4. Viertel',
   OT: 'Verlängerung',
+  P1: '1. Drittel',
+  P2: '2. Drittel',
+  P3: '3. Drittel',
   S1: '1. Satz',
   S2: '2. Satz',
   S3: '3. Satz',

@@ -7,7 +7,9 @@ import {
   type FootballStatistics,
   type MarketStatus,
   type MarketType,
+  marketLabel,
   type Pair,
+  type ScoreStatistics,
   type SportKey,
   type TennisStatistics,
 } from '@storm-bet/types';
@@ -26,6 +28,11 @@ export const SPORT_NAMES: Record<SportKey, string> = {
   football: 'Fußball',
   tennis: 'Tennis',
   basketball: 'Basketball',
+  hockey: 'Eishockey',
+  american_football: 'American Football',
+  baseball: 'Baseball',
+  handball: 'Handball',
+  mma: 'MMA',
 };
 
 export function slug(value: string): string {
@@ -92,7 +99,11 @@ export function scoreStatistics(sport: SportKey, pair: Pair): EventStatistics {
     };
     return stats;
   }
-  const stats: BasketballStatistics = { sport: 'basketball', points: pair, periods: [] };
+  if (sport === 'basketball') {
+    const stats: BasketballStatistics = { sport: 'basketball', points: pair, periods: [] };
+    return stats;
+  }
+  const stats: ScoreStatistics = { sport, score: pair, periods: [] };
   return stats;
 }
 
@@ -148,9 +159,12 @@ export function buildMarket(
   raw: RawMarket,
   names: { home: string; away: string },
   gate: MarketGate,
+  /** Names the market for its sport (e.g. "Runs Über/Unter"). */
+  sport?: SportKey,
 ): ProviderMarket | null {
   const definition = MARKET_DEFINITIONS[type];
   if (definition.kind !== raw.kind) return null;
+  const label = marketLabel(type, sport);
   let line: number | null = null;
   let quotes: [ProviderSelection['outcome'], string, number | null][];
   switch (raw.kind) {
@@ -195,10 +209,7 @@ export function buildMarket(
   return {
     key: marketKey(type, line),
     type,
-    name:
-      line == null
-        ? definition.label
-        : `${definition.label} ${lineLabel(line, definition.kind === 'HANDICAP')}`,
+    name: line == null ? label : `${label} ${lineLabel(line, definition.kind === 'HANDICAP')}`,
     line,
     status: gate.status,
     suspensionReason: gate.status === 'SUSPENDED' ? gate.reason : null,
