@@ -51,7 +51,7 @@ export default async function BetDetailPage({ params }: { params: Promise<{ betI
       <div className="grid gap-3 sm:grid-cols-4">
         {[
           ['Einsatz', formatMoney(bet.stake)],
-          ['Gesamtquote', formatOdds(bet.totalOdds)],
+          [bet.system ? 'Ø Quote pro Wette' : 'Gesamtquote', formatOdds(bet.totalOdds)],
           ['Möglicher Gewinn', formatMoney(bet.potentialReturn)],
           ['Auszahlung', bet.payout == null ? '—' : formatMoney(bet.payout)],
         ].map(([label, value]) => (

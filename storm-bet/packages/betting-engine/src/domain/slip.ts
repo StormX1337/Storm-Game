@@ -19,6 +19,7 @@ import {
   type BuilderPrice,
 } from './football-model';
 import { betTypeFor, combineOdds, fromMilli, maxStakeForPayout, potentialReturn } from './odds';
+import { SYSTEM_MAX_LEGS, SYSTEM_MIN_LEGS, systemComboOdds, systemLines } from './system';
 
 /** The book's current view of one selection, as loaded (and locked) from the database. */
 export interface BookSelection {
@@ -56,8 +57,10 @@ export interface SlipLegRequest {
 export interface SlipRequest {
   mode: SlipMode;
   legs: SlipLegRequest[];
-  /** COMBO and BUILDER only. */
+  /** COMBO and BUILDER: the stake; SYSTEM: the stake per combination. */
   stake?: bigint;
+  /** SYSTEM only: selections per combination (k of n). */
+  systemSize?: number;
   /** BUILDER only: the Bet Builder price the player saw (absent in a first quote). */
   requestedOddsMilli?: number;
   /** An odds boost: a single on its selection at the raised price. */
@@ -85,6 +88,8 @@ export interface PlannedBet {
   stake: bigint;
   totalOddsMilli: bigint;
   potentialReturn: bigint;
+  /** SYSTEM only: selections per combination. */
+  systemSize?: number;
 }
 
 export interface SlipEvaluation {
@@ -235,7 +240,7 @@ export function evaluateSlip(
   }
 
   const bets: PlannedBet[] = [];
-  if (request.mode === 'COMBO') {
+  if (request.mode === 'COMBO' || request.mode === 'SYSTEM') {
     const seen = new Set<string>();
     for (const leg of legs) {
       if (seen.has(leg.book.eventId)) {
@@ -251,7 +256,10 @@ export function evaluateSlip(
       }
       seen.add(leg.book.eventId);
     }
-    if (legs.length > 0) {
+    if (request.mode === 'SYSTEM') {
+      const planned = systemBet(request, legs, limits, requireStake, issues);
+      if (planned) bets.push(planned);
+    } else if (legs.length > 0) {
       const totalOddsMilli = combineOdds(legs.map((l) => l.oddsMilli));
       const stake = request.stake ?? 0n;
       bets.push({
@@ -352,6 +360,60 @@ export function evaluateSlip(
         : 0n,
     totalStake: bets.reduce((sum, b) => sum + b.stake, 0n),
     potentialReturn: bets.reduce((sum, b) => sum + b.potentialReturn, 0n),
+  };
+}
+
+/**
+ * The system bet: every combination of `systemSize` legs, each with the stake
+ * per combination. Its figure for "total odds" is the average combination
+ * odds, so stake × odds is its return if every selection wins.
+ */
+function systemBet(
+  request: SlipRequest,
+  legs: PlannedLeg[],
+  limits: BettingLimits,
+  requireStake: boolean,
+  issues: SlipIssue[],
+): PlannedBet | null {
+  const n = request.legs.length;
+  const size = request.systemSize ?? 0;
+  if (n < SYSTEM_MIN_LEGS || n > SYSTEM_MAX_LEGS) {
+    issues.push(
+      issue(
+        'VALIDATION_ERROR',
+        `Eine Systemwette braucht ${SYSTEM_MIN_LEGS} bis ${SYSTEM_MAX_LEGS} Auswahlen.`,
+      ),
+    );
+    return null;
+  }
+  if (!Number.isInteger(size) || size < 2 || size >= n) {
+    issues.push(issue('VALIDATION_ERROR', `Wähle ein System von 2 bis ${n - 1} aus ${n}.`));
+    return null;
+  }
+  // Missing or blocked legs were reported above; no price for an incomplete slip.
+  if (legs.length !== n) return null;
+  const unit = request.stake ?? 0n;
+  if ((unit > 0n || requireStake) && unit < BigInt(limits.minStake)) {
+    issues.push(
+      issue(
+        'BET_LIMIT_EXCEEDED',
+        `Der Mindesteinsatz pro Kombination beträgt ${formatMoney(BigInt(limits.minStake))}.`,
+      ),
+    );
+  }
+  const lines = BigInt(systemLines(n, size));
+  const comboOdds = systemComboOdds(
+    legs.map((l) => l.oddsMilli),
+    size,
+  );
+  const sum = comboOdds.reduce((a, b) => a + b, 0n);
+  return {
+    type: 'SYSTEM',
+    legs,
+    stake: unit * lines,
+    totalOddsMilli: sum / lines,
+    potentialReturn: comboOdds.reduce((total, odds) => total + potentialReturn(unit, odds), 0n),
+    systemSize: size,
   };
 }
 

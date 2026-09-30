@@ -67,6 +67,24 @@ test.describe('player journey', () => {
     await expect(page.getByRole('link', { name: 'Anmelden, um zu wetten' })).toBeVisible();
   });
 
+  test('three picks on different matches can be played as a system bet', async ({ page }) => {
+    await login(page, ADMIN_EMAIL, ADMIN_PASSWORD);
+    await page.goto('/sports/football');
+    const rows = page
+      .getByTestId('event-row')
+      .filter({ hasNot: page.getByText('Live', { exact: true }) });
+    for (let i = 0; i < 3; i += 1) {
+      await rows.nth(i).locator('[data-testid=odds-button]:not([disabled])').first().click();
+    }
+    await expect(page.getByTestId('slip-item')).toHaveCount(3);
+    await page.getByRole('tab', { name: 'System' }).click();
+    await page.getByTestId('system-size').filter({ hasText: '2 aus 3' }).click();
+    await page.getByTestId('stake-input').fill('1');
+    await expect(page.getByText('Einsatz (3 Wetten)')).toBeVisible();
+    await placeSlip(page, '1');
+    await expect(page.getByTestId('bet-receipt')).toContainText('Systemwette');
+  });
+
   test('two picks on one match become a Bet Builder with one price', async ({ page }) => {
     await login(page, ADMIN_EMAIL, ADMIN_PASSWORD);
     await openUpcomingEvent(page);

@@ -5,7 +5,9 @@ import {
   cashoutValue,
   combineOdds,
   decideBet,
+  decideSystem,
   evaluateSlip,
+  systemLines,
   potentialReturn,
   resolveSelection,
   SettlementDataError,
@@ -502,5 +504,81 @@ describe('combined player figures', () => {
       );
     expect(pra(39.5)).toBe('WON');
     expect(pra(40.5)).toBe('LOST');
+  });
+});
+
+describe('system bets', () => {
+  const b = new Map([
+    ['a', book('a', { oddsMilli: 2000 })],
+    ['b', book('b', { oddsMilli: 3000 })],
+    ['c', book('c', { oddsMilli: 4000 })],
+  ]);
+  const legs = [
+    { selectionId: 'a', requestedOddsMilli: 2000 },
+    { selectionId: 'b', requestedOddsMilli: 3000 },
+    { selectionId: 'c', requestedOddsMilli: 4000 },
+  ];
+
+  it('counts combinations', () => {
+    expect([systemLines(3, 2), systemLines(4, 2), systemLines(5, 3), systemLines(8, 4)]).toEqual([
+      3, 6, 10, 70,
+    ]);
+  });
+
+  it('quotes 2 of 3: one stake per combination', () => {
+    const result = evaluateSlip(
+      { mode: 'SYSTEM', stake: 100n, systemSize: 2, policy: 'REJECT', legs },
+      b,
+      { now, limits, requireStake: true },
+    );
+    expect(result.issues).toEqual([]);
+    expect(result.betType).toBe('SYSTEM');
+    expect(result.bets[0]).toMatchObject({ stake: 300n, systemSize: 2 });
+    // 6.00 + 8.00 + 12.00 per 1,00 €
+    expect(result.potentialReturn).toBe(2_600n);
+    expect(result.totalOddsMilli).toBe(8_666n);
+  });
+
+  it('refuses a size that is no system, legs of one match and a tiny stake', () => {
+    const bad = (systemSize: number, stake = 100n, book2 = b) =>
+      evaluateSlip({ mode: 'SYSTEM', stake, systemSize, policy: 'REJECT', legs }, book2, {
+        now,
+        limits,
+        requireStake: true,
+      }).issues.map((i) => i.code);
+    expect(bad(3)).toContain('VALIDATION_ERROR');
+    expect(bad(1)).toContain('VALIDATION_ERROR');
+    expect(bad(2, 5n)).toContain('BET_LIMIT_EXCEEDED');
+    const sameMatch = new Map(b);
+    sameMatch.set('c', book('c', { oddsMilli: 4000, eventId: 'e-a' }));
+    expect(bad(2, 100n, sameMatch)).toContain('VALIDATION_ERROR');
+  });
+
+  it('settles each combination like a multiple', () => {
+    const r = (odds: number, result: 'WON' | 'LOST' | 'VOID' | 'PENDING') => ({ odds, result });
+    expect(decideSystem(300n, 2, [r(2000, 'WON'), r(3000, 'LOST'), r(4000, 'WON')])).toMatchObject({
+      status: 'WON',
+      payout: 800n,
+    });
+    expect(decideSystem(300n, 2, [r(2000, 'VOID'), r(3000, 'WON'), r(4000, 'WON')])).toMatchObject({
+      status: 'WON',
+      payout: 1_900n,
+    });
+    // Two lost of three: no combination can win any more.
+    expect(
+      decideSystem(300n, 2, [r(2000, 'LOST'), r(3000, 'LOST'), r(4000, 'PENDING')]),
+    ).toMatchObject({ status: 'LOST', payout: 0n });
+    expect(decideSystem(300n, 2, [r(2000, 'LOST'), r(3000, 'WON'), r(4000, 'PENDING')])).toEqual({
+      decided: false,
+    });
+    expect(
+      decideSystem(300n, 2, [r(2000, 'VOID'), r(3000, 'VOID'), r(4000, 'VOID')]),
+    ).toMatchObject({ status: 'VOID', payout: 300n });
+  });
+
+  it('has no cashout', () => {
+    expect(
+      cashoutValue({ type: 'SYSTEM', stake: 300n, potentialReturn: 2_600n }, [], now, 5),
+    ).toMatchObject({ available: false });
   });
 });

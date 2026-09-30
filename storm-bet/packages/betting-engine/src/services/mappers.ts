@@ -1,6 +1,7 @@
 import { decimalToNumber, moneyToNumber, oddsToMilli, type Prisma } from '@storm-bet/database';
 import type { BetDto, EventStatistics, SportKey, TransactionDto } from '@storm-bet/types';
 import { parseLiveState, parseStatistics } from '@storm-bet/validation';
+import { systemLines } from '../domain/system';
 
 /** Everything a BetDto needs, in one query (no N+1 over legs). */
 export const BET_INCLUDE = {
@@ -68,6 +69,10 @@ export function toBetDto(bet: BetWithLegs): BetDto {
     })),
     autoCashout: bet.autoCashoutAmount == null ? null : moneyToNumber(bet.autoCashoutAmount),
     boosted: bet.boostId !== null,
+    system:
+      bet.systemSize === null
+        ? null
+        : { size: bet.systemSize, lines: systemLines(bet.selections.length, bet.systemSize) },
     selections: bet.selections.map((leg) => ({
       id: leg.id,
       selectionId: leg.selectionId,

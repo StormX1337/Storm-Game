@@ -184,6 +184,8 @@ export interface BetDto {
   autoCashout: Money | null;
   /** Placed with an odds boost (the total odds are the boosted price). */
   boosted: boolean;
+  /** System bet: selections per combination and number of combinations. */
+  system: { size: number; lines: number } | null;
   selections: BetSelectionDto[];
 }
 

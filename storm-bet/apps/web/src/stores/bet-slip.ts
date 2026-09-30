@@ -30,6 +30,8 @@ interface SlipState {
   items: SlipItem[];
   mode: SlipMode;
   comboStake: string;
+  /** System bets: selections per combination (clamped to the slip). */
+  systemSize: number;
   singleStakes: Record<string, string>;
   acceptHigher: boolean;
   /** Reused for retries of the same submission; reset after a definitive answer. */
@@ -45,6 +47,7 @@ interface SlipState {
   replaceEvent: (eventId: string, items: Omit<SlipItem, 'pendingOdds'>[]) => void;
   setMode: (mode: SlipMode) => void;
   setComboStake: (value: string) => void;
+  setSystemSize: (size: number) => void;
   setSingleStake: (selectionId: string, value: string) => void;
   setAcceptHigher: (value: boolean) => void;
   /** Records a server price; it only becomes the bet price once accepted. */
@@ -61,6 +64,7 @@ export const useBetSlip = create<SlipState>()(
       items: [],
       mode: 'COMBO',
       comboStake: '',
+      systemSize: 2,
       singleStakes: {},
       acceptHigher: false,
       idempotencyKey: null,
@@ -111,6 +115,7 @@ export const useBetSlip = create<SlipState>()(
         })),
       setMode: (mode) => set({ mode, idempotencyKey: null }),
       setComboStake: (comboStake) => set({ comboStake, idempotencyKey: null }),
+      setSystemSize: (systemSize) => set({ systemSize, idempotencyKey: null }),
       setSingleStake: (selectionId, value) =>
         set((state) => ({
           singleStakes: { ...state.singleStakes, [selectionId]: value },
@@ -155,6 +160,7 @@ export const useBetSlip = create<SlipState>()(
         items: state.items,
         mode: state.mode,
         comboStake: state.comboStake,
+        systemSize: state.systemSize,
         singleStakes: state.singleStakes,
         acceptHigher: state.acceptHigher,
       }),
@@ -175,5 +181,31 @@ export function sameEvent(items: SlipItem[]): boolean {
 export function effectiveMode(items: SlipItem[], mode: SlipMode): SlipMode {
   if (items.length <= 1) return 'COMBO';
   if (mode === 'SINGLES') return mode;
+  if (mode === 'SYSTEM' && systemPossible(items)) return mode;
   return sameEvent(items) ? 'BUILDER' : 'COMBO';
+}
+
+export const SYSTEM_MIN_ITEMS = 3;
+export const SYSTEM_MAX_ITEMS = 8;
+
+/** A system bet takes 3 to 8 selections, each from a different match. */
+export function systemPossible(items: SlipItem[]): boolean {
+  return (
+    items.length >= SYSTEM_MIN_ITEMS &&
+    items.length <= SYSTEM_MAX_ITEMS &&
+    new Set(items.map((i) => i.eventId)).size === items.length
+  );
+}
+
+/** The chosen system size, kept within 2 … n − 1 for the current slip. */
+export function systemSizeFor(items: SlipItem[], size: number): number {
+  return Math.min(Math.max(2, size), Math.max(2, items.length - 1));
+}
+
+/** Number of combinations of k out of n. */
+export function binomial(n: number, k: number): number {
+  if (k < 0 || k > n) return 0;
+  let r = 1;
+  for (let i = 1; i <= k; i += 1) r = (r * (n - k + i)) / i;
+  return Math.round(r);
 }

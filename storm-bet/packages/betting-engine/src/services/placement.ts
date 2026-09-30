@@ -82,6 +82,18 @@ function toRequest(input: ValidateSlipInput | PlaceBetInput): SlipRequest {
       legs: input.selections.map((s) => ({ selectionId: s.selectionId, requestedOddsMilli: 0 })),
     };
   }
+  if (input.mode === 'SYSTEM') {
+    return {
+      mode: 'SYSTEM',
+      stake: BigInt(input.stake),
+      systemSize: input.size,
+      policy: input.oddsChangePolicy,
+      legs: input.selections.map((s) => ({
+        selectionId: s.selectionId,
+        requestedOddsMilli: toMilli(s.odds),
+      })),
+    };
+  }
   if (input.mode === 'COMBO') {
     return {
       mode: 'COMBO',
@@ -111,7 +123,7 @@ function fingerprint(request: SlipRequest): string {
     .sort((a, b) => a.selectionId.localeCompare(b.selectionId))
     .map((l) => `${l.selectionId}@${l.requestedOddsMilli}x${l.stake ?? ''}`);
   return sha256(
-    `${request.mode}|${request.stake ?? ''}|${request.requestedOddsMilli ?? ''}|${request.boostId ?? ''}|${request.policy}|${legs.join(',')}`,
+    `${request.mode}|${request.stake ?? ''}|${request.requestedOddsMilli ?? ''}|${request.boostId ?? ''}${request.systemSize ? `|k${request.systemSize}` : ''}|${request.policy}|${legs.join(',')}`,
   );
 }
 
@@ -194,7 +206,9 @@ export class BetPlacementService {
         potentialReturn: moneyToNumber(evaluation.potentialReturn),
         selectionCount: request.legs.length,
         maxStake:
-          request.mode === 'SINGLES' || evaluation.totalOddsMilli === 0n
+          request.mode === 'SINGLES' ||
+          request.mode === 'SYSTEM' ||
+          evaluation.totalOddsMilli === 0n
             ? null
             : moneyToNumber(
                 [
@@ -350,6 +364,7 @@ export class BetPlacementService {
           totalOdds: milliToDecimal(Number(planned.totalOddsMilli)),
           potentialReturn: planned.potentialReturn,
           boostId: request.boostId ?? null,
+          systemSize: planned.systemSize ?? null,
           oddsChangePolicy: request.policy,
           placedAt: now,
         },

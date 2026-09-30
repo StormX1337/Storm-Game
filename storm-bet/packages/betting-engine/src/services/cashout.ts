@@ -262,6 +262,8 @@ export class CashoutService {
       throw new AppError('CONFLICT', 'Die Wette ist bereits abgerechnet.');
     if (bet.type === 'BET_BUILDER')
       throw new AppError('VALIDATION_ERROR', 'Für Bet Builder gibt es keinen Cashout.');
+    if (bet.type === 'SYSTEM')
+      throw new AppError('VALIDATION_ERROR', 'Für Systemwetten gibt es keinen Cashout.');
     if (amount !== null && amount > bet.potentialReturn) {
       throw new AppError(
         'VALIDATION_ERROR',

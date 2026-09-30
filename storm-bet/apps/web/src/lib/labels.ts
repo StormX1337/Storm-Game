@@ -35,6 +35,7 @@ export const BET_TYPE_LABELS: Record<BetType, string> = {
   TRIPLE: 'Dreierkombi',
   ACCUMULATOR: 'Kombiwette',
   BET_BUILDER: 'Bet Builder',
+  SYSTEM: 'Systemwette',
 };
 
 export const EVENT_STATUS_LABELS: Record<EventStatus, string> = {

@@ -103,7 +103,14 @@ export function BetCard({ bet, href }: { bet: BetDto; href?: string }) {
     <>
       <div className="flex items-center gap-2 border-b border-border px-4 py-2.5">
         <Badge variant={betStatusVariant(bet.status)}>{BET_STATUS_LABELS[bet.status]}</Badge>
-        <span className="truncate text-sm font-semibold">{BET_TYPE_LABELS[bet.type]}</span>
+        <span className="truncate text-sm font-semibold">
+          {BET_TYPE_LABELS[bet.type]}
+          {bet.system ? (
+            <span className="ml-1 font-normal text-fg-muted">
+              {bet.system.size} aus {bet.selections.length} · {bet.system.lines} Wetten
+            </span>
+          ) : null}
+        </span>
         {bet.boosted ? (
           <span className="rounded bg-accent-soft px-1.5 py-0.5 text-[10px] font-bold text-accent-strong">
             BOOST
@@ -127,7 +134,7 @@ export function BetCard({ bet, href }: { bet: BetDto; href?: string }) {
           <dd className="tabular font-semibold">{formatMoney(bet.stake)}</dd>
         </div>
         <div>
-          <dt className="text-fg-subtle">Quote</dt>
+          <dt className="text-fg-subtle">{bet.system ? 'Ø Quote' : 'Quote'}</dt>
           <dd className="tabular font-semibold">{formatOdds(bet.totalOdds)}</dd>
         </div>
         <div className="text-right">

@@ -14,7 +14,15 @@ import { usePathname } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ApiError, api } from '@/lib/api-client';
 import { formatKickoff, formatMoney, formatOdds, parseStake } from '@/lib/format';
-import { effectiveMode, sameEvent, useBetSlip, type SlipItem } from '@/stores/bet-slip';
+import {
+  binomial,
+  effectiveMode,
+  sameEvent,
+  systemPossible,
+  systemSizeFor,
+  useBetSlip,
+  type SlipItem,
+} from '@/stores/bet-slip';
 import { useLive } from '@/stores/live';
 import { announceWalletChange, useSession } from '../providers/session';
 import { useRealtimeTopics } from '../providers/realtime';
@@ -28,6 +36,7 @@ const MODE_LABELS: Record<SlipMode, string> = {
   COMBO: 'Kombi',
   BUILDER: 'Bet Builder',
   SINGLES: 'Einzelwetten',
+  SYSTEM: 'System',
 };
 /**
  * Issues that make placing pointless until the slip changes. Suspensions and
@@ -48,9 +57,19 @@ function slipPayload(
   comboStake: string,
   singleStakes: Record<string, string>,
   acceptHigher: boolean,
+  systemSize: number,
   builderOdds: number | null = null,
 ) {
   const policy = acceptHigher ? 'ACCEPT_HIGHER' : 'REJECT';
+  if (mode === 'SYSTEM') {
+    return {
+      mode,
+      size: systemSizeFor(items, systemSize),
+      stake: parseStake(comboStake) ?? 0,
+      oddsChangePolicy: policy,
+      selections: items.map((i) => ({ selectionId: i.selectionId, odds: i.odds })),
+    } as const;
+  }
   if (mode === 'BUILDER') {
     return {
       mode,
@@ -85,10 +104,34 @@ function localQuote(
   mode: SlipMode,
   comboStake: string,
   singleStakes: Record<string, string>,
+  systemSize: number,
 ) {
   // The Bet Builder price comes from the server's model only.
   if (mode === 'BUILDER')
     return { totalOdds: 0, stake: parseStake(comboStake) ?? 0, potentialReturn: 0 };
+  if (mode === 'SYSTEM') {
+    const size = systemSizeFor(items, systemSize);
+    const unit = parseStake(comboStake) ?? 0;
+    const lines = binomial(items.length, size);
+    let potentialReturn = 0;
+    let sum = 0;
+    const walk = (from: number, left: number, milli: bigint) => {
+      if (left === 0) {
+        sum += Number(milli);
+        potentialReturn += Math.floor((unit * Number(milli)) / 1000);
+        return;
+      }
+      for (let i = from; i <= items.length - left; i += 1) {
+        walk(i + 1, left - 1, (milli * BigInt(Math.round(items[i]!.odds * 1000))) / 1000n);
+      }
+    };
+    walk(0, size, 1000n);
+    return {
+      totalOdds: lines ? Math.floor(sum / lines) / 1000 : 0,
+      stake: unit * lines,
+      potentialReturn,
+    };
+  }
   if (mode === 'COMBO') {
     const milli = items.reduce(
       (acc, i) => (acc * BigInt(Math.round(i.odds * 1000))) / 1000n,
@@ -131,8 +174,16 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
   useRealtimeTopics(slip.items.map((i) => `event:${i.eventId}`));
 
   const payload = useMemo(
-    () => slipPayload(slip.items, mode, slip.comboStake, slip.singleStakes, slip.acceptHigher),
-    [slip.items, mode, slip.comboStake, slip.singleStakes, slip.acceptHigher],
+    () =>
+      slipPayload(
+        slip.items,
+        mode,
+        slip.comboStake,
+        slip.singleStakes,
+        slip.acceptHigher,
+        slip.systemSize,
+      ),
+    [slip.items, mode, slip.comboStake, slip.singleStakes, slip.acceptHigher, slip.systemSize],
   );
   // Status updates change `items` without changing what is sent; key on content.
   const payloadKey = JSON.stringify(payload);
@@ -202,16 +253,24 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
   }, [builderQuote, legsKey]);
   const seenOdds = mode === 'BUILDER' && builderSeen?.legs === legsKey ? builderSeen.odds : null;
 
-  const estimate = localQuote(slip.items, mode, slip.comboStake, slip.singleStakes);
+  const estimate = localQuote(
+    slip.items,
+    mode,
+    slip.comboStake,
+    slip.singleStakes,
+    slip.systemSize,
+  );
   const totalOdds =
     mode === 'BUILDER'
       ? (builderQuote ?? 0)
-      : quote?.quote.mode === mode && mode === 'COMBO'
+      : quote?.quote.mode === mode && (mode === 'COMBO' || mode === 'SYSTEM')
         ? quote.quote.totalOdds
         : estimate.totalOdds;
   const potentialReturn =
     quote?.quote.mode === mode ? quote.quote.potentialReturn : estimate.potentialReturn;
   const totalStake = estimate.stake;
+  const systemSize = systemSizeFor(slip.items, slip.systemSize);
+  const systemLines = mode === 'SYSTEM' ? binomial(slip.items.length, systemSize) : 0;
   // The highest stake the limits allow at this price, within the available balance.
   const maxStake = (() => {
     const caps = [wallet?.available, quote?.quote.maxStake].filter(
@@ -274,6 +333,7 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
         s.comboStake,
         s.singleStakes,
         s.acceptHigher,
+        s.systemSize,
         acceptFirst ? builderQuote : seenOdds,
       );
       const idempotencyKey = s.ensureKey();
@@ -324,6 +384,12 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
                 <span className="font-mono text-xs text-fg-muted">{bet.reference}</span>
                 <span className="tabular font-semibold">{formatOdds(bet.totalOdds)}</span>
               </div>
+              {bet.system ? (
+                <p className="mt-1 text-xs text-fg-muted">
+                  Systemwette {bet.system.size} aus {bet.selections.length} · {bet.system.lines}{' '}
+                  Wetten
+                </p>
+              ) : null}
               <dl className="mt-2 space-y-1 text-xs">
                 <div className="flex justify-between text-fg-muted">
                   <dt>Einsatz</dt>
@@ -367,11 +433,20 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
     <div className={cn('flex min-h-0 flex-col', className)} data-testid="bet-slip">
       {slip.items.length > 1 ? (
         <div
-          className="grid grid-cols-2 gap-1 border-b border-border p-2"
+          className={cn(
+            'grid gap-1 border-b border-border p-2',
+            systemPossible(slip.items) ? 'grid-cols-3' : 'grid-cols-2',
+          )}
           role="tablist"
           aria-label="Wettart"
         >
-          {([sameEvent(slip.items) ? 'BUILDER' : 'COMBO', 'SINGLES'] as const).map((m) => (
+          {(
+            [
+              sameEvent(slip.items) ? 'BUILDER' : 'COMBO',
+              ...(systemPossible(slip.items) ? (['SYSTEM'] as const) : []),
+              'SINGLES',
+            ] as const
+          ).map((m) => (
             <button
               key={m}
               role="tab"
@@ -498,13 +573,48 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
           </p>
         ) : null}
 
+        {mode === 'SYSTEM' ? (
+          <div className="space-y-1.5">
+            <p className="text-xs text-fg-muted">
+              System: jede Kombination aus {systemSize} von {slip.items.length} Tipps ist eine
+              eigene Wette.
+            </p>
+            <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="System">
+              {Array.from({ length: slip.items.length - 2 }, (_, i) => i + 2).map((k) => (
+                <button
+                  key={k}
+                  type="button"
+                  role="radio"
+                  aria-checked={systemSize === k}
+                  onClick={() => slip.setSystemSize(k)}
+                  className={cn(
+                    'tabular rounded-md border px-2.5 py-1 text-xs font-semibold transition-colors',
+                    systemSize === k
+                      ? 'border-accent bg-accent-soft text-fg'
+                      : 'border-border text-fg-muted hover:text-fg',
+                  )}
+                  data-testid="system-size"
+                >
+                  {k} aus {slip.items.length} · {binomial(slip.items.length, k)} Wetten
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
         {mode !== 'SINGLES' ? (
           <StakeInput
             value={slip.comboStake}
             onChange={slip.setComboStake}
-            label="Einsatz"
+            label={mode === 'SYSTEM' ? 'Einsatz pro Wette' : 'Einsatz'}
             quick
-            max={maxStake}
+            max={
+              mode === 'SYSTEM'
+                ? wallet && systemLines
+                  ? Math.floor(wallet.available / systemLines)
+                  : null
+                : maxStake
+            }
           />
         ) : null}
 
@@ -515,18 +625,26 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
           </div>
           {mode !== 'SINGLES' ? (
             <div className="flex justify-between text-fg-muted">
-              <dt>{mode === 'BUILDER' ? 'Bet-Builder-Quote' : 'Gesamtquote'}</dt>
+              <dt>
+                {mode === 'BUILDER'
+                  ? 'Bet-Builder-Quote'
+                  : mode === 'SYSTEM'
+                    ? 'Ø Quote pro Wette'
+                    : 'Gesamtquote'}
+              </dt>
               <dd className="tabular font-semibold text-fg" data-testid="total-odds">
                 {totalOdds > 0 ? formatOdds(totalOdds) : '–'}
               </dd>
             </div>
           ) : null}
           <div className="flex justify-between text-fg-muted">
-            <dt>Einsatz</dt>
+            <dt>{mode === 'SYSTEM' ? `Einsatz (${systemLines} Wetten)` : 'Einsatz'}</dt>
             <dd className="tabular">{formatMoney(totalStake)}</dd>
           </div>
           <div className="flex justify-between">
-            <dt className="text-fg-muted">Möglicher Gewinn</dt>
+            <dt className="text-fg-muted">
+              {mode === 'SYSTEM' ? 'Möglicher Gewinn (alle richtig)' : 'Möglicher Gewinn'}
+            </dt>
             <dd className="tabular font-semibold text-up" data-testid="potential-return">
               {formatMoney(potentialReturn)}
             </dd>

@@ -139,12 +139,14 @@ enum BetType {
   TRIPLE
   ACCUMULATOR
   BET_BUILDER
+  SYSTEM
 }
 
 enum SlipMode {
   SINGLES
   COMBO
   BUILDER
+  SYSTEM
 }
 
 enum OddsChangePolicy {
@@ -553,6 +555,8 @@ model Bet {
   totalOdds         Decimal          @map("total_odds") @db.Decimal(14, 3)
   /// Odds boost the bet was placed with (its total odds are the boosted price).
   boostId           String?          @map("boost_id") @db.Uuid
+  /// System bet: size of each combination (k of the bet's n selections).
+  systemSize        Int?             @map("system_size")
   potentialReturn   BigInt           @map("potential_return")
   payout            BigInt?
   oddsChangePolicy  OddsChangePolicy @map("odds_change_policy")

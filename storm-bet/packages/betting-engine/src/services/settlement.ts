@@ -14,6 +14,7 @@ import { parseStatistics } from '@storm-bet/validation';
 import {
   decideBet,
   decideBuilder,
+  decideSystem,
   resolveSelection,
   SettlementDataError,
 } from '../domain/settlement-rules';
@@ -258,13 +259,14 @@ export class SettlementService {
           type: string;
           total_odds: string;
           boost_id: string | null;
+          system_size: number | null;
           stake: bigint;
           user_id: string;
           reference: string;
         }[]
       >`
         SELECT "id", "status"::text AS "status", "type"::text AS "type",
-               "total_odds"::text AS "total_odds", "boost_id",
+               "total_odds"::text AS "total_odds", "boost_id", "system_size",
                -- Partial cashouts closed part of the stake; the rest is settled.
                "stake" - "cashed_out_stake" AS "stake", "user_id", "reference"
         FROM "bets" WHERE "id" = ${betId}::uuid FOR UPDATE`;
@@ -280,7 +282,9 @@ export class SettlementService {
         // One price for the bet: a Bet Builder, or a boosted single.
         bet.type === 'BET_BUILDER' || bet.boost_id
           ? decideBuilder(bet.stake, BigInt(oddsToMilli(bet.total_odds)), results)
-          : decideBet(bet.stake, results);
+          : bet.type === 'SYSTEM' && bet.system_size
+            ? decideSystem(bet.stake, bet.system_size, results)
+            : decideBet(bet.stake, results);
       if (!outcome.decided) return null;
 
       const now = this.now();

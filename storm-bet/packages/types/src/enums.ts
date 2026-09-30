@@ -81,6 +81,8 @@ export const BetType = {
   ACCUMULATOR: 'ACCUMULATOR',
   /** Several selections on one match at one model price. */
   BET_BUILDER: 'BET_BUILDER',
+  /** Every combination of k out of n selections, one stake per combination. */
+  SYSTEM: 'SYSTEM',
 } as const;
 export type BetType = (typeof BetType)[keyof typeof BetType];
 export const BET_TYPES = values(BetType);
@@ -93,6 +95,7 @@ export const SlipMode = {
   SINGLES: 'SINGLES',
   COMBO: 'COMBO',
   BUILDER: 'BUILDER',
+  SYSTEM: 'SYSTEM',
 } as const;
 export type SlipMode = (typeof SlipMode)[keyof typeof SlipMode];
 export const SLIP_MODES = values(SlipMode);

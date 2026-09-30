@@ -671,3 +671,50 @@ describe('odds boosts', () => {
     });
   });
 });
+
+describe('system bets', () => {
+  it('places 2 of 3 as three combinations and pays the ones that won', async () => {
+    const user = await createUser(10_000n);
+    const a = await createEvent({ odds: [2.0, 3.4, 3.8] });
+    const b = await createEvent({ odds: [3.0, 3.4, 2.2] });
+    const c = await createEvent({ odds: [4.0, 3.4, 1.8] });
+    const placed = await placement.place(user.id, {
+      idempotencyKey: randomUUID(),
+      mode: 'SYSTEM',
+      size: 2,
+      stake: 100,
+      oddsChangePolicy: 'REJECT',
+      selections: [
+        { selectionId: a.home.id, odds: 2.0 },
+        { selectionId: b.home.id, odds: 3.0 },
+        { selectionId: c.home.id, odds: 4.0 },
+      ],
+    });
+    const bet = placed.bets[0]!;
+    expect(bet).toMatchObject({
+      type: 'SYSTEM',
+      stake: 300,
+      potentialReturn: 2_600,
+      system: { size: 2, lines: 3 },
+    });
+    expect((await wallet(user.id)).reserved).toBe(300n);
+
+    await finishEvent(a.event.id, 1, 0);
+    await finishEvent(b.event.id, 0, 1);
+    await settlement.settleEvent(a.event.id);
+    await settlement.settleEvent(b.event.id);
+    expect((await db.bet.findUniqueOrThrow({ where: { id: bet.id } })).status).toBe('PENDING');
+    await finishEvent(c.event.id, 2, 0);
+    await settlement.settleEvent(c.event.id);
+    // Only a + c won: 1,00 € × 8.00.
+    expect(await db.bet.findUniqueOrThrow({ where: { id: bet.id } })).toMatchObject({
+      status: 'WON',
+      payout: 800n,
+    });
+    expect(await wallet(user.id)).toMatchObject({ balance: 10_500n, reserved: 0n });
+    // The combination size is a term of the bet, fixed at placement.
+    await expect(
+      db.bet.update({ where: { id: bet.id }, data: { systemSize: 3 } }),
+    ).rejects.toThrow();
+  });
+});

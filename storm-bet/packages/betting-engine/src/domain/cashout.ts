@@ -33,6 +33,9 @@ export function cashoutValue(
   if (bet.type === 'BET_BUILDER') {
     return { available: false, reason: 'Für Bet Builder gibt es keinen Cashout.' };
   }
+  if (bet.type === 'SYSTEM') {
+    return { available: false, reason: 'Für Systemwetten gibt es keinen Cashout.' };
+  }
   if (bet.boosted) {
     return { available: false, reason: 'Für Boosts gibt es keinen Cashout.' };
   }

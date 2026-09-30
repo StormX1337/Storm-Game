@@ -10,6 +10,7 @@ import {
   type PlayerStatLine,
   type SelectionResult,
 } from '@storm-bet/types';
+import { combinations } from './system';
 
 export class SettlementDataError extends Error {
   constructor(message: string) {
@@ -281,5 +282,43 @@ export function decideBuilder(
     status: 'WON',
     payout: (stake * oddsMilli) / 1000n,
     settledOddsMilli: oddsMilli,
+  };
+}
+
+/**
+ * Outcome of a system bet: `stake` is spread evenly over every combination of
+ * `size` legs, and each combination is settled like a multiple (void legs at
+ * 1.00, a lost leg loses that combination). Decided early only when so many
+ * legs lost that no combination can win; otherwise when every leg is resulted.
+ * It is won when anything is paid (even less than the stake), void when every
+ * leg is void.
+ */
+export function decideSystem(stake: bigint, size: number, legs: readonly LegResult[]): BetOutcome {
+  const n = legs.length;
+  const lines = combinations(n, size);
+  const lost = legs.filter((l) => l.result === 'LOST').length;
+  if (lines.length === 0 || lost > n - size) {
+    return { decided: true, status: 'LOST', payout: 0n, settledOddsMilli: null };
+  }
+  if (legs.some((l) => l.result === 'PENDING')) return { decided: false };
+  if (legs.every((l) => l.result === 'VOID')) {
+    return { decided: true, status: 'VOID', payout: stake, settledOddsMilli: null };
+  }
+  const unit = stake / BigInt(lines.length);
+  let payout = 0n;
+  for (const combo of lines) {
+    const picked = combo.map((i) => legs[i]!);
+    if (picked.some((l) => l.result === 'LOST')) continue;
+    let product = 1n;
+    for (const leg of picked) product *= BigInt(leg.result === 'WON' ? leg.odds : 1000);
+    // Truncated like the combination's odds at placement.
+    payout += (unit * (product / 1000n ** BigInt(size - 1))) / 1000n;
+  }
+  if (payout === 0n) return { decided: true, status: 'LOST', payout: 0n, settledOddsMilli: null };
+  return {
+    decided: true,
+    status: 'WON',
+    payout,
+    settledOddsMilli: (payout * 1000n) / stake,
   };
 }

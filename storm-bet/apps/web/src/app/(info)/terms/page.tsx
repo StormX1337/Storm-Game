@@ -79,6 +79,12 @@ export default async function TermsPage() {
           als Einzelwette, mit Höchsteinsatz und einmal pro Konto, bis zum Anpfiff. Kein Cashout.
         </li>
         <li>
+          Systemwetten (z. B. 2 aus 3): 3 bis 8 Tipps aus verschiedenen Spielen; jede Kombination
+          ist eine eigene Wette mit dem Einsatz pro Wette. Jede Kombination wird wie eine Kombi
+          abgerechnet (stornierte Tipps zählen 1,00); ausgezahlt wird die Summe der gewonnenen
+          Kombinationen, auch wenn sie unter dem Gesamteinsatz liegt. Kein Cashout.
+        </li>
+        <li>
           Frühe Auszahlung: Ein vor Anpfiff platzierter Tipp auf Sieg eines Teams (Fußball, 1X2)
           gilt als gewonnen, sobald dieses Team mit 2 Toren führt – unabhängig vom Endstand. Gilt
           auch als Teil einer Kombi, nicht im Bet Builder und nicht für Live-Tipps.

@@ -44,6 +44,19 @@ const builderSelections = z
   .max(BUILDER_MAX_SELECTIONS, `Höchstens ${BUILDER_MAX_SELECTIONS} Auswahlen im Bet Builder`)
   .refine(uniqueSelections, 'Jede Auswahl darf nur einmal vorkommen');
 
+/** System bet: every combination of `size` selections, `stake` per combination. */
+export const systemSlipSchema = z.object({
+  mode: z.literal('SYSTEM'),
+  size: z.number().int().min(2).max(7),
+  stake: positiveMoneyMinor,
+  selections: z
+    .array(slipSelectionSchema)
+    .min(3, 'Mindestens drei Auswahlen')
+    .max(8, 'Höchstens 8 Auswahlen in einer Systemwette')
+    .refine(uniqueSelections, 'Jede Auswahl darf nur einmal vorkommen'),
+  oddsChangePolicy,
+});
+
 /** Bet Builder: selections on one match, one price for all of them. */
 export const builderSlipSchema = z.object({
   mode: z.literal('BUILDER'),
@@ -58,6 +71,7 @@ export const slipSchema = z.discriminatedUnion('mode', [
   comboSlipSchema,
   singlesSlipSchema,
   builderSlipSchema,
+  systemSlipSchema,
 ]);
 export type SlipInput = z.infer<typeof slipSchema>;
 
@@ -79,6 +93,7 @@ export const validateSlipSchema = z.discriminatedUnion('mode', [
     selections: builderSelections.refine((s) => s.length >= 1, 'Mindestens eine Auswahl'),
     odds: decimalOdds.optional(),
   }),
+  systemSlipSchema.extend({ stake: z.number().int().nonnegative().default(0) }),
 ]);
 export type ValidateSlipInput = z.infer<typeof validateSlipSchema>;
 
