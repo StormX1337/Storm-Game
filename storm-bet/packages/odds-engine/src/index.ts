@@ -9,3 +9,4 @@ export { SportsGameOddsProvider, type SportsGameOddsOptions } from './providers/
 export { americanToDecimal, type ProviderQuota } from './providers/shared';
 export { PROVIDER_INFO, isSimulatedProvider } from './provider-info';
 export * from './sync/retire';
+export { detectIncidents, type DetectedIncident, type IncidentSnapshot } from './sync/incidents';

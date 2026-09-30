@@ -7,8 +7,9 @@ import {
 import type { FastifyInstance } from 'fastify';
 import { parse } from '../lib/validate';
 import type { CatalogService } from '../services/catalog';
+import type { InsightsService } from '../services/insights';
 
-export function catalogRoutes(catalog: CatalogService) {
+export function catalogRoutes(catalog: CatalogService, insights: InsightsService) {
   return async (app: FastifyInstance) => {
     app.get('/sports', async () => catalog.listSports());
 
@@ -36,6 +37,16 @@ export function catalogRoutes(catalog: CatalogService) {
     app.get('/selections', async (request) => {
       const { ids } = parse(sharedSelectionsQuery, request.query);
       return { selections: await catalog.sharedSelections(ids) };
+    });
+
+    app.get('/events/:id/incidents', async (request) => {
+      const { id } = parse(idParam, request.params);
+      return insights.incidents(id);
+    });
+
+    app.get('/events/:id/insights', async (request) => {
+      const { id } = parse(idParam, request.params);
+      return insights.insights(id);
     });
 
     app.get('/events/:id/markets', async (request) => {

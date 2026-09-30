@@ -2,6 +2,7 @@ import type {
   BetStatus,
   BetType,
   EventStatus,
+  IncidentKind,
   KycStatus,
   LimitType,
   MarketStatus,
@@ -98,6 +99,58 @@ export interface EventSummaryDto {
 export interface EventDetailDto extends EventSummaryDto {
   statistics: EventStatistics | null;
   markets: MarketDto[];
+}
+
+/** One live ticker line. `at` is when the change was seen, not an official time. */
+export interface IncidentDto {
+  id: string;
+  kind: IncidentKind;
+  side: 'HOME' | 'AWAY' | null;
+  clock: string | null;
+  period: string | null;
+  playerName: string | null;
+  score: { home: number; away: number } | null;
+  at: string;
+}
+
+/** Recent finished games of a team, as recorded here (newest first). */
+export interface FormEntryDto {
+  eventId: string;
+  startTime: string;
+  opponent: string;
+  home: boolean;
+  goalsFor: number;
+  goalsAgainst: number;
+  result: 'W' | 'D' | 'L';
+}
+
+export interface HeadToHeadDto {
+  eventId: string;
+  startTime: string;
+  homeTeam: string;
+  awayTeam: string;
+  score: { home: number; away: number };
+}
+
+export interface StandingRowDto {
+  position: number;
+  team: string;
+  played: number;
+  won: number;
+  draw: number;
+  lost: number;
+  goalsFor: number;
+  goalsAgainst: number;
+  points: number;
+  /** One of the match's teams. */
+  highlight: boolean;
+}
+
+/** Form, head-to-head and (when a standings source is set up) the league table. */
+export interface EventInsightsDto {
+  form: { home: FormEntryDto[]; away: FormEntryDto[] };
+  headToHead: HeadToHeadDto[];
+  standings: { competition: string; source: string; rows: StandingRowDto[] } | null;
 }
 
 export interface WalletDto {

@@ -4,6 +4,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { EventMarkets } from '@/components/sportsbook/event-markets';
+import { MatchInfo } from '@/components/sportsbook/match-info';
 import { Scoreboard } from '@/components/sportsbook/scoreboard';
 import { serverApi, ServerApiError } from '@/lib/server-api';
 
@@ -45,6 +46,7 @@ export default async function EventPage({ params }: { params: Promise<{ eventId:
         <ChevronLeft className="size-4" aria-hidden="true" /> {event.sport.name}
       </Link>
       <Scoreboard event={event} />
+      <MatchInfo event={event} />
       <EventMarkets event={event} />
     </div>
   );

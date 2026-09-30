@@ -13,6 +13,7 @@ import { authRoutes } from './routes/auth';
 import { betRoutes } from './routes/bets';
 import { casinoRoutes } from './routes/casino';
 import { catalogRoutes } from './routes/catalog';
+import { InsightsService } from './services/insights';
 import { contactRoutes } from './routes/contact';
 import { healthRoutes } from './routes/health';
 import { LiveEventTracker, streamRoutes } from './routes/stream';
@@ -77,6 +78,10 @@ export async function buildApp(
     now: ctx.now,
   });
   const catalog = new CatalogService(ctx.db, ctx.cache, ctx.now);
+  const insights = new InsightsService(ctx.db, ctx.cache, {
+    apiKey: ctx.env.STANDINGS_API_KEY,
+    apiUrl: ctx.env.STANDINGS_API_URL,
+  });
   const accounts = new AccountService(ctx.db, ctx.now);
   const admin = new AdminService(
     ctx.db,
@@ -123,7 +128,7 @@ export async function buildApp(
     async (api) => {
       await api.register(healthRoutes(ctx));
       await api.register(authRoutes(ctx, auth, sessions));
-      await api.register(catalogRoutes(catalog));
+      await api.register(catalogRoutes(catalog, insights));
       await api.register(betRoutes(ctx));
       await api.register(walletRoutes(ctx));
       await api.register(accountRoutes(ctx, accounts, sessions));

@@ -2,10 +2,17 @@ import { randomUUID } from 'node:crypto';
 import { REDIS_KEYS } from '@storm-bet/config/constants';
 import { oddsToMilli, Prisma, type Event, type PrismaClient } from '@storm-bet/database';
 import { publishRealtime, type Redis } from '@storm-bet/redis';
-import type { MarketStatus, RealtimeMessage, SelectionStatus } from '@storm-bet/types';
+import type {
+  EventStatistics,
+  LiveState,
+  MarketStatus,
+  RealtimeMessage,
+  SelectionStatus,
+} from '@storm-bet/types';
 import { MARKET_DEFINITIONS } from '@storm-bet/types';
 import type { OddsProvider, ProviderEvent, ProviderMarket, ProviderTeam } from '../provider';
 import { mapLimit, silentLogger, stableStringify, type Logger } from '../util';
+import { detectIncidents } from './incidents';
 
 export interface SyncOptions {
   /** How far ahead fixtures are imported. */
@@ -339,6 +346,7 @@ export class OddsSyncService {
       if (changes) {
         const updated = await this.db.event.update({ where: { id: current.id }, data: changes });
         report.updatedEvents += 1;
+        await this.recordIncidents(current, event, values.translatedStatistics);
         realtime.push({
           type: 'event',
           eventId: updated.id,
@@ -450,6 +458,44 @@ export class OddsSyncService {
       statistics: (statistics ?? Prisma.DbNull) as Prisma.InputJsonValue | typeof Prisma.DbNull,
       translatedStatistics: statistics,
     };
+  }
+
+  /** Live ticker lines for what changed; a line already recorded is skipped. */
+  private async recordIncidents(
+    current: Event,
+    event: ProviderEvent,
+    statistics: EventStatistics | null,
+  ): Promise<void> {
+    const found = detectIncidents(
+      event.sportKey,
+      {
+        status: current.status,
+        score:
+          current.homeScore == null
+            ? null
+            : { home: current.homeScore, away: current.awayScore ?? 0 },
+        liveState: (current.liveState as LiveState | null) ?? null,
+        statistics: (current.statistics as EventStatistics | null) ?? null,
+      },
+      { status: event.status, score: event.score, liveState: event.liveState, statistics },
+    );
+    if (found.length === 0) return;
+    await this.db.eventIncident
+      .createMany({
+        data: found.map((i) => ({
+          eventId: current.id,
+          key: i.key,
+          kind: i.kind,
+          side: i.side,
+          clock: i.clock,
+          period: i.period,
+          playerName: i.playerName,
+          homeScore: i.score?.home ?? null,
+          awayScore: i.score?.away ?? null,
+        })),
+        skipDuplicates: true,
+      })
+      .catch((err) => this.logger.warn({ err: String(err) }, 'incident record failed'));
   }
 
   private diffEvent(

@@ -36,6 +36,20 @@ export const EventStatus = {
 export type EventStatus = (typeof EventStatus)[keyof typeof EventStatus];
 export const EVENT_STATUSES = values(EventStatus);
 
+/** Live ticker entries. */
+export const IncidentKind = {
+  KICK_OFF: 'KICK_OFF',
+  PERIOD_START: 'PERIOD_START',
+  HALF_TIME: 'HALF_TIME',
+  FULL_TIME: 'FULL_TIME',
+  GOAL: 'GOAL',
+  GOAL_CANCELLED: 'GOAL_CANCELLED',
+  YELLOW_CARD: 'YELLOW_CARD',
+  RED_CARD: 'RED_CARD',
+  CORNER: 'CORNER',
+} as const;
+export type IncidentKind = (typeof IncidentKind)[keyof typeof IncidentKind];
+
 export const MarketStatus = {
   OPEN: 'OPEN',
   SUSPENDED: 'SUSPENDED',

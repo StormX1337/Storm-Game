@@ -89,6 +89,9 @@ export const apiEnvSchema = z.object({
   SUPPORT_EMAIL: z.string().email().default('support@storm-bet.local'),
   /** Record client IPs in the audit log. Switch off where that is not lawful. */
   AUDIT_LOG_IP: bool(true),
+  /** Optional league tables from football-data.org (free key). Without it no table is shown. */
+  STANDINGS_API_KEY: z.string().min(10).optional(),
+  STANDINGS_API_URL: url.default('https://api.football-data.org/v4'),
 });
 export type ApiEnv = z.infer<typeof apiEnvSchema>;
 
