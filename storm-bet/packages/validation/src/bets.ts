@@ -29,6 +29,8 @@ export const comboSlipSchema = z.object({
 
 export const singlesSlipSchema = z.object({
   mode: z.literal('SINGLES'),
+  /** An odds boost: one selection at the boosted price. */
+  boostId: uuid.optional(),
   selections: z
     .array(slipSelectionSchema.extend({ stake: positiveMoneyMinor }))
     .min(1, 'Mindestens eine Auswahl')

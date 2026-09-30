@@ -257,13 +257,14 @@ export class SettlementService {
           status: string;
           type: string;
           total_odds: string;
+          boost_id: string | null;
           stake: bigint;
           user_id: string;
           reference: string;
         }[]
       >`
         SELECT "id", "status"::text AS "status", "type"::text AS "type",
-               "total_odds"::text AS "total_odds",
+               "total_odds"::text AS "total_odds", "boost_id",
                -- Partial cashouts closed part of the stake; the rest is settled.
                "stake" - "cashed_out_stake" AS "stake", "user_id", "reference"
         FROM "bets" WHERE "id" = ${betId}::uuid FOR UPDATE`;
@@ -276,7 +277,8 @@ export class SettlementService {
       });
       const results = legs.map((l) => ({ odds: oddsToMilli(l.odds), result: l.result }));
       const outcome =
-        bet.type === 'BET_BUILDER'
+        // One price for the bet: a Bet Builder, or a boosted single.
+        bet.type === 'BET_BUILDER' || bet.boost_id
           ? decideBuilder(bet.stake, BigInt(oddsToMilli(bet.total_odds)), results)
           : decideBet(bet.stake, results);
       if (!outcome.decided) return null;

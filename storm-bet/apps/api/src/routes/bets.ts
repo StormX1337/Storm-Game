@@ -46,6 +46,10 @@ export function betRoutes(ctx: AppContext) {
       return result;
     });
 
+    app.get('/boosts', async (request) => ({
+      boosts: await ctx.boosts.active(request.session?.userId ?? null),
+    }));
+
     app.post('/bets/cashout/quotes', { preHandler: authenticated }, async (request) => {
       const session = requireSession(request);
       const { betIds } = parse(cashoutQuotesSchema, request.body);

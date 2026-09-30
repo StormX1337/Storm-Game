@@ -634,3 +634,40 @@ describe('early payout', () => {
     expect((await db.bet.findUniqueOrThrow({ where: { id: late } })).status).toBe('LOST');
   });
 });
+
+describe('odds boosts', () => {
+  it('pays a boosted single at the boosted price, once per player and within its stake', async () => {
+    const user = await createUser(100_000n);
+    const m = await createEvent({ odds: [2.0, 3.4, 3.8] });
+    const boost = await db.oddsBoost.create({
+      data: {
+        selectionId: m.home.id,
+        title: 'Home gewinnt',
+        upliftPct: 20,
+        maxStake: 1_000n,
+        startsAt: new Date(Date.now() - 60_000),
+        endsAt: m.event.startTime,
+      },
+    });
+    const boosted = (stake: number, odds = 2.4) => ({
+      idempotencyKey: randomUUID(),
+      mode: 'SINGLES' as const,
+      boostId: boost.id,
+      oddsChangePolicy: 'REJECT' as const,
+      selections: [{ selectionId: m.home.id, odds, stake }],
+    });
+    await expectCode(placement.place(user.id, boosted(2_000)), 'BET_LIMIT_EXCEEDED');
+    await expectCode(placement.place(user.id, boosted(500, 2.0)), 'ODDS_CHANGED');
+    const bet = (await placement.place(user.id, boosted(1_000))).bets[0]!;
+    expect(bet).toMatchObject({ totalOdds: 2.4, potentialReturn: 2_400, boosted: true });
+    expect(bet.selections[0]!.odds).toBe(2);
+    await expectCode(placement.place(user.id, boosted(500)), 'VALIDATION_ERROR');
+
+    await finishEvent(m.event.id, 1, 0);
+    await settlement.settleEvent(m.event.id);
+    expect(await db.bet.findUniqueOrThrow({ where: { id: bet.id } })).toMatchObject({
+      status: 'WON',
+      payout: 2_400n,
+    });
+  });
+});

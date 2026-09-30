@@ -1,6 +1,7 @@
 import type { ApiEnv, BettingLimits, DemoWalletPolicy } from '@storm-bet/config';
 import type {
   BetPlacementService,
+  BoostService,
   CashoutService,
   SettlementService,
 } from '@storm-bet/betting-engine';
@@ -22,6 +23,7 @@ export interface AppContext {
   demoWallet: DemoWalletPolicy;
   placement: BetPlacementService;
   cashout: CashoutService;
+  boosts: BoostService;
   settlement: SettlementService;
   casino: CasinoService;
   /** Read-only handles on the worker's queues, for the system health view. */

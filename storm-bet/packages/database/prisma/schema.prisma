@@ -456,6 +456,7 @@ model Selection {
   market        Market         @relation(fields: [marketId], references: [id], onDelete: Cascade)
   player        Player?        @relation(fields: [playerId], references: [id])
   betSelections BetSelection[]
+  boosts        OddsBoost[]
   oddsSnapshots OddsSnapshot[]
 
   @@unique([marketId, key])
@@ -550,6 +551,8 @@ model Bet {
   status            BetStatus        @default(PENDING)
   stake             BigInt
   totalOdds         Decimal          @map("total_odds") @db.Decimal(14, 3)
+  /// Odds boost the bet was placed with (its total odds are the boosted price).
+  boostId           String?          @map("boost_id") @db.Uuid
   potentialReturn   BigInt           @map("potential_return")
   payout            BigInt?
   oddsChangePolicy  OddsChangePolicy @map("odds_change_policy")
@@ -567,8 +570,10 @@ model Bet {
   slip         BetSlip        @relation(fields: [slipId], references: [id], onDelete: Restrict)
   selections   BetSelection[]
   cashouts     BetCashout[]
+  boost        OddsBoost?     @relation(fields: [boostId], references: [id], onDelete: Restrict)
   transactions Transaction[]
 
+  @@unique([userId, boostId])
   @@index([userId, status, placedAt])
   @@index([userId, placedAt])
   @@index([status])
@@ -816,4 +821,23 @@ model BetCashout {
 
   @@index([betId])
   @@map("bet_cashouts")
+}
+
+/// A published odds boost: one selection at a raised price, for a limited stake.
+model OddsBoost {
+  id          String   @id @default(uuid()) @db.Uuid
+  selectionId String   @map("selection_id") @db.Uuid
+  title       String
+  /// Price raise in percent of the current odds.
+  upliftPct   Int      @map("uplift_pct")
+  maxStake    BigInt   @map("max_stake")
+  startsAt    DateTime @map("starts_at")
+  endsAt      DateTime @map("ends_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  selection Selection @relation(fields: [selectionId], references: [id], onDelete: Cascade)
+  bets      Bet[]
+
+  @@index([endsAt])
+  @@map("odds_boosts")
 }

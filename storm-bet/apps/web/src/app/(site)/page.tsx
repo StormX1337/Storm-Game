@@ -11,6 +11,7 @@ import {
   Zap,
 } from 'lucide-react';
 import Link from 'next/link';
+import { BoostList } from '@/components/sportsbook/boost-list';
 import { EventList } from '@/components/sportsbook/event-list';
 import { LiveDot } from '@/components/sportsbook/live-indicator';
 import { SectionTitle } from '@/components/sportsbook/page-header';
@@ -102,6 +103,8 @@ export default async function HomePage() {
           </div>
         </div>
       </section>
+
+      <BoostList />
 
       <section className="space-y-3" aria-labelledby="live-title">
         <SectionTitle

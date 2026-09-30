@@ -60,6 +60,8 @@ export interface SlipRequest {
   stake?: bigint;
   /** BUILDER only: the Bet Builder price the player saw (absent in a first quote). */
   requestedOddsMilli?: number;
+  /** An odds boost: a single on its selection at the raised price. */
+  boostId?: string;
   policy: OddsChangePolicy;
 }
 
@@ -101,6 +103,19 @@ export interface EvaluateOptions {
   requireStake: boolean;
   /** BUILDER only: the model price of the legs, computed from the book. */
   builder?: BuilderPrice;
+  /** The boost named by the request, as the book holds it (or why it cannot be used). */
+  boost?: BoostTerms | { error: string };
+}
+
+export interface BoostTerms {
+  selectionId: string;
+  upliftPct: number;
+  maxStake: bigint;
+}
+
+/** A boosted price: the current odds raised by the boost, cut to two decimals. */
+export function boostedOddsMilli(currentMilli: number, upliftPct: number): number {
+  return Math.floor((currentMilli * (100 + upliftPct)) / 100 / 10) * 10;
 }
 
 const issue = (code: ErrorCode, message?: string, extra: Partial<SlipIssue> = {}): SlipIssue => ({
@@ -171,7 +186,7 @@ function formatMoney(minor: bigint): string {
 export function evaluateSlip(
   request: SlipRequest,
   book: Map<string, BookSelection>,
-  { now, limits, requireStake, builder }: EvaluateOptions,
+  { now, limits, requireStake, builder, boost }: EvaluateOptions,
 ): SlipEvaluation {
   const issues: SlipIssue[] = [];
   const legs: PlannedLeg[] = [];
@@ -196,19 +211,22 @@ export function evaluateSlip(
       issues.push(blocked);
       continue;
     }
+    // A boosted pick is compared with its boosted price.
+    const offered =
+      boost && !('error' in boost) && boost.selectionId === leg.selectionId
+        ? boostedOddsMilli(current.oddsMilli, boost.upliftPct)
+        : current.oddsMilli;
+    // An unusable boost is reported as such, not as a price change.
+    const boostUnusable = !!request.boostId && (!boost || 'error' in boost);
     if (
       request.mode !== 'BUILDER' &&
-      !acceptOdds(
-        leg.requestedOddsMilli,
-        current.oddsMilli,
-        request.policy,
-        limits.acceptHigherMaxPct,
-      )
+      !boostUnusable &&
+      !acceptOdds(leg.requestedOddsMilli, offered, request.policy, limits.acceptHigherMaxPct)
     ) {
       issues.push(
         issue('ODDS_CHANGED', undefined, {
           selectionId: leg.selectionId,
-          currentOdds: fromMilli(current.oddsMilli),
+          currentOdds: fromMilli(offered),
           requestedOdds: fromMilli(leg.requestedOddsMilli),
         }),
       );
@@ -248,9 +266,30 @@ export function evaluateSlip(
     const planned = builderBet(request, legs, builder, limits, issues);
     if (planned) bets.push(planned);
   } else {
+    if (request.boostId) {
+      if (!boost || 'error' in boost) {
+        issues.push(issue('VALIDATION_ERROR', boost?.error ?? 'Dieser Boost ist nicht verfügbar.'));
+      } else if (request.legs.length !== 1 || request.legs[0]?.selectionId !== boost.selectionId) {
+        issues.push(issue('VALIDATION_ERROR', 'Ein Boost wird als Einzelwette gespielt.'));
+      } else if ((request.legs[0]?.stake ?? 0n) > boost.maxStake) {
+        issues.push(
+          issue(
+            'BET_LIMIT_EXCEEDED',
+            `Höchsteinsatz für diesen Boost: ${formatMoney(boost.maxStake)} DEMO.`,
+          ),
+        );
+      }
+    }
     for (const leg of legs) {
       const stake = request.legs.find((l) => l.selectionId === leg.book.selectionId)?.stake ?? 0n;
-      const totalOddsMilli = BigInt(leg.oddsMilli);
+      const boosted =
+        request.boostId &&
+        boost &&
+        !('error' in boost) &&
+        boost.selectionId === leg.book.selectionId;
+      const totalOddsMilli = BigInt(
+        boosted ? boostedOddsMilli(leg.oddsMilli, boost.upliftPct) : leg.oddsMilli,
+      );
       bets.push({
         type: 'SINGLE',
         legs: [leg],

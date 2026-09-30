@@ -75,6 +75,10 @@ export default async function TermsPage() {
           Einsatz erstattet.
         </li>
         <li>
+          Quoten-Boosts: ausgewählte Tipps zur um den angegebenen Prozentsatz erhöhten Quote, nur
+          als Einzelwette, mit Höchsteinsatz und einmal pro Konto, bis zum Anpfiff. Kein Cashout.
+        </li>
+        <li>
           Frühe Auszahlung: Ein vor Anpfiff platzierter Tipp auf Sieg eines Teams (Fußball, 1X2)
           gilt als gewonnen, sobald dieses Team mit 2 Toren führt – unabhängig vom Endstand. Gilt
           auch als Teil einer Kombi, nicht im Bet Builder und nicht für Live-Tipps.

@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { CashoutService, SettlementService } from '@storm-bet/betting-engine';
+import { BoostService, CashoutService, SettlementService } from '@storm-bet/betting-engine';
 import { CasinoService, MockCasinoProvider, syncCasinoCatalog } from '@storm-bet/casino';
 import { parseEnv, QUEUES, REDIS_KEYS, workerEnvSchema } from '@storm-bet/config';
 import { createPrismaClient } from '@storm-bet/database';
@@ -31,6 +31,7 @@ async function main(): Promise<void> {
     logger,
   });
   const settlement = new SettlementService({ db, redis, logger });
+  const boosts = new BoostService({ db });
   const cashout = new CashoutService({ db, redis, marginPct: env.CASHOUT_MARGIN_PCT });
   const retired = await retireInactiveProviderEvents(db, provider.key);
   if (retired.events)
@@ -39,7 +40,16 @@ async function main(): Promise<void> {
   const casino = new CasinoService({ db, redis, providers: [casinoProvider] });
   const casinoCatalog = await syncCasinoCatalog(db, casinoProvider);
   logger.info(casinoCatalog, 'casino catalogue synced');
-  const handlers = createJobHandlers({ db, redis, sync, settlement, cashout, casino, logger });
+  const handlers = createJobHandlers({
+    db,
+    redis,
+    sync,
+    settlement,
+    cashout,
+    boosts,
+    casino,
+    logger,
+  });
 
   const schedule: { queue: string; job: JobName; every: number }[] = [
     { queue: QUEUES.oddsSync, job: 'catalog-sync', every: env.CATALOG_SYNC_INTERVAL_MS },
@@ -49,6 +59,7 @@ async function main(): Promise<void> {
     // Auto-cashout follows the live prices.
     { queue: QUEUES.settlement, job: 'auto-cashout', every: env.LIVE_SYNC_INTERVAL_MS },
     { queue: QUEUES.settlement, job: 'early-payout', every: env.LIVE_SYNC_INTERVAL_MS },
+    { queue: QUEUES.maintenance, job: 'boosts', every: 10 * 60_000 },
     { queue: QUEUES.maintenance, job: 'cleanup', every: 3_600_000 },
   ];
 

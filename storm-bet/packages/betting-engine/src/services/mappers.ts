@@ -67,6 +67,7 @@ export function toBetDto(bet: BetWithLegs): BetDto {
       at: c.createdAt.toISOString(),
     })),
     autoCashout: bet.autoCashoutAmount == null ? null : moneyToNumber(bet.autoCashoutAmount),
+    boosted: bet.boostId !== null,
     selections: bet.selections.map((leg) => ({
       id: leg.id,
       selectionId: leg.selectionId,

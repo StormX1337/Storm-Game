@@ -6,3 +6,4 @@ export * from './services/placement';
 export * from './services/settlement';
 export * from './services/builder';
 export * from './services/cashout';
+export * from './services/boosts';

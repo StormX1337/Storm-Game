@@ -1,4 +1,4 @@
-import type { CashoutService, SettlementService } from '@storm-bet/betting-engine';
+import type { BoostService, CashoutService, SettlementService } from '@storm-bet/betting-engine';
 import type { CasinoService } from '@storm-bet/casino';
 import type { PrismaClient } from '@storm-bet/database';
 import type { OddsSyncService } from '@storm-bet/odds-engine';
@@ -11,6 +11,7 @@ export interface JobDeps {
   sync: OddsSyncService;
   settlement: SettlementService;
   cashout: CashoutService;
+  boosts: BoostService;
   casino: CasinoService;
   logger: Logger;
 }
@@ -42,10 +43,11 @@ export type JobName =
   | 'settle-due'
   | 'auto-cashout'
   | 'early-payout'
+  | 'boosts'
   | 'cleanup';
 
 export function createJobHandlers(deps: JobDeps): Record<JobName, () => Promise<unknown>> {
-  const { db, redis, sync, settlement, cashout, casino, logger } = deps;
+  const { db, redis, sync, settlement, cashout, boosts, casino, logger } = deps;
   return {
     'catalog-sync': () =>
       exclusive(redis, 'catalog-sync', 120_000, async () => {
@@ -75,6 +77,12 @@ export function createJobHandlers(deps: JobDeps): Record<JobName, () => Promise<
             'settlement run',
           );
         return reports;
+      }),
+    boosts: () =>
+      exclusive(redis, 'boosts', 60_000, async () => {
+        const created = await boosts.ensureDaily();
+        if (created) logger.info({ created }, 'odds boosts published');
+        return created;
       }),
     'early-payout': () =>
       exclusive(redis, 'early-payout', 60_000, async () => {

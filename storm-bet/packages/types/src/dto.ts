@@ -182,6 +182,8 @@ export interface BetDto {
   partialCashouts: { stake: Money; amount: Money; at: string }[];
   /** Auto-cashout target, if set. */
   autoCashout: Money | null;
+  /** Placed with an odds boost (the total odds are the boosted price). */
+  boosted: boolean;
   selections: BetSelectionDto[];
 }
 
@@ -459,4 +461,27 @@ export interface SharedSelectionDto {
   sportKey: SportKey;
   startTime: string;
   isLive: boolean;
+}
+
+/** An odds boost on offer. */
+export interface BoostDto {
+  id: string;
+  title: string;
+  upliftPct: number;
+  maxStake: Money;
+  endsAt: string;
+  /** The player has already used it. */
+  used: boolean;
+  /** Bettable right now. */
+  open: boolean;
+  selectionId: string;
+  selectionName: string;
+  marketId: string;
+  marketName: string;
+  eventId: string;
+  eventName: string;
+  sportKey: SportKey;
+  startTime: string;
+  odds: number;
+  boostedOdds: number;
 }

@@ -62,6 +62,7 @@ export class CashoutService {
         cashedOutStake: true,
         potentialReturn: true,
         autoCashoutAmount: true,
+        boostId: true,
         selections: { select: LEG_SELECT },
       },
     });
@@ -73,7 +74,7 @@ export class CashoutService {
     return bets.map((b) => {
       const rest = open(b);
       const quote: CashoutQuote = cashoutValue(
-        { type: b.type, ...rest },
+        { type: b.type, boosted: b.boostId !== null, ...rest },
         b.selections.map((s) => ({
           oddsMilli: oddsToMilli(s.odds),
           result: s.result,
@@ -118,10 +119,11 @@ export class CashoutService {
             cashed_out_stake: bigint;
             potential_return: bigint;
             reference: string;
+            boost_id: string | null;
           }[]
         >`
           SELECT "status"::text AS "status", "type"::text AS "type", "stake", "cashed_out_stake",
-                 "potential_return", "reference"
+                 "potential_return", "reference", "boost_id"
           FROM "bets" WHERE "id" = ${betId}::uuid AND "user_id" = ${userId}::uuid FOR UPDATE`;
         const bet = rows[0];
         if (!bet) throw new AppError('NOT_FOUND', 'Wette nicht gefunden.');
@@ -154,7 +156,7 @@ export class CashoutService {
         );
         const now = this.now();
         const quote = cashoutValue(
-          { type: bet.type as 'SINGLE', ...rest },
+          { type: bet.type as 'SINGLE', boosted: bet.boost_id !== null, ...rest },
           legs.map((l) => ({
             oddsMilli: oddsToMilli(l.odds),
             result: l.result,

@@ -30,6 +30,7 @@ import {
   evaluateSlip,
   formatMoney,
   type BookSelection,
+  type BoostTerms,
   type SlipIssue,
   type SlipRequest,
 } from '../domain/slip';
@@ -95,6 +96,7 @@ function toRequest(input: ValidateSlipInput | PlaceBetInput): SlipRequest {
   return {
     mode: 'SINGLES',
     policy: input.oddsChangePolicy,
+    boostId: input.boostId,
     legs: input.selections.map((s) => ({
       selectionId: s.selectionId,
       requestedOddsMilli: toMilli(s.odds),
@@ -109,7 +111,7 @@ function fingerprint(request: SlipRequest): string {
     .sort((a, b) => a.selectionId.localeCompare(b.selectionId))
     .map((l) => `${l.selectionId}@${l.requestedOddsMilli}x${l.stake ?? ''}`);
   return sha256(
-    `${request.mode}|${request.stake ?? ''}|${request.requestedOddsMilli ?? ''}|${request.policy}|${legs.join(',')}`,
+    `${request.mode}|${request.stake ?? ''}|${request.requestedOddsMilli ?? ''}|${request.boostId ?? ''}|${request.policy}|${legs.join(',')}`,
   );
 }
 
@@ -143,6 +145,7 @@ export class BetPlacementService {
       limits: this.deps.limits,
       requireStake: false,
       builder: await this.builderPrice(this.deps.db, request, book),
+      boost: await this.boostTerms(this.deps.db, userId, request, now),
     });
     const issues = [...evaluation.issues];
 
@@ -296,6 +299,7 @@ export class BetPlacementService {
       limits: this.deps.limits,
       requireStake: true,
       builder: await this.builderPrice(tx, request, book),
+      boost: await this.boostTerms(tx, userId, request, now),
     });
     if (evaluation.issues.length) throw slipError(evaluation.issues);
 
@@ -345,6 +349,7 @@ export class BetPlacementService {
           stake: planned.stake,
           totalOdds: milliToDecimal(Number(planned.totalOddsMilli)),
           potentialReturn: planned.potentialReturn,
+          boostId: request.boostId ?? null,
           oddsChangePolicy: request.policy,
           placedAt: now,
         },
@@ -414,6 +419,28 @@ export class BetPlacementService {
       );
     }
     return slip.id;
+  }
+
+  /** The boost a request names, if it can be used by this player now. */
+  private async boostTerms(
+    db: DbOrTx,
+    userId: string | null,
+    request: SlipRequest,
+    now: Date,
+  ): Promise<BoostTerms | { error: string } | undefined> {
+    if (!request.boostId) return undefined;
+    const boost = await db.oddsBoost.findUnique({ where: { id: request.boostId } });
+    if (!boost || now < boost.startsAt || now >= boost.endsAt) {
+      return { error: 'Dieser Boost ist nicht mehr verfügbar.' };
+    }
+    if (userId) {
+      const used = await db.bet.findFirst({
+        where: { userId, boostId: boost.id },
+        select: { id: true },
+      });
+      if (used) return { error: 'Diesen Boost hast du bereits genutzt.' };
+    }
+    return { selectionId: boost.selectionId, upliftPct: boost.upliftPct, maxStake: boost.maxStake };
   }
 
   private async builderPrice(

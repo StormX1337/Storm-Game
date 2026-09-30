@@ -1,4 +1,9 @@
-import { BetPlacementService, CashoutService, SettlementService } from '@storm-bet/betting-engine';
+import {
+  BetPlacementService,
+  BoostService,
+  CashoutService,
+  SettlementService,
+} from '@storm-bet/betting-engine';
 import {
   apiEnvSchema,
   bettingLimitsFrom,
@@ -49,6 +54,7 @@ async function main(): Promise<void> {
       requireEmailVerification: env.AUTH_REQUIRE_EMAIL_VERIFICATION,
       now,
     }),
+    boosts: new BoostService({ db, now }),
     cashout: new CashoutService({ db, redis, marginPct: env.CASHOUT_MARGIN_PCT, now }),
     settlement: new SettlementService({ db, redis, logger, now }),
     casino: new CasinoService({ db, redis, providers: [new MockCasinoProvider()], now }),

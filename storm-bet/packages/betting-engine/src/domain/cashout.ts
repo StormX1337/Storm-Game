@@ -25,13 +25,16 @@ export type CashoutQuote =
  * no reliable price, so no cashout.
  */
 export function cashoutValue(
-  bet: { type: BetType; stake: bigint; potentialReturn: bigint },
+  bet: { type: BetType; stake: bigint; potentialReturn: bigint; boosted?: boolean },
   legs: readonly CashoutLeg[],
   now: Date,
   marginPct: number,
 ): CashoutQuote {
   if (bet.type === 'BET_BUILDER') {
     return { available: false, reason: 'Für Bet Builder gibt es keinen Cashout.' };
+  }
+  if (bet.boosted) {
+    return { available: false, reason: 'Für Boosts gibt es keinen Cashout.' };
   }
   if (legs.some((l) => l.result === 'LOST')) {
     return { available: false, reason: 'Die Wette ist bereits verloren.' };
