@@ -48,6 +48,7 @@ async function main(): Promise<void> {
     { queue: QUEUES.settlement, job: 'settle-due', every: env.SETTLEMENT_INTERVAL_MS },
     // Auto-cashout follows the live prices.
     { queue: QUEUES.settlement, job: 'auto-cashout', every: env.LIVE_SYNC_INTERVAL_MS },
+    { queue: QUEUES.settlement, job: 'early-payout', every: env.LIVE_SYNC_INTERVAL_MS },
     { queue: QUEUES.maintenance, job: 'cleanup', every: 3_600_000 },
   ];
 

@@ -75,6 +75,11 @@ export default async function TermsPage() {
           Einsatz erstattet.
         </li>
         <li>
+          Frühe Auszahlung: Ein vor Anpfiff platzierter Tipp auf Sieg eines Teams (Fußball, 1X2)
+          gilt als gewonnen, sobald dieses Team mit 2 Toren führt – unabhängig vom Endstand. Gilt
+          auch als Teil einer Kombi, nicht im Bet Builder und nicht für Live-Tipps.
+        </li>
+        <li>
           Zusätzliche Fußball-Märkte (z. B. Doppelte Chance, Beide treffen, weitere Tor-Linien)
           werden vor Anpfiff mit demselben Modell aus den Quoten des Datendienstes berechnet.
         </li>

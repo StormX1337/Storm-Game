@@ -45,6 +45,11 @@ function Legs({ bet }: { bet: BetDto }) {
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-semibold">{leg.selectionName}</p>
               <p className="truncate text-xs text-fg-muted">{leg.marketName}</p>
+              {leg.earlyPayout ? (
+                <p className="text-[11px] font-semibold text-up">
+                  Frühe Auszahlung · 2 Tore Vorsprung
+                </p>
+              ) : null}
             </div>
             <span className="tabular text-sm font-semibold">{formatOdds(leg.odds)}</span>
           </div>

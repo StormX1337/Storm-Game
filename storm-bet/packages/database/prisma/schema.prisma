@@ -585,6 +585,8 @@ model BetSelection {
   /// Odds the bet was accepted at.
   odds          Decimal         @db.Decimal(8, 3)
   result        SelectionResult @default(PENDING)
+  /// Won early: the backed side led by two goals (pre-match 1X2 pick).
+  earlyPayout   Boolean         @default(false) @map("early_payout")
   /// Names frozen at placement: history must read the same after a rename.
   eventName     String          @map("event_name")
   marketName    String          @map("market_name")

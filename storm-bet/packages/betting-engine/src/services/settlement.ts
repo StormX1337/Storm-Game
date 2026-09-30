@@ -66,6 +66,9 @@ const noopLogger: SettlementLogger = {
  * - the ledger accepts one settlement entry per bet (unique key + trigger).
  * Running it twice, or in two workers at once, can never pay a bet twice.
  */
+/** Goal lead that wins a pre-match 1X2 pick early. */
+export const EARLY_PAYOUT_LEAD = 2;
+
 /** Wait before retrying an event some of whose markets still lack official data. */
 const RETRY_INCOMPLETE_SECONDS = 300;
 
@@ -310,6 +313,51 @@ export class SettlementService {
       });
       return outcome.status;
     });
+  }
+
+  /**
+   * Early payout: a pre-match 1X2 pick on a football team counts as won as
+   * soon as that team leads by two goals, whatever the final score. Only
+   * picks taken before kick-off qualify (never a price taken at 2:0), and
+   * not in a Bet Builder, whose price holds for its picks together.
+   */
+  async applyEarlyPayouts(limit = 500): Promise<number> {
+    const due = await this.deps.db.$queryRaw<{ id: string; bet_id: string }[]>`
+      SELECT bs."id", bs."bet_id"
+      FROM "bet_selections" bs
+      JOIN "bets" b ON b."id" = bs."bet_id"
+      JOIN "selections" s ON s."id" = bs."selection_id"
+      JOIN "markets" m ON m."id" = bs."market_id"
+      JOIN "events" e ON e."id" = bs."event_id"
+      JOIN "sports" sp ON sp."id" = e."sport_id"
+      JOIN "odds_snapshots" os ON os."bet_selection_id" = bs."id"
+      WHERE bs."result" = 'PENDING' AND b."status" = 'PENDING' AND b."type" <> 'BET_BUILDER'
+        AND m."type" = 'MATCH_RESULT' AND sp."key" = 'football'
+        AND os."event_status" = 'SCHEDULED'
+        AND e."status" IN ('LIVE', 'SUSPENDED')
+        AND e."home_score" IS NOT NULL AND e."away_score" IS NOT NULL
+        AND (
+          (s."outcome" = 'HOME' AND e."home_score" - e."away_score" >= ${EARLY_PAYOUT_LEAD})
+          OR (s."outcome" = 'AWAY' AND e."away_score" - e."home_score" >= ${EARLY_PAYOUT_LEAD})
+        )
+      LIMIT ${limit}`;
+    if (!due.length) return 0;
+    const changed = await this.deps.db.betSelection.updateMany({
+      where: { id: { in: due.map((d) => d.id) }, result: 'PENDING' },
+      data: { result: 'WON', earlyPayout: true },
+    });
+    for (const betId of new Set(due.map((d) => d.bet_id))) {
+      await recordAudit(this.deps.db, SYSTEM_ACTOR, {
+        action: 'bet.early_payout',
+        targetType: 'bet',
+        targetId: betId,
+        metadata: { legs: due.filter((d) => d.bet_id === betId).map((d) => d.id) },
+      });
+      await this.settleBet(betId).catch((error: unknown) =>
+        this.logger.error({ betId, err: String(error) }, 'early payout settlement failed'),
+      );
+    }
+    return changed.count;
   }
 
   /** Staff cancellation of an open bet: the stake goes back, the record stays. */

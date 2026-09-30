@@ -26,10 +26,12 @@ export default async function SportPage({
   searchParams,
 }: {
   params: Promise<{ sport: string }>;
-  searchParams: Promise<{ league?: string }>;
+  searchParams: Promise<{ league?: string; day?: string }>;
 }) {
   const { sport } = await params;
-  const { league } = await searchParams;
+  const { league, day: dayParam } = await searchParams;
+  const days = calendarDays();
+  const day = days.some((d) => d.value === dayParam) ? dayParam : undefined;
   if (!(SPORT_KEYS as readonly string[]).includes(sport)) notFound();
   const leagueFilter = league && /^[0-9a-f-]{36}$/i.test(league) ? `&league=${league}` : '';
 
@@ -41,7 +43,9 @@ export default async function SportPage({
       `/events?sport=${sport}&status=live&limit=50${leagueFilter}`,
     ),
     tryServerApi<Paginated<EventSummaryDto>>(
-      `/events?sport=${sport}&status=upcoming&withinHours=${within}&limit=60${leagueFilter}`,
+      `/events?sport=${sport}&status=upcoming&limit=60${leagueFilter}${
+        day ? `&day=${day}` : `&withinHours=${within}`
+      }`,
     ),
   ]);
   if (!detail) notFound();
@@ -91,12 +95,52 @@ export default async function SportPage({
       ) : null}
       <section className="space-y-3">
         <SectionTitle>Demnächst</SectionTitle>
+        <div className="scrollbar-none -mx-4 flex gap-2 overflow-x-auto px-4" aria-label="Tage">
+          {[{ value: undefined, label: 'Alle' }, ...days].map((d) => {
+            const query = new URLSearchParams();
+            if (league) query.set('league', league);
+            if (d.value) query.set('day', d.value);
+            const qs = query.toString();
+            return (
+              <Link
+                key={d.label}
+                href={`/sports/${sport}${qs ? `?${qs}` : ''}`}
+                className={chip(day === d.value)}
+                data-testid="day-chip"
+              >
+                {d.label}
+              </Link>
+            );
+          })}
+        </div>
         <EventList
           events={upcoming?.items ?? []}
           emptyTitle="Keine anstehenden Events"
-          emptyDescription="In diesem Wettbewerb sind aktuell keine Spiele angesetzt."
+          emptyDescription={
+            day
+              ? 'An diesem Tag sind keine Spiele angesetzt.'
+              : 'In diesem Wettbewerb sind aktuell keine Spiele angesetzt.'
+          }
         />
       </section>
     </div>
   );
+}
+
+/** Today and the next six days (Europe/Berlin) as filter chips. */
+function calendarDays(): { value: string; label: string }[] {
+  const key = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Berlin' });
+  const label = new Intl.DateTimeFormat('de-DE', {
+    timeZone: 'Europe/Berlin',
+    weekday: 'short',
+    day: '2-digit',
+    month: '2-digit',
+  });
+  return Array.from({ length: 7 }, (_, i) => {
+    const date = new Date(Date.now() + i * 86_400_000);
+    return {
+      value: key.format(date),
+      label: i === 0 ? 'Heute' : i === 1 ? 'Morgen' : label.format(date),
+    };
+  });
 }

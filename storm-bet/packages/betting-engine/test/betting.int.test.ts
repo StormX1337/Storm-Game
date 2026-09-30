@@ -605,3 +605,32 @@ describe('due settlement', () => {
     expect(again.some((r) => r.eventId === m.event.id)).toBe(false);
   });
 });
+
+describe('early payout', () => {
+  it('wins a pre-match 1X2 pick at a two-goal lead, whatever the final score', async () => {
+    const user = await createUser(100_000n);
+    const m = await createEvent({ odds: [2.0, 3.4, 3.8] });
+    const early = (await placement.place(user.id, single(m.home.id, 2.0, 1_000))).bets[0]!.id;
+    // Kick-off; a pick taken in play at 1:0 does not qualify.
+    await db.event.update({
+      where: { id: m.event.id },
+      data: { status: 'LIVE', homeScore: 1, awayScore: 0 },
+    });
+    const late = (await placement.place(user.id, single(m.home.id, 2.0, 500))).bets[0]!.id;
+    await db.event.update({ where: { id: m.event.id }, data: { homeScore: 2 } });
+    expect(await settlement.applyEarlyPayouts()).toBeGreaterThanOrEqual(1);
+    expect(await db.bet.findUniqueOrThrow({ where: { id: early } })).toMatchObject({
+      status: 'WON',
+      payout: 2_000n,
+    });
+    expect((await db.bet.findUniqueOrThrow({ where: { id: late } })).status).toBe('PENDING');
+    const leg = await db.betSelection.findFirstOrThrow({ where: { betId: early } });
+    expect(leg).toMatchObject({ result: 'WON', earlyPayout: true });
+
+    // The away side comes back to win: the early win stands, the late pick loses.
+    await finishEvent(m.event.id, 2, 3);
+    await settlement.settleEvent(m.event.id);
+    expect((await db.bet.findUniqueOrThrow({ where: { id: early } })).status).toBe('WON');
+    expect((await db.bet.findUniqueOrThrow({ where: { id: late } })).status).toBe('LOST');
+  });
+});

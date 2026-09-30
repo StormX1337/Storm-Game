@@ -81,6 +81,7 @@ export function toBetDto(bet: BetWithLegs): BetDto {
       outcome: leg.selection.outcome,
       odds: odds(leg.odds),
       result: leg.result,
+      earlyPayout: leg.earlyPayout,
       event: {
         home: leg.event.homeTeam.name,
         away: leg.event.awayTeam.name,

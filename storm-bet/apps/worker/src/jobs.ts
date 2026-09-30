@@ -41,6 +41,7 @@ export type JobName =
   | 'prematch-sync'
   | 'settle-due'
   | 'auto-cashout'
+  | 'early-payout'
   | 'cleanup';
 
 export function createJobHandlers(deps: JobDeps): Record<JobName, () => Promise<unknown>> {
@@ -74,6 +75,12 @@ export function createJobHandlers(deps: JobDeps): Record<JobName, () => Promise<
             'settlement run',
           );
         return reports;
+      }),
+    'early-payout': () =>
+      exclusive(redis, 'early-payout', 60_000, async () => {
+        const count = await settlement.applyEarlyPayouts();
+        if (count) logger.info({ count }, 'early payouts');
+        return count;
       }),
     'auto-cashout': () =>
       exclusive(redis, 'auto-cashout', 60_000, async () => {

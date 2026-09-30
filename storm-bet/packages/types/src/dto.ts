@@ -147,6 +147,8 @@ export interface BetSelectionDto {
   outcome: Outcome;
   odds: number;
   result: SelectionResult;
+  /** Won early by a two-goal lead. */
+  earlyPayout: boolean;
   snapshot: OddsSnapshotDto | null;
   /** The match as it stands now: teams, status and score (final once finished). */
   event: {

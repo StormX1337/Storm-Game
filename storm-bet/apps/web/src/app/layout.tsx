@@ -10,11 +10,17 @@ export const metadata: Metadata = {
   description:
     'STORM BET ist eine Sportwetten-Plattform im Demo-Modus: Demo-Guthaben, kein Echtgeld.',
   robots: { index: false, follow: false },
+  applicationName: 'STORM BET',
+  // iPhone: "Zum Home-Bildschirm" opens it like an app (also without HTTPS).
+  appleWebApp: { capable: true, title: 'STORM BET', statusBarStyle: 'black-translucent' },
+  icons: { apple: '/icons/apple-touch-icon.png' },
+  formatDetection: { telephone: false },
 };
 
 export const viewport: Viewport = {
   themeColor: '#07080a',
   colorScheme: 'dark',
+  viewportFit: 'cover',
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {

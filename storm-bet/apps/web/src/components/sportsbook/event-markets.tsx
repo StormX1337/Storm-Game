@@ -192,6 +192,11 @@ export function EventMarkets({ event }: { event: EventDetailDto }) {
               markets={markets}
               context={context}
               builder={builderEvent && builderTypes.includes(type)}
+              early={
+                event.sport.key === 'football' &&
+                live.status === 'SCHEDULED' &&
+                type === 'MATCH_RESULT'
+              }
             />
           ),
         )}
@@ -204,11 +209,14 @@ function MarketCard({
   markets,
   context,
   builder,
+  early = false,
 }: {
   markets: MarketDto[];
   context: (m: MarketDto) => OddsContext;
   /** Selections of this market can be combined in a Bet Builder. */
   builder: boolean;
+  /** Pre-match 1X2: won early at a two-goal lead. */
+  early?: boolean;
 }) {
   const first = markets[0]!;
   const playerTotal = MARKET_DEFINITIONS[first.type].kind === 'PLAYER_TOTAL';
@@ -223,6 +231,15 @@ function MarketCard({
     <Card className={cn('overflow-hidden', wide && 'xl:col-span-2')} data-testid="market-card">
       <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
         <h3 className="text-sm font-semibold">{title}</h3>
+        {early ? (
+          <span
+            className="ml-auto mr-2 rounded bg-up-soft px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-up"
+            title="Frühe Auszahlung: Führt dein Team mit 2 Toren, ist der Tipp sofort gewonnen."
+            data-testid="early-payout-badge"
+          >
+            2+ FRÜH
+          </span>
+        ) : null}
         {builder ? (
           <span
             className="rounded bg-accent-soft px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-accent-strong"

@@ -16,6 +16,11 @@ export const eventListQuery = z.object({
     .min(1)
     .max(24 * 14)
     .optional(),
+  /** Only events on this calendar day (Europe/Berlin), YYYY-MM-DD. */
+  day: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Datum im Format JJJJ-MM-TT')
+    .optional(),
   cursor: z.string().max(200).optional(),
   limit: z.coerce.number().int().min(1).max(100).default(30),
 });

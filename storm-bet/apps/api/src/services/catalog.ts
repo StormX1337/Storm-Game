@@ -19,6 +19,24 @@ import { parseLiveState, parseStatistics, type EventListQuery } from '@storm-bet
 import { cursorArgs, page } from '../lib/pagination';
 
 const MAIN_MARKETS = ['MATCH_RESULT', 'MATCH_WINNER'] as const;
+
+/** Start and end of a calendar day in Europe/Berlin (daylight saving included). */
+export function berlinDay(day: string): [Date, Date] {
+  const at = (date: string) => {
+    const utc = new Date(`${date}T00:00:00Z`);
+    const offset = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Europe/Berlin',
+      timeZoneName: 'shortOffset',
+    })
+      .formatToParts(utc)
+      .find((p) => p.type === 'timeZoneName')?.value;
+    const hours = Number(/GMT([+-]\d+)/.exec(offset ?? '')?.[1] ?? 0);
+    return new Date(utc.getTime() - hours * 3_600_000);
+  };
+  const next = new Date(`${day}T00:00:00Z`);
+  next.setUTCDate(next.getUTCDate() + 1);
+  return [at(day), at(next.toISOString().slice(0, 10))];
+}
 const VISIBLE_MARKET_STATUSES: MarketStatus[] = ['OPEN', 'SUSPENDED'];
 
 const EVENT_BASE_INCLUDE = {
@@ -224,6 +242,10 @@ export class CatalogService {
             ? { lte: new Date(now.getTime() + query.withinHours * 3_600_000) }
             : {}),
         };
+        if (query.day) {
+          const [from, to] = berlinDay(query.day);
+          where.startTime = { gt: from > now ? from : now, lt: to };
+        }
       } else {
         Object.assign(where, this.openEventsWhere(now));
       }
