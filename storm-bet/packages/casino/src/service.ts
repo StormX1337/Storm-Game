@@ -341,7 +341,7 @@ export class CasinoService {
     if (stake < game.minStake || stake > game.maxStake) {
       throw new AppError(
         'VALIDATION_ERROR',
-        `Einsatz muss zwischen ${(Number(game.minStake) / 100).toFixed(2)} und ${(Number(game.maxStake) / 100).toFixed(2)} DEMO liegen.`,
+        `Einsatz muss zwischen ${(Number(game.minStake) / 100).toFixed(2).replace('.', ',')} und ${(Number(game.maxStake) / 100).toFixed(2).replace('.', ',')} € liegen.`,
       );
     }
     const hash = this.requestHash(gameId, input);
@@ -685,7 +685,7 @@ export class CasinoService {
     let total = 0n;
     for (const p of parts) {
       if (!Number.isSafeInteger(p) || BigInt(p) < MIN_PART)
-        throw new AppError('VALIDATION_ERROR', 'Jeder Einsatz muss mindestens 0.10 DEMO betragen.');
+        throw new AppError('VALIDATION_ERROR', 'Jeder Einsatz muss mindestens 0,10 € betragen.');
       total += BigInt(p);
     }
     return total;

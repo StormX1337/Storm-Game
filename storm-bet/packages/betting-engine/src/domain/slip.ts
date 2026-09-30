@@ -176,7 +176,7 @@ export function acceptOdds(
 function formatMoney(minor: bigint): string {
   const sign = minor < 0n ? '-' : '';
   const abs = minor < 0n ? -minor : minor;
-  return `${sign}${abs / 100n},${String(abs % 100n).padStart(2, '0')}`;
+  return `${sign}${abs / 100n},${String(abs % 100n).padStart(2, '0')} €`;
 }
 
 /**
@@ -275,7 +275,7 @@ export function evaluateSlip(
         issues.push(
           issue(
             'BET_LIMIT_EXCEEDED',
-            `Höchsteinsatz für diesen Boost: ${formatMoney(boost.maxStake)} DEMO.`,
+            `Höchsteinsatz für diesen Boost: ${formatMoney(boost.maxStake)}.`,
           ),
         );
       }

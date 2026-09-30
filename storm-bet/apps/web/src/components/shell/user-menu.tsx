@@ -71,12 +71,11 @@ export function UserMenu() {
       <Link
         href="/dashboard/wallet"
         className="flex items-center gap-2 rounded-md border border-border bg-surface-2 px-2 py-1.5 transition-colors hover:border-border-strong sm:px-3"
-        aria-label="Demo-Guthaben"
+        aria-label="Guthaben (Spielgeld)"
       >
         <Wallet className="hidden size-4 text-fg-muted sm:block" aria-hidden="true" />
         <span className="tabular text-sm font-semibold text-fg" data-testid="header-balance">
-          {wallet ? formatMoney(wallet.available, { unit: false }) : '—'}
-          <span className="ml-1 hidden text-xs font-normal text-fg-subtle sm:inline">DEMO</span>
+          {wallet ? formatMoney(wallet.available) : '—'}
         </span>
       </Link>
       <NotificationBell />

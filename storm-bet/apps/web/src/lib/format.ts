@@ -16,7 +16,7 @@ export function formatMoney(
   const { sign = false, unit = true } = options;
   const value = moneyFormat.format(Math.abs(minor) / 100);
   const prefix = minor < 0 ? '−' : sign && minor > 0 ? '+' : '';
-  return `${prefix}${value}${unit ? ' DEMO' : ''}`;
+  return `${prefix}${value}${unit ? '\u00a0€' : ''}`;
 }
 
 /** Decimal odds: two decimals, three when the third is significant. */

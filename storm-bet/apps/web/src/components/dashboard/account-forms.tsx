@@ -347,11 +347,11 @@ function LimitRow({ type, current }: { type: LimitType; current: LimitDto | unde
             placeholder="z. B. 50,00"
             value={value}
             onChange={(e) => setValue(e.target.value)}
-            aria-label={`${LIMIT_LABELS[type]} in DEMO`}
+            aria-label={`${LIMIT_LABELS[type]} in €`}
             className="pr-14 text-right"
           />
           <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-fg-subtle">
-            DEMO
+            €
           </span>
         </div>
         <Button

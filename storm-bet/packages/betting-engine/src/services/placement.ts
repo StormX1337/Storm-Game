@@ -457,7 +457,7 @@ export class BetPlacementService {
     const remaining = limit - used > 0n ? limit - used : 0n;
     return {
       code: 'BET_LIMIT_EXCEEDED',
-      message: `Dein Limit „${LIMIT_LABELS[type]}“ (${formatMoney(limit)} DEMO) wäre überschritten. Verbleibend: ${formatMoney(remaining)} DEMO.`,
+      message: `Dein Limit „${LIMIT_LABELS[type]}“ (${formatMoney(limit)}) wäre überschritten. Verbleibend: ${formatMoney(remaining)}.`,
     };
   }
 

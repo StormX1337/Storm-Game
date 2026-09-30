@@ -182,7 +182,7 @@ export class CashoutService {
               payout: amount,
               settledAt: now,
               autoCashoutAmount: null,
-              settlementNote: `${options.auto ? 'Auto-Cashout' : 'Cashout'}: ${formatMoney(amount)} DEMO`,
+              settlementNote: `${options.auto ? 'Auto-Cashout' : 'Cashout'}: ${formatMoney(amount)}`,
             },
           });
           if (changed.count !== 1)
@@ -265,7 +265,7 @@ export class CashoutService {
     if (amount !== null && amount > bet.potentialReturn) {
       throw new AppError(
         'VALIDATION_ERROR',
-        `Der Zielwert darf den möglichen Gewinn (${formatMoney(bet.potentialReturn)} DEMO) nicht übersteigen.`,
+        `Der Zielwert darf den möglichen Gewinn (${formatMoney(bet.potentialReturn)}) nicht übersteigen.`,
       );
     }
     await this.deps.db.bet.updateMany({

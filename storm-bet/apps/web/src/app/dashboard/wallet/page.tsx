@@ -48,7 +48,7 @@ export default async function WalletPage() {
           Beim Platzieren wird dein Einsatz <strong className="text-fg">reserviert</strong>. Bei der
           Abrechnung wird er freigegeben: Gewinne werden gutgeschrieben, verlorene Einsätze
           abgebucht, stornierte Einsätze erstattet. Aufladen ist einmal pro Tag möglich, wenn
-          weniger als 50 DEMO verfügbar sind.
+          weniger als 50 € verfügbar sind.
         </p>
       </div>
       <Card className="overflow-hidden">

@@ -32,8 +32,8 @@ export default async function TermsPage() {
           </li>
         )}
         <li>
-          Gewettet wird ausschließlich mit <strong>Demo-Guthaben (DEMO)</strong>. Es hat keinen
-          Geldwert, ist nicht übertragbar und kann weder eingezahlt noch ausgezahlt werden.
+          Gewettet wird ausschließlich mit <strong>Demo-Guthaben (Spielgeld in €)</strong>. Es hat
+          keinen Geldwert, ist nicht übertragbar und kann weder eingezahlt noch ausgezahlt werden.
         </li>
         <li>Es werden keine Gewinne versprochen. Auch Demo-Gewinne haben keinen Gegenwert.</li>
       </ul>

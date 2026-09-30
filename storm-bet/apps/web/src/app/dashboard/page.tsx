@@ -25,7 +25,7 @@ export default async function DashboardPage({
         title={welcome ? `Willkommen, ${user?.displayName ?? ''}!` : 'Übersicht'}
         description={
           welcome
-            ? 'Dein Konto ist eingerichtet – 1.000 DEMO Startguthaben stehen bereit.'
+            ? 'Dein Konto ist eingerichtet – 1.000 € Spielgeld stehen bereit.'
             : 'Dein Demo-Konto auf einen Blick.'
         }
         actions={

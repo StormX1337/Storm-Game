@@ -226,7 +226,7 @@ export async function topUpDemoWallet(
   if (available >= BigInt(policy.topUpThreshold)) {
     throw new AppError(
       'CONFLICT',
-      `Eine Aufladung ist erst möglich, wenn weniger als ${(policy.topUpThreshold / 100).toFixed(2)} DEMO verfügbar sind.`,
+      `Eine Aufladung ist erst möglich, wenn weniger als ${(policy.topUpThreshold / 100).toFixed(2).replace('.', ',')} € verfügbar sind.`,
     );
   }
   const nextAllowed = meta.lastTopUpAt

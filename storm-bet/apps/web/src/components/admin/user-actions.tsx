@@ -102,7 +102,7 @@ export function UserActions({ user }: { user: AdminUserDetailDto }) {
               ))}
             </NativeSelect>
           </Field>
-          <Field label="Betrag (DEMO)" htmlFor="limitValue">
+          <Field label="Betrag (€)" htmlFor="limitValue">
             <Input
               id="limitValue"
               inputMode="decimal"

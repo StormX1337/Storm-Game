@@ -624,7 +624,7 @@ function StakeInput({
           data-testid="stake-input"
         />
         <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-fg-subtle">
-          DEMO
+          €
         </span>
       </div>
       {quick ? (

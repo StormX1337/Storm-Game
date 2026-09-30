@@ -141,7 +141,7 @@ export function RegisterForm() {
     <Card className="p-6">
       <h1 className="text-lg font-semibold">Konto erstellen</h1>
       <p className="mt-1 text-sm text-fg-muted">
-        Mit 1.000 DEMO Startguthaben – kostenlos und ohne Echtgeld.
+        Mit 1.000 € Spielgeld-Startguthaben – kostenlos und ohne Echtgeld.
       </p>
       <form onSubmit={onSubmit} className="mt-6 space-y-4" noValidate>
         <FormError message={error} />

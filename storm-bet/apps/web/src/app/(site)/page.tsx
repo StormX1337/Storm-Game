@@ -178,9 +178,9 @@ export default async function HomePage() {
             className="pointer-events-none absolute -bottom-16 -right-10 size-56 rounded-full bg-up/10 blur-3xl"
           />
           <p className="text-xs font-semibold uppercase tracking-wider text-up">Demo-Bonus</p>
-          <p className="mt-2 text-3xl font-semibold tracking-tight">1.000 DEMO Startguthaben</p>
+          <p className="mt-2 text-3xl font-semibold tracking-tight">1.000 € Startguthaben</p>
           <p className="mt-2 max-w-md text-sm text-fg-muted">
-            Jedes neue Konto startet mit 1.000 DEMO Spielgeld. Es hat keinen Geldwert, kann nicht
+            Jedes neue Konto startet mit 1.000 € Spielgeld. Es hat keinen Geldwert, kann nicht
             ausgezahlt werden und dient nur zum Ausprobieren. Ist es fast aufgebraucht, kannst du es
             einmal täglich aufladen.
           </p>
