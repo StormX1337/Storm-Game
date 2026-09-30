@@ -57,7 +57,7 @@ export default async function HomePage() {
 
   return (
     <div className="space-y-10">
-      <section className="relative overflow-hidden rounded-xl border border-border bg-surface px-6 py-10 sm:px-10 sm:py-14">
+      <section className="relative overflow-hidden rounded-xl border border-border bg-surface px-5 py-6 sm:px-10 sm:py-12">
         <div
           aria-hidden="true"
           className="pointer-events-none absolute -right-24 -top-24 size-80 rounded-full bg-accent/15 blur-3xl"
@@ -66,17 +66,17 @@ export default async function HomePage() {
           aria-hidden="true"
           className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,rgb(255_255_255/0.025)_1px,transparent_1px),linear-gradient(to_bottom,rgb(255_255_255/0.025)_1px,transparent_1px)] bg-[size:48px_48px] [mask-image:radial-gradient(ellipse_at_top_right,black,transparent_70%)]"
         />
-        <div className="relative max-w-2xl space-y-5">
+        <div className="relative max-w-2xl space-y-4">
           <span className="inline-flex items-center gap-2 rounded-full border border-border-strong bg-surface-2 px-3 py-1 text-xs text-fg-muted">
             <Sparkles className="size-3.5 text-accent" aria-hidden="true" /> Demo-Plattform · kein
             Echtgeld
           </span>
-          <h1 className="text-3xl font-semibold leading-tight tracking-tight sm:text-5xl">
+          <h1 className="text-2xl font-semibold leading-tight tracking-tight sm:text-5xl">
             Sportwetten, <span className="text-accent-strong">präzise</span> gebaut.
           </h1>
-          <p className="max-w-xl text-base leading-relaxed text-fg-muted">
-            Fußball, Tennis und Basketball mit Live-Quoten, schnellem Wettschein und
-            nachvollziehbarer Abrechnung – vollständig mit Demo-Guthaben
+          <p className="max-w-xl text-sm leading-relaxed text-fg-muted sm:text-base">
+            Live-Quoten, Bet Builder, Cashout und nachvollziehbare Abrechnung – vollständig mit
+            Demo-Guthaben
             {odds.isSimulated
               ? ' und simulierten Spielen'
               : ` auf echte Spiele (Quoten: ${odds.name})`}
@@ -103,11 +103,29 @@ export default async function HomePage() {
         </div>
       </section>
 
+      <section className="space-y-3" aria-labelledby="live-title">
+        <SectionTitle
+          action={
+            <Link href="/live" className="text-sm text-accent hover:underline">
+              Alle Live-Events
+            </Link>
+          }
+        >
+          <LiveDot /> <span id="live-title">Jetzt live</span>
+        </SectionTitle>
+        <EventList
+          events={live?.items ?? []}
+          subscribeLive
+          emptyTitle="Gerade läuft kein Event"
+          emptyDescription="Schau gleich wieder vorbei – neue Spiele beginnen laufend."
+        />
+      </section>
+
       <section className="space-y-3" aria-labelledby="sports-title">
         <SectionTitle>
           <span id="sports-title">Sportarten</span>
         </SectionTitle>
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 lg:grid-cols-4">
           {(sports ?? []).map((sport) => (
             <Link
               key={sport.key}
@@ -135,24 +153,6 @@ export default async function HomePage() {
             </Link>
           ))}
         </div>
-      </section>
-
-      <section className="space-y-3" aria-labelledby="live-title">
-        <SectionTitle
-          action={
-            <Link href="/live" className="text-sm text-accent hover:underline">
-              Alle Live-Events
-            </Link>
-          }
-        >
-          <LiveDot /> <span id="live-title">Jetzt live</span>
-        </SectionTitle>
-        <EventList
-          events={live?.items ?? []}
-          subscribeLive
-          emptyTitle="Gerade läuft kein Event"
-          emptyDescription="Schau gleich wieder vorbei – neue Spiele beginnen laufend."
-        />
       </section>
 
       <section className="space-y-3" aria-labelledby="upcoming-title">

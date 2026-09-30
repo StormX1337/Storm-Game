@@ -19,6 +19,7 @@ import { useLive } from '@/stores/live';
 import { announceWalletChange, useSession } from '../providers/session';
 import { useRealtimeTopics } from '../providers/realtime';
 import { SportIcon } from '../sportsbook/sport-icon';
+import { ShareButton } from './share-button';
 
 /** Quick stakes add to the typed amount (minor units). */
 const QUICK_ADD = [200, 1000, 5000];
@@ -576,12 +577,15 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
         )}
         <div className="flex items-center justify-between text-xs text-fg-subtle">
           <span>Nur Demo-Guthaben · kein Echtgeld</span>
-          <button
-            onClick={() => slip.clear()}
-            className="inline-flex items-center gap-1 hover:text-fg"
-          >
-            <Trash2 className="size-3" /> Leeren
-          </button>
+          <span className="flex items-center gap-3">
+            <ShareButton selectionIds={slip.items.map((i) => i.selectionId)} />
+            <button
+              onClick={() => slip.clear()}
+              className="inline-flex items-center gap-1 hover:text-fg"
+            >
+              <Trash2 className="size-3" /> Leeren
+            </button>
+          </span>
         </div>
       </div>
     </div>

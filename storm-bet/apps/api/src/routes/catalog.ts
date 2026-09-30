@@ -1,4 +1,9 @@
-import { eventListQuery, idParam, sportKeyParam } from '@storm-bet/validation';
+import {
+  eventListQuery,
+  idParam,
+  sharedSelectionsQuery,
+  sportKeyParam,
+} from '@storm-bet/validation';
 import type { FastifyInstance } from 'fastify';
 import { parse } from '../lib/validate';
 import type { CatalogService } from '../services/catalog';
@@ -26,6 +31,11 @@ export function catalogRoutes(catalog: CatalogService) {
     app.get('/events/:id', async (request) => {
       const { id } = parse(idParam, request.params);
       return catalog.getEvent(id);
+    });
+
+    app.get('/selections', async (request) => {
+      const { ids } = parse(sharedSelectionsQuery, request.query);
+      return { selections: await catalog.sharedSelections(ids) };
     });
 
     app.get('/events/:id/markets', async (request) => {

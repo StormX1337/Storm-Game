@@ -22,6 +22,10 @@ keinen Echtgeldbetrieb; der entsprechende Schalter ist technisch gesperrt.
   Auto-Cashout
 - Live-Matchcenter: Spielfeld/Court mit Spielstand, Periode und Uhr, Viertel/Halbzeiten und
   Teamstatistiken – nur Daten, die der Feed liefert (kein Ball-Tracking)
+- Sportarten: Fußball, Tennis, Basketball, Eishockey, American Football, Baseball, Handball, MMA
+  (mit SportsGameOdds/The Odds API); alternative Linien und Spielerwetten (Punkte, Dreier, P+R+A,
+  Schüsse aufs Tor)
+- Wettschein und platzierte Tipps per Link teilen (Einsatz wird nie geteilt)
 - Bet Builder (vor Anpfiff und live, mit Torschützen, Ecken, Karten und Vorschlägen): mehrere Tipps auf
   ein Fußballspiel zu einer Modell-Quote; mit echten Feeds zusätzliche,
   aus den Feed-Quoten berechnete Märkte (Doppelte Chance, Draw No Bet, Beide treffen, weitere Linien)

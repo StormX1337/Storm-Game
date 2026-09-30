@@ -4,6 +4,7 @@ import { ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { formatDateTime, formatMoney, formatOdds } from '@/lib/format';
 import { BET_STATUS_LABELS, BET_TYPE_LABELS, betStatusVariant } from '@/lib/labels';
+import { ShareButton } from '../betslip/share-button';
 import { CashoutBar } from './cashout-bar';
 
 const RESULT_STYLE = {
@@ -95,6 +96,9 @@ export function BetCard({ bet, href }: { bet: BetDto; href?: string }) {
       {bet.status === 'PENDING' && bet.type !== 'BET_BUILDER' ? (
         <CashoutBar betId={bet.id} />
       ) : null}
+      <div className="flex justify-end border-t border-border px-4 py-1.5">
+        <ShareButton selectionIds={bet.selections.map((s) => s.selectionId)} label="Tipp teilen" />
+      </div>
     </Card>
   );
 }

@@ -39,6 +39,8 @@ interface SlipState {
   toggle: (item: Omit<SlipItem, 'pendingOdds' | 'status'> & { status?: SelectionStatus }) => void;
   remove: (selectionId: string) => void;
   clear: () => void;
+  /** Adds picks (a shared slip); a pick replaces another of the same market. */
+  addMany: (items: Omit<SlipItem, 'pendingOdds'>[]) => void;
   /** Replaces the picks of one match (a suggested Bet Builder). */
   replaceEvent: (eventId: string, items: Omit<SlipItem, 'pendingOdds'>[]) => void;
   setMode: (mode: SlipMode) => void;
@@ -89,6 +91,16 @@ export const useBetSlip = create<SlipState>()(
           idempotencyKey: null,
         })),
       clear: () => set({ items: [], comboStake: '', singleStakes: {}, idempotencyKey: null }),
+      addMany: (added) =>
+        set((state) => {
+          let items = state.items;
+          for (const item of added) {
+            if (items.some((i) => i.selectionId === item.selectionId)) continue;
+            if (!item.multi) items = items.filter((i) => i.marketId !== item.marketId);
+            items = [...items, { ...item, pendingOdds: null }];
+          }
+          return { items: items.slice(0, MAX_SLIP_ITEMS), idempotencyKey: null };
+        }),
       replaceEvent: (eventId, items) =>
         set((state) => ({
           items: [

@@ -3,6 +3,7 @@ import { isSimulatedProvider } from '@storm-bet/odds-engine';
 import type { JsonCache } from '@storm-bet/redis';
 import {
   AppError,
+  type SharedSelectionDto,
   type EventDetailDto,
   type EventStatus,
   type EventSummaryDto,
@@ -260,6 +261,56 @@ export class CatalogService {
         statistics: parseStatistics(event.statistics),
         markets,
       };
+    });
+  }
+
+  /** Selections of a shared bet slip, as the book holds them now. */
+  async sharedSelections(ids: string[]): Promise<SharedSelectionDto[]> {
+    const rows = await this.db.selection.findMany({
+      where: { id: { in: ids } },
+      include: {
+        market: {
+          include: {
+            event: {
+              include: {
+                sport: { select: { key: true } },
+                homeTeam: { select: { name: true } },
+                awayTeam: { select: { name: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    return ids.flatMap((id) => {
+      const s = byId.get(id);
+      if (!s) return [];
+      const { market } = s;
+      const { event } = market;
+      return [
+        {
+          selectionId: s.id,
+          selectionName: s.name,
+          outcome: s.outcome,
+          odds: oddsToMilli(s.odds) / 1000,
+          open:
+            s.status === 'OPEN' &&
+            market.status === 'OPEN' &&
+            !market.tradingSuspended &&
+            event.isActive &&
+            !event.tradingSuspended &&
+            (event.status === 'SCHEDULED' || event.status === 'LIVE'),
+          marketId: market.id,
+          marketName: market.name,
+          marketType: market.type,
+          eventId: event.id,
+          eventName: `${event.homeTeam.name} – ${event.awayTeam.name}`,
+          sportKey: event.sport.key as SportKey,
+          startTime: event.startTime.toISOString(),
+          isLive: event.status === 'LIVE',
+        },
+      ];
     });
   }
 

@@ -47,3 +47,12 @@ export const streamQuery = z.object({
         .max(50),
     ),
 });
+
+/** Shared bet slip: up to 20 selection ids, comma separated. */
+export const sharedSelectionsQuery = z.object({
+  ids: z
+    .string()
+    .max(20 * 37)
+    .transform((v) => [...new Set(v.split(',').filter(Boolean))])
+    .pipe(z.array(z.string().uuid('Ungültige ID')).min(1).max(20)),
+});

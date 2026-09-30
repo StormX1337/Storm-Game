@@ -429,3 +429,21 @@ export interface PlatformMetaDto {
   realMoney: false;
   odds: { provider: string; name: string; isSimulated: boolean };
 }
+
+/** A selection as a shared bet slip shows it, with its current price and state. */
+export interface SharedSelectionDto {
+  selectionId: string;
+  selectionName: string;
+  outcome: Outcome;
+  odds: number;
+  /** Open for betting right now (selection, market and event). */
+  open: boolean;
+  marketId: string;
+  marketName: string;
+  marketType: MarketType;
+  eventId: string;
+  eventName: string;
+  sportKey: SportKey;
+  startTime: string;
+  isLive: boolean;
+}

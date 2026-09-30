@@ -8,6 +8,7 @@ import { EVENT_STATUS_LABELS } from '@/lib/labels';
 import { useLiveEvent } from './hooks';
 import { DemoDataBadge, LiveBadge } from './live-indicator';
 import { MatchField } from './match-field';
+import { TeamBadge } from './team-badge';
 import { SportIcon } from './sport-icon';
 
 export function Scoreboard({ event }: { event: EventDetailDto }) {
@@ -110,9 +111,7 @@ function TeamName({
         align === 'right' ? 'items-end text-right' : 'items-start text-left',
       )}
     >
-      <span className="grid size-11 place-items-center rounded-full border border-border-strong bg-surface-3 text-xs font-bold tracking-wider text-fg-muted">
-        {short}
-      </span>
+      <TeamBadge name={name} short={short} className="size-11 text-xs" />
       <span className="line-clamp-2 text-sm font-semibold sm:text-base">{name}</span>
     </div>
   );

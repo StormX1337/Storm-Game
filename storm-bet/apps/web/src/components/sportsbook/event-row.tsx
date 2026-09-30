@@ -9,6 +9,7 @@ import { formatKickoff } from '@/lib/format';
 import { useLiveEvent } from './hooks';
 import { LiveBadge } from './live-indicator';
 import { OddsButton } from './odds-button';
+import { TeamBadge } from './team-badge';
 
 export function eventName(e: Pick<EventSummaryDto, 'home' | 'away'>) {
   return `${e.home.name} – ${e.away.name}`;
@@ -58,8 +59,11 @@ export function EventRow({
           ) : null}
           {[event.home, event.away].map((team, i) => (
             <div key={team.id} className="flex items-center justify-between gap-2">
-              <span className="truncate text-sm text-fg group-hover:text-accent-strong">
-                {team.name}
+              <span className="flex min-w-0 items-center gap-2">
+                <TeamBadge name={team.name} />
+                <span className="truncate text-sm text-fg group-hover:text-accent-strong">
+                  {team.name}
+                </span>
               </span>
               {live.score ? (
                 <span
@@ -82,6 +86,8 @@ export function EventRow({
               key={s.id}
               selection={s}
               label={OUTCOME_LABELS[s.outcome]}
+              layout="inline"
+              className="min-h-10"
               context={{
                 eventId: event.id,
                 eventName: eventName(event),
