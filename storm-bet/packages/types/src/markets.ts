@@ -34,6 +34,9 @@ export const MarketType = {
   PLAYER_POINTS: 'PLAYER_POINTS',
   PLAYER_REBOUNDS: 'PLAYER_REBOUNDS',
   PLAYER_ASSISTS: 'PLAYER_ASSISTS',
+  PLAYER_THREES: 'PLAYER_THREES',
+  PLAYER_PRA: 'PLAYER_PRA',
+  PLAYER_SHOTS_ON_TARGET: 'PLAYER_SHOTS_ON_TARGET',
 } as const;
 export type MarketType = (typeof MarketType)[keyof typeof MarketType];
 export const MARKET_TYPES = Object.values(MarketType) as [MarketType, ...MarketType[]];
@@ -72,8 +75,18 @@ export type ResultMetric = 'score' | 'corners' | 'cards' | 'games';
  */
 export type MarketPeriod = 'FULL' | 'H1' | 'H2';
 
-/** Per-player figure a player over/under market is decided on. */
-export type PlayerStat = 'goals' | 'points' | 'rebounds' | 'assists';
+/**
+ * Per-player figure a player over/under market is decided on. "pra" is
+ * points + rebounds + assists.
+ */
+export type PlayerStat =
+  | 'goals'
+  | 'points'
+  | 'rebounds'
+  | 'assists'
+  | 'threes'
+  | 'shotsOnTarget'
+  | 'pra';
 
 export type SettlementKind =
   | 'THREE_WAY'
@@ -146,10 +159,11 @@ const playerTotal = (
   label: string,
   playerStat: PlayerStat,
   sortOrder: number,
+  sports: readonly SportKey[] = BASKETBALL,
 ): MarketDefinition => ({
   type,
   label,
-  sports: BASKETBALL,
+  sports,
   metric: 'score',
   period: 'FULL',
   playerStat,
@@ -421,6 +435,15 @@ export const MARKET_DEFINITIONS: Record<MarketType, MarketDefinition> = {
   PLAYER_POINTS: playerTotal('PLAYER_POINTS', 'Spieler – Punkte Über/Unter', 'points', 200),
   PLAYER_REBOUNDS: playerTotal('PLAYER_REBOUNDS', 'Spieler – Rebounds Über/Unter', 'rebounds', 210),
   PLAYER_ASSISTS: playerTotal('PLAYER_ASSISTS', 'Spieler – Assists Über/Unter', 'assists', 220),
+  PLAYER_THREES: playerTotal('PLAYER_THREES', 'Spieler – Dreier Über/Unter', 'threes', 230),
+  PLAYER_PRA: playerTotal('PLAYER_PRA', 'Spieler – Punkte+Rebounds+Assists Über/Unter', 'pra', 240),
+  PLAYER_SHOTS_ON_TARGET: playerTotal(
+    'PLAYER_SHOTS_ON_TARGET',
+    'Spieler – Schüsse aufs Tor Über/Unter',
+    'shotsOnTarget',
+    95,
+    FOOTBALL,
+  ),
 };
 
 /** A market's name in a sport. */

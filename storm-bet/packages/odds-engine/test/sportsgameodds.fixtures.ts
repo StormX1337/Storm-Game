@@ -277,6 +277,22 @@ export function events(): Record<string, unknown>[] {
         odd('points-all-1h-ou-under', { odds: '-110', overUnder: '108.5' }),
         prop('points-JAYSON_TATUM_1_NBA-game-ou-over', { odds: '-115', overUnder: '27.5' }),
         prop('points-JAYSON_TATUM_1_NBA-game-ou-under', { odds: '-105', overUnder: '27.5' }),
+        prop('threePointersMade-JAYSON_TATUM_1_NBA-game-ou-over', {
+          odds: '+110',
+          overUnder: '3.5',
+        }),
+        prop('threePointersMade-JAYSON_TATUM_1_NBA-game-ou-under', {
+          odds: '-130',
+          overUnder: '3.5',
+        }),
+        prop('points+rebounds+assists-JAYSON_TATUM_1_NBA-game-ou-over', {
+          odds: '-110',
+          overUnder: '40.5',
+        }),
+        prop('points+rebounds+assists-JAYSON_TATUM_1_NBA-game-ou-under', {
+          odds: '-110',
+          overUnder: '40.5',
+        }),
         prop('rebounds-JAYSON_TATUM_1_NBA-game-ou-over', { odds: '+100', overUnder: '8.5' }),
         prop('rebounds-JAYSON_TATUM_1_NBA-game-ou-under', { odds: '-130', overUnder: '8.5' }),
         prop('assists-JIMMY_BUTLER_1_NBA-game-ou-over', { odds: '-110', overUnder: '5.5' }),

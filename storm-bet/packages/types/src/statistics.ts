@@ -26,8 +26,10 @@ export interface PlayerStatLine {
   /** Internal player id once synced; the provider's own id never leaves the sync layer. */
   playerId: string;
   name: string | null;
-  /** Keys are PlayerStat values (goals, points, rebounds, assists). */
-  stats: Partial<Record<'goals' | 'points' | 'rebounds' | 'assists', number>>;
+  /** Recorded figures (PlayerStat values except the computed "pra"). */
+  stats: Partial<
+    Record<'goals' | 'points' | 'rebounds' | 'assists' | 'threes' | 'shotsOnTarget', number>
+  >;
 }
 
 /**

@@ -23,6 +23,8 @@ const playerLines = z
           points: stat.optional(),
           rebounds: stat.optional(),
           assists: stat.optional(),
+          threes: stat.optional(),
+          shotsOnTarget: stat.optional(),
         })
         .strict(),
     }),

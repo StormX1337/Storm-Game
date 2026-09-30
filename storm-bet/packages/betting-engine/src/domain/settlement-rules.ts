@@ -99,6 +99,12 @@ function playerFigure(
   if (!players) throw new SettlementDataError('player figures were not recorded');
   const line = players.find((p) => p.playerId === playerId);
   if (!line) return null;
+  if (stat === 'pra') {
+    const { points, rebounds, assists } = line.stats;
+    if (points === undefined || rebounds === undefined || assists === undefined)
+      throw new SettlementDataError('points, rebounds or assists not recorded for a player');
+    return points + rebounds + assists;
+  }
   const value = line.stats[stat];
   if (value === undefined) throw new SettlementDataError(`${stat} not recorded for a player`);
   return value;

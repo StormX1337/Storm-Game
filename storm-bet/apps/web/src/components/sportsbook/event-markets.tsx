@@ -35,7 +35,7 @@ const GROUPS: Record<SportKey, { key: string; label: string; types: MarketType[]
       ],
     },
     { key: 'specials', label: 'Ecken & Karten', types: ['TOTAL_CORNERS', 'TOTAL_CARDS'] },
-    { key: 'players', label: 'Spieler', types: ['PLAYER_TO_SCORE'] },
+    { key: 'players', label: 'Spieler', types: ['PLAYER_TO_SCORE', 'PLAYER_SHOTS_ON_TARGET'] },
   ],
   tennis: [
     { key: 'main', label: 'Sieger', types: ['MATCH_WINNER', 'FIRST_SET_WINNER'] },
@@ -54,7 +54,7 @@ const GROUPS: Record<SportKey, { key: string; label: string; types: MarketType[]
     {
       key: 'players',
       label: 'Spieler',
-      types: ['PLAYER_POINTS', 'PLAYER_REBOUNDS', 'PLAYER_ASSISTS'],
+      types: ['PLAYER_POINTS', 'PLAYER_REBOUNDS', 'PLAYER_ASSISTS', 'PLAYER_THREES', 'PLAYER_PRA'],
     },
   ],
   hockey: scoreGroups('Tore'),

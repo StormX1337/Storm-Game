@@ -95,7 +95,7 @@ describe('TheOddsApiProvider', () => {
   it('maps two-way sports and restricts tennis to the winner market', async () => {
     const { provider: p, api } = provider();
     await p.getEvents({ ...window });
-    expect((await p.getMarkets('nba-1')).map((m) => m.key)).toEqual([
+    expect(quoted(await p.getMarkets('nba-1')).map((m) => m.key)).toEqual([
       'MATCH_WINNER',
       'POINT_SPREAD:-7.5',
       'TOTAL_POINTS:214.5',

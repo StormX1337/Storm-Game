@@ -14,10 +14,11 @@ import {
   type MarketPeriod,
   type MarketType,
   type Outcome,
+  type SportKey,
 } from '@storm-bet/types';
-import { isOffered, MARGINS, priceOutcomes, priceSingle } from '../mock/pricing';
+import { isOffered, MARGINS, normalCdf, priceOutcomes, priceSingle } from '../mock/pricing';
 import type { ProviderMarket } from '../provider';
-import type { MarketGate } from './shared';
+import { buildMarket, type MarketGate, type RawMarket } from './shared';
 
 /**
  * Extra pre-match football markets for real feeds, priced from a goal model
@@ -155,6 +156,77 @@ export function deriveFootballMarkets(
           playerExternalId: null,
         })),
       });
+    }
+  }
+  return out;
+}
+
+/**
+ * Alternative lines around the feed's main total and handicap in sports
+ * with high, near-normal scores: the margin of victory and the total are
+ * taken as normal around the values the feed's fair prices imply.
+ */
+const LADDERS: Partial<Record<SportKey, { total: number; spread: number; steps: number[] }>> = {
+  basketball: { total: 17, spread: 12, steps: [-10, -5, 5, 10] },
+  american_football: { total: 13, spread: 13, steps: [-7, -3, 3, 7] },
+};
+
+/** Inverse of the standard normal distribution (bisection is plenty here). */
+function probit(p: number): number {
+  let lo = -8;
+  let hi = 8;
+  for (let i = 0; i < 60; i += 1) {
+    const mid = (lo + hi) / 2;
+    if (normalCdf(mid) < p) lo = mid;
+    else hi = mid;
+  }
+  return (lo + hi) / 2;
+}
+
+export function deriveLineLadder(
+  feed: readonly ProviderMarket[],
+  names: { home: string; away: string },
+  gate: MarketGate,
+  sport: SportKey,
+): ProviderMarket[] {
+  const ladder = LADDERS[sport];
+  if (!ladder || gate.status !== 'OPEN') return [];
+  const offered = new Set(feed.map((m) => m.key));
+  const fairFirst = (m: ProviderMarket, outcome: string) => {
+    const [a, b] = m.selections;
+    if (!a || !b) return null;
+    const p = 1 / a.odds / (1 / a.odds + 1 / b.odds);
+    return a.outcome === outcome ? p : 1 - p;
+  };
+  const out: ProviderMarket[] = [];
+  const add = (type: MarketType, raw: RawMarket) => {
+    const market = buildMarket(type, raw, names, gate, sport);
+    if (market && !offered.has(market.key)) out.push({ ...market, derived: true });
+  };
+  const total = feed.find((m) => m.type === 'TOTAL_POINTS' && !m.derived && m.line !== null);
+  const totalOver = total ? fairFirst(total, 'OVER') : null;
+  if (total && totalOver !== null) {
+    const mean = total.line! + ladder.total * probit(totalOver);
+    for (const step of ladder.steps) {
+      const line = total.line! + step;
+      if (line <= 0) continue;
+      const over = 1 - normalCdf((line - mean) / ladder.total);
+      if (!isOffered(over)) continue;
+      const [o, u] = priceOutcomes([over, 1 - over], MARGINS.totals);
+      add('TOTAL_POINTS', { kind: 'TOTAL', line, over: o!, under: u! });
+    }
+  }
+  const spread = feed.find((m) => m.type === 'POINT_SPREAD' && !m.derived && m.line !== null);
+  const covers = spread ? fairFirst(spread, 'HOME') : null;
+  if (spread && covers !== null) {
+    // Home covers when margin + line > 0.
+    const margin = ladder.spread * probit(covers) - spread.line!;
+    for (const step of ladder.steps) {
+      const line = spread.line! + step;
+      const home = normalCdf((margin + line) / ladder.spread);
+      if (!isOffered(home)) continue;
+      const [h, a] = priceOutcomes([home, 1 - home], MARGINS.totals);
+      add('POINT_SPREAD', { kind: 'HANDICAP', line, home: h!, away: a! });
     }
   }
   return out;

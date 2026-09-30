@@ -120,11 +120,19 @@ describe('SportsGameOddsProvider', () => {
     const { provider: p } = provider();
     await p.getEvents(window);
     const markets = await p.getMarkets('nfl-1');
-    expect(markets.map((m) => m.name)).toEqual([
+    expect(quoted(markets).map((m) => m.name)).toEqual([
       'Sieger',
       'Handicap (Punkte) -3.5',
       'Punkte Über/Unter 47.5',
     ]);
+    // Alternative lines around the main ones, priced by the book.
+    const alt = markets.filter((m) => m.derived).map((m) => m.key);
+    expect(alt).toEqual(
+      expect.arrayContaining(['TOTAL_POINTS:40.5', 'TOTAL_POINTS:54.5', 'POINT_SPREAD:-6.5']),
+    );
+    const over = (line: number) =>
+      markets.find((m) => m.key === `TOTAL_POINTS:${line}`)!.selections[0]!.odds;
+    expect(over(40.5)).toBeLessThan(over(54.5));
   });
 
   it('maps regular-time 1X2, handicap and total from consensus prices', async () => {
@@ -313,7 +321,9 @@ describe('SportsGameOddsProvider', () => {
     expect(players.map((m) => m.key).sort()).toEqual([
       'PLAYER_ASSISTS:JIMMY_BUTLER_1_NBA:5.5',
       'PLAYER_POINTS:JAYSON_TATUM_1_NBA:27.5',
+      'PLAYER_PRA:JAYSON_TATUM_1_NBA:40.5',
       'PLAYER_REBOUNDS:JAYSON_TATUM_1_NBA:8.5',
+      'PLAYER_THREES:JAYSON_TATUM_1_NBA:3.5',
     ]);
     const tatum = players.find((m) => m.type === 'PLAYER_POINTS')!;
     expect(tatum).toMatchObject({ name: 'Jayson Tatum – Punkte Über/Unter 27.5', line: 27.5 });

@@ -37,7 +37,7 @@ import {
   type ProviderQuota,
   type RawMarket,
 } from './shared';
-import { deriveFootballMarkets } from './derived';
+import { deriveFootballMarkets, deriveLineLadder } from './derived';
 
 /**
  * SportsGameOdds (https://sportsgameodds.com), API v2 — bookmaker odds,
@@ -277,17 +277,33 @@ const TEAM_MARKETS: Record<SportKey, { type: MarketType; betType: string; period
 };
 
 /** Basketball player over/under markets by the feed's statID. */
-const PLAYER_TOTALS: [string, MarketType][] = [
-  ['points', 'PLAYER_POINTS'],
-  ['rebounds', 'PLAYER_REBOUNDS'],
-  ['assists', 'PLAYER_ASSISTS'],
-];
+const PLAYER_TOTALS: Partial<Record<SportKey, [string, MarketType][]>> = {
+  basketball: [
+    ['points', 'PLAYER_POINTS'],
+    ['rebounds', 'PLAYER_REBOUNDS'],
+    ['assists', 'PLAYER_ASSISTS'],
+    ['threePointersMade', 'PLAYER_THREES'],
+    ['points+rebounds+assists', 'PLAYER_PRA'],
+  ],
+  football: [['shots_onGoal', 'PLAYER_SHOTS_ON_TARGET']],
+};
 
 /** Player figures kept from the official result, per sport. */
-const PLAYER_FIGURES: Partial<Record<SportKey, ('goals' | 'points' | 'rebounds' | 'assists')[]>> = {
-  football: ['goals'],
-  basketball: ['points', 'rebounds', 'assists'],
-  tennis: [],
+/**
+ * Player figures kept from the official result, per sport: our key and the
+ * feed's statID (the same ids price the player markets).
+ */
+const PLAYER_FIGURES: Partial<Record<SportKey, [keyof PlayerStatLine['stats'], string][]>> = {
+  football: [
+    ['goals', 'goals'],
+    ['shotsOnTarget', 'shots_onGoal'],
+  ],
+  basketball: [
+    ['points', 'points'],
+    ['rebounds', 'rebounds'],
+    ['assists', 'assists'],
+    ['threes', 'threePointersMade'],
+  ],
 };
 
 const TEAM_ENTITIES = new Set(['home', 'away', 'all']);
@@ -973,8 +989,8 @@ export class SportsGameOddsProvider implements OddsProvider {
     for (const [entity, values] of Object.entries(game)) {
       if (TEAM_ENTITIES.has(entity)) continue;
       const stats: PlayerStatLine['stats'] = {};
-      for (const figure of figures) {
-        const value = num(values?.[figure]);
+      for (const [figure, statID] of figures) {
+        const value = num(values?.[statID]);
         if (value !== null && Number.isInteger(value) && value >= 0) stats[figure] = value;
       }
       if (Object.keys(stats).length === 0) continue;
@@ -1029,6 +1045,8 @@ export class SportsGameOddsProvider implements OddsProvider {
     }
     if (sport === 'football' && event.status === 'SCHEDULED')
       markets.push(...deriveFootballMarkets(markets, names, gate, { halves: true }));
+    if (event.status === 'SCHEDULED')
+      markets.push(...deriveLineLadder(markets, names, gate, sport));
     markets.push(...this.playerMarkets(sport, stored.event, open, bookmaker, gate));
     return markets;
   }
@@ -1045,6 +1063,7 @@ export class SportsGameOddsProvider implements OddsProvider {
     gate: ReturnType<typeof marketGate>,
   ): ProviderMarket[] {
     const roster = this.roster(event);
+    const markets: ProviderMarket[] = [];
     const byPlayer = new Map<string, SgoOdd[]>();
     for (const o of odds) {
       if (!o.playerID || o.statEntityID !== o.playerID || !roster.has(o.playerID)) continue;
@@ -1069,13 +1088,11 @@ export class SportsGameOddsProvider implements OddsProvider {
           quotes.push({ externalId: playerID, name: roster.get(playerID)!.name, odds });
       }
       const market = buildScorerMarket(quotes, gate);
-      return market ? [market] : [];
+      if (market) markets.push(market);
     }
-    if (sport !== 'basketball') return [];
-    const markets: ProviderMarket[] = [];
     for (const [playerID, list] of byPlayer) {
       const player = { externalId: playerID, name: roster.get(playerID)!.name };
-      for (const [statID, type] of PLAYER_TOTALS) {
+      for (const [statID, type] of PLAYER_TOTALS[sport] ?? []) {
         const mine = list.filter(
           (o) => o.statID === statID && o.periodID === 'game' && o.betTypeID === 'ou',
         );

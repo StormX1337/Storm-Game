@@ -167,7 +167,7 @@ describe('SportsGameOdds → sync → settlement', () => {
       game: {
         home: { points: 110 },
         away: { points: 104 },
-        JAYSON_TATUM_1_NBA: { points: 31, rebounds: 7, assists: 4 },
+        JAYSON_TATUM_1_NBA: { points: 31, rebounds: 7, assists: 4, threePointersMade: 5 },
         JIMMY_BUTLER_1_NBA: { points: 20, rebounds: 5, assists: 6 },
       },
       '1h': { home: { points: 50 }, away: { points: 55 } },

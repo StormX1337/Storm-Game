@@ -485,3 +485,22 @@ describe('score-only sports', () => {
     ).toBe('VOID');
   });
 });
+
+describe('combined player figures', () => {
+  it('settles points + rebounds + assists on their sum', () => {
+    const stats = {
+      sport: 'basketball' as const,
+      points: { home: 100, away: 90 },
+      periods: [],
+      players: [{ playerId: 'p1', name: 'A', stats: { points: 25, rebounds: 8, assists: 7 } }],
+    };
+    const pra = (line: number) =>
+      resolveSelection(
+        { marketType: 'PLAYER_PRA', line, outcome: 'OVER', playerId: 'p1' },
+        'FINISHED',
+        stats,
+      );
+    expect(pra(39.5)).toBe('WON');
+    expect(pra(40.5)).toBe('LOST');
+  });
+});
