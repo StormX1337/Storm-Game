@@ -148,6 +148,13 @@ export interface BetSelectionDto {
   odds: number;
   result: SelectionResult;
   snapshot: OddsSnapshotDto | null;
+  /** The match as it stands now: teams, status and score (final once finished). */
+  event: {
+    home: string;
+    away: string;
+    status: EventStatus;
+    score: { home: number; away: number } | null;
+  };
 }
 
 export interface BetDto {

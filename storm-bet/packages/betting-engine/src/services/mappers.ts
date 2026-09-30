@@ -9,7 +9,17 @@ export const BET_INCLUDE = {
       snapshot: true,
       selection: { select: { outcome: true } },
       market: { select: { type: true, line: true } },
-      event: { select: { startTime: true, sport: { select: { key: true } } } },
+      event: {
+        select: {
+          startTime: true,
+          status: true,
+          homeScore: true,
+          awayScore: true,
+          sport: { select: { key: true } },
+          homeTeam: { select: { name: true } },
+          awayTeam: { select: { name: true } },
+        },
+      },
     },
   },
   cashouts: { orderBy: { createdAt: 'asc' } },
@@ -55,6 +65,15 @@ export function toBetDto(bet: BetWithLegs): BetDto {
       outcome: leg.selection.outcome,
       odds: odds(leg.odds),
       result: leg.result,
+      event: {
+        home: leg.event.homeTeam.name,
+        away: leg.event.awayTeam.name,
+        status: leg.event.status,
+        score:
+          leg.event.homeScore == null || leg.event.awayScore == null
+            ? null
+            : { home: leg.event.homeScore, away: leg.event.awayScore },
+      },
       snapshot: leg.snapshot
         ? {
             odds: odds(leg.snapshot.odds),

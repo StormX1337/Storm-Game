@@ -1,18 +1,112 @@
 import type { BetDto } from '@storm-bet/types';
 import { Badge, Card, cn } from '@storm-bet/ui';
-import { ChevronRight } from 'lucide-react';
+import { BarChart3, CheckCircle2, ChevronRight, Circle, MinusCircle, XCircle } from 'lucide-react';
 import Link from 'next/link';
 import { formatDateTime, formatMoney, formatOdds } from '@/lib/format';
 import { BET_STATUS_LABELS, BET_TYPE_LABELS, betStatusVariant } from '@/lib/labels';
 import { ShareButton } from '../betslip/share-button';
+import { TeamBadge } from '../sportsbook/team-badge';
 import { CashoutBar } from './cashout-bar';
 
-const RESULT_STYLE = {
-  PENDING: 'bg-fg-subtle',
-  WON: 'bg-up',
-  LOST: 'bg-down',
-  VOID: 'bg-warning',
-} as const;
+type Leg = BetDto['selections'][number];
+
+/** ✓ won, ✗ lost, – void, ○ open. */
+function ResultIcon({ result }: { result: Leg['result'] }) {
+  if (result === 'WON')
+    return <CheckCircle2 className="size-4 shrink-0 text-up" aria-label="Gewonnen" />;
+  if (result === 'LOST')
+    return <XCircle className="size-4 shrink-0 text-down" aria-label="Verloren" />;
+  if (result === 'VOID')
+    return <MinusCircle className="size-4 shrink-0 text-warning" aria-label="Storniert" />;
+  return <Circle className="size-4 shrink-0 text-fg-subtle" aria-label="Offen" />;
+}
+
+/** "Ergebnis 2:1" once finished, the running score in play. */
+function ScorePill({ leg }: { leg: Leg }) {
+  const { status, score } = leg.event;
+  if (!score || (status !== 'FINISHED' && status !== 'LIVE')) {
+    if (status === 'CANCELLED') return <span className="text-[11px] text-fg-subtle">Abgesagt</span>;
+    return null;
+  }
+  const live = status === 'LIVE';
+  return (
+    <span
+      className={cn(
+        'tabular inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold',
+        live ? 'bg-live/15 text-live' : 'bg-surface-3 text-fg-muted',
+      )}
+    >
+      <BarChart3 className="size-3" aria-hidden="true" />
+      {live ? 'Live' : 'Ergebnis'} {score.home}:{score.away}
+    </span>
+  );
+}
+
+function Teams({ leg }: { leg: Leg }) {
+  return (
+    <div className="space-y-1">
+      {[leg.event.home, leg.event.away].map((team) => (
+        <p key={team} className="flex min-w-0 items-center gap-2 text-xs text-fg-muted">
+          <TeamBadge name={team} className="size-4 text-[7px]" />
+          <span className="truncate">{team}</span>
+        </p>
+      ))}
+    </div>
+  );
+}
+
+function Legs({ bet }: { bet: BetDto }) {
+  return (
+    <ul className="divide-y divide-border/60">
+      {bet.selections.map((leg) => (
+        <li key={leg.id} className="space-y-2 px-4 py-3">
+          <div className="flex items-start gap-2">
+            <ResultIcon result={leg.result} />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold">{leg.selectionName}</p>
+              <p className="truncate text-xs text-fg-muted">{leg.marketName}</p>
+            </div>
+            <span className="tabular text-sm font-semibold">{formatOdds(leg.odds)}</span>
+          </div>
+          <div className="flex items-end justify-between gap-2 pl-6">
+            <Teams leg={leg} />
+            <ScorePill leg={leg} />
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** One match, its picks as a chain. */
+function BuilderLegs({ bet }: { bet: BetDto }) {
+  const first = bet.selections[0];
+  if (!first) return null;
+  return (
+    <div className="space-y-3 px-4 py-3">
+      <div className="flex items-end justify-between gap-2">
+        <Teams leg={first} />
+        <ScorePill leg={first} />
+      </div>
+      <ol>
+        {bet.selections.map((leg, i) => (
+          <li key={leg.id} className="flex gap-3">
+            <span className="flex w-4 shrink-0 flex-col items-center">
+              <ResultIcon result={leg.result} />
+              {i < bet.selections.length - 1 ? (
+                <span className="my-0.5 w-px flex-1 bg-border-strong" />
+              ) : null}
+            </span>
+            <div className="min-w-0 flex-1 pb-2.5">
+              <p className="truncate text-sm font-semibold">{leg.selectionName}</p>
+              <p className="truncate text-xs text-fg-muted">{leg.marketName}</p>
+            </div>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
 
 export function BetCard({ bet, href }: { bet: BetDto; href?: string }) {
   const payout =
@@ -22,30 +116,21 @@ export function BetCard({ bet, href }: { bet: BetDto; href?: string }) {
       : 0);
   const content = (
     <>
-      <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2.5">
+      <div className="flex items-center gap-2 border-b border-border px-4 py-2.5">
         <Badge variant={betStatusVariant(bet.status)}>{BET_STATUS_LABELS[bet.status]}</Badge>
-        <span className="text-sm font-medium">{BET_TYPE_LABELS[bet.type]}</span>
-        <span className="font-mono text-xs text-fg-subtle">{bet.reference}</span>
-        <span className="ml-auto text-xs text-fg-subtle">{formatDateTime(bet.placedAt)}</span>
-        {href ? <ChevronRight className="size-4 text-fg-subtle" aria-hidden="true" /> : null}
+        <span className="truncate text-sm font-semibold">{BET_TYPE_LABELS[bet.type]}</span>
+        <span className="tabular ml-auto rounded-md bg-surface-3 px-2 py-0.5 text-sm font-semibold">
+          {formatOdds(bet.totalOdds)}
+        </span>
+        {href ? (
+          <ChevronRight className="size-4 shrink-0 text-fg-subtle" aria-hidden="true" />
+        ) : null}
       </div>
-      <ul className="divide-y divide-border/60">
-        {bet.selections.map((leg) => (
-          <li key={leg.id} className="flex items-center gap-3 px-4 py-2.5">
-            <span
-              className={cn('size-1.5 shrink-0 rounded-full', RESULT_STYLE[leg.result])}
-              aria-hidden="true"
-            />
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm">{leg.selectionName}</p>
-              <p className="truncate text-xs text-fg-muted">
-                {leg.marketName} · {leg.eventName}
-              </p>
-            </div>
-            <span className="tabular text-sm font-semibold">{formatOdds(leg.odds)}</span>
-          </li>
-        ))}
-      </ul>
+      <p className="flex justify-between px-4 pt-2 text-[11px] text-fg-subtle">
+        <span className="font-mono">{bet.reference}</span>
+        <span>{formatDateTime(bet.placedAt)}</span>
+      </p>
+      {bet.type === 'BET_BUILDER' ? <BuilderLegs bet={bet} /> : <Legs bet={bet} />}
       <dl className="grid grid-cols-3 gap-2 border-t border-border bg-surface-2/50 px-4 py-2.5 text-xs">
         <div>
           <dt className="text-fg-subtle">Einsatz</dt>
