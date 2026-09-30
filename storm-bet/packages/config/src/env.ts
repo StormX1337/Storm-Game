@@ -129,7 +129,8 @@ export const workerEnvSchema = z
     SGO_BOOKMAKERS: list(''),
     SGO_HORIZON_HOURS: int(48, 1, 24 * 14),
     SGO_ODDS_TTL_SECONDS: int(1800, 60),
-    SGO_LIVE_TTL_SECONDS: int(120, 15),
+    /** Running games are re-read this often; 1 = every second (with LIVE_SYNC_INTERVAL_MS=1000). */
+    SGO_LIVE_TTL_SECONDS: int(5, 1),
     SGO_MIN_REMAINING: int(50, 0),
     SGO_LIVE_BETTING: bool(false),
     SGO_LIVE_MAX_AGE_SECONDS: int(60, 5),
