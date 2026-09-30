@@ -12,6 +12,7 @@ import { Plus, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { ApiError, api, errorMessage } from '@/lib/api-client';
+import { uuid } from '@/lib/uuid';
 
 interface MarketDraft {
   id: string;
@@ -31,7 +32,7 @@ const DEFAULTS: Record<SportKey, { type: MarketType; line?: string }[]> = {
 };
 
 const draft = (type: MarketType, line = ''): MarketDraft => ({
-  id: crypto.randomUUID(),
+  id: uuid(),
   type,
   line,
   odds: {},

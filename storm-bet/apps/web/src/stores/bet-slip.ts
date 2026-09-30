@@ -3,6 +3,7 @@
 import type { SelectionStatus, SlipMode, SportKey } from '@storm-bet/types';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
+import { uuid } from '@/lib/uuid';
 
 export const MAX_SLIP_ITEMS = 20;
 
@@ -111,7 +112,7 @@ export const useBetSlip = create<SlipState>()(
       ensureKey: () => {
         const existing = get().idempotencyKey;
         if (existing) return existing;
-        const key = crypto.randomUUID();
+        const key = uuid();
         set({ idempotencyKey: key });
         return key;
       },

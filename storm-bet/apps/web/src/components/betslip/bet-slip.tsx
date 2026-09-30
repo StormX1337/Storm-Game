@@ -254,18 +254,18 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
     if (acceptFirst) acceptChanges();
     setPlacing(true);
     setError(null);
-    // Read the store directly: after accepting, this render's payload is stale.
-    const s = useBetSlip.getState();
-    const body = slipPayload(
-      s.items,
-      effectiveMode(s.items, s.mode),
-      s.comboStake,
-      s.singleStakes,
-      s.acceptHigher,
-      acceptFirst ? builderQuote : seenOdds,
-    );
-    const idempotencyKey = s.ensureKey();
     try {
+      // Read the store directly: after accepting, this render's payload is stale.
+      const s = useBetSlip.getState();
+      const body = slipPayload(
+        s.items,
+        effectiveMode(s.items, s.mode),
+        s.comboStake,
+        s.singleStakes,
+        s.acceptHigher,
+        acceptFirst ? builderQuote : seenOdds,
+      );
+      const idempotencyKey = s.ensureKey();
       const result = await api<PlaceBetResponse>('/bets/place', {
         body: { ...body, idempotencyKey },
       });
