@@ -13,7 +13,19 @@ export interface CasinoTheme {
   to: string;
   accent: string;
   /** Motif drawn on the cover. */
-  motif: 'bolt' | 'gem' | 'crown' | 'star' | 'wave' | 'moon' | 'wheel' | 'cards' | 'chip';
+  motif:
+    | 'bolt'
+    | 'gem'
+    | 'crown'
+    | 'star'
+    | 'wave'
+    | 'moon'
+    | 'wheel'
+    | 'cards'
+    | 'chip'
+    | 'rocket'
+    | 'bomb'
+    | 'pegs';
 }
 
 export interface CasinoCategoryDto {
@@ -136,7 +148,49 @@ export interface BaccaratResult {
   bets: { side: BaccaratSide; stake: number; payout: number }[];
 }
 
-export type CasinoRoundResult = SlotResult | RouletteResult | BlackjackResult | BaccaratResult;
+export interface CrashResult {
+  game: 'CRASH';
+  /** The cash-out multiplier the player set before the round. */
+  target: number;
+  crashPoint: number;
+  won: boolean;
+}
+
+export type PlinkoRisk = 'low' | 'medium' | 'high';
+
+export interface PlinkoResult {
+  game: 'PLINKO';
+  risk: PlinkoRisk;
+  /** The ball's way down, one step per row. */
+  path: ('L' | 'R')[];
+  bucket: number;
+  multiplier: number;
+}
+
+export interface MinesResult {
+  game: 'MINES';
+  mines: number;
+  revealed: number[];
+  /** Cash-out multiplier now. */
+  multiplier: number;
+  /** After one more safe tile (null when none is left). */
+  nextMultiplier: number | null;
+  /** Present once the round is over. */
+  outcome: 'cashout' | 'mine' | null;
+  /** The mine that was hit. */
+  hit: number | null;
+  /** All mines, shown once the round is over. */
+  minePositions: number[] | null;
+}
+
+export type CasinoRoundResult =
+  | SlotResult
+  | RouletteResult
+  | BlackjackResult
+  | BaccaratResult
+  | CrashResult
+  | PlinkoResult
+  | MinesResult;
 
 export interface CasinoRoundDto {
   id: string;

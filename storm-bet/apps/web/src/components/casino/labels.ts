@@ -5,6 +5,9 @@ export const GAME_TYPE_LABELS: Record<CasinoGameType, string> = {
   ROULETTE: 'Roulette',
   BLACKJACK: 'Blackjack',
   BACCARAT: 'Baccarat',
+  CRASH: 'Crash',
+  PLINKO: 'Plinko',
+  MINES: 'Mines',
 };
 
 export const DEMO_MODE_LABEL = 'DEMO MODE – No real money';

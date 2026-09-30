@@ -168,6 +168,9 @@ export const CasinoGameType = {
   ROULETTE: 'ROULETTE',
   BLACKJACK: 'BLACKJACK',
   BACCARAT: 'BACCARAT',
+  CRASH: 'CRASH',
+  PLINKO: 'PLINKO',
+  MINES: 'MINES',
 } as const;
 export type CasinoGameType = (typeof CasinoGameType)[keyof typeof CasinoGameType];
 export const CASINO_GAME_TYPES = values(CasinoGameType);

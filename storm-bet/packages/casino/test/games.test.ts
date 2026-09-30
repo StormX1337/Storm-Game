@@ -2,6 +2,16 @@ import type { Card, SlotSymbol } from '@storm-bet/types';
 import { describe, expect, it } from 'vitest';
 import {
   actBlackjack,
+  actMines,
+  crashPoint,
+  CRASH_RTP,
+  dropPlinko,
+  minesMultiplier,
+  playCrash,
+  PLINKO_MULTIPLIERS,
+  PLINKO_ROWS,
+  plinkoRtp,
+  startMines,
   dealBaccarat,
   dealBlackjack,
   evaluateSlot,
@@ -137,5 +147,50 @@ describe('blackjack', () => {
     // Dealer stands on soft 17: 18 beats it.
     const stand = actBlackjack(state([c('10'), c('8')], [c('A'), c('6')], []), 'stand', 100n);
     expect(stand.result).toMatchObject({ outcome: 'win', dealerTotal: 17 });
+  });
+});
+
+describe('instant games', () => {
+  it('crash: reaching target m has probability 0.97 / m, paying stake × m', () => {
+    // u = (draw + 1) / 1e6: the last draw gives u = 1 → crash at 0.97 → 1.00×.
+    expect(crashPoint(() => 999_999)).toBe(100);
+    expect(crashPoint(() => 484_999)).toBe(200); // 0.97 / 0.485 = 2.00
+    const win = playCrash(() => 484_999, 1_000n, 200);
+    expect(win).toMatchObject({ payout: 2_000n, result: { won: true, crashPoint: 2 } });
+    expect(playCrash(() => 484_999, 1_000n, 201).payout).toBe(0n);
+    // Exact over the whole draw range: P(point ≥ 2.00×) = 0.485 → RTP 97 %.
+    expect(CRASH_RTP * 100).toBe(97);
+  });
+
+  it('plinko: each risk table returns between 95 and 98 %', () => {
+    for (const risk of ['low', 'medium', 'high'] as const) {
+      const rtp = plinkoRtp(risk);
+      expect(rtp).toBeGreaterThan(0.95);
+      expect(rtp).toBeLessThan(0.98);
+      expect(PLINKO_MULTIPLIERS[risk]).toHaveLength(PLINKO_ROWS + 1);
+    }
+    // All rights: the last bucket.
+    const drop = dropPlinko(() => 1, 100n, 'low');
+    expect(drop.result).toMatchObject({ bucket: 12, multiplier: 8.4 });
+    expect(drop.payout).toBe(840n);
+  });
+
+  it('mines: fair odds less 3 %, a mine ends the round, the field stays hidden until then', () => {
+    // 3 mines: first safe tile pays 25/22 × 0.97.
+    expect(minesMultiplier(3, 0)).toBe(100);
+    expect(minesMultiplier(3, 1)).toBe(Math.floor((25 / 22) * 0.97 * 100));
+    // rng (max) => max - 1 leaves the tiles in order: mines on 0, 1, 2.
+    const { state, result } = startMines((m) => m - 1, 3);
+    expect(result.minePositions).toBeNull();
+    expect(state.mines).toEqual([0, 1, 2]);
+    const safe = actMines(state, { type: 'reveal', tile: 10 }, 1_000n);
+    expect(safe.payout).toBeNull();
+    expect(safe.result).toMatchObject({ revealed: [10], outcome: null });
+    const out = actMines(safe.state, { type: 'cashout' }, 1_000n);
+    expect(out.payout).toBe(BigInt(minesMultiplier(3, 1) * 10));
+    const boom = actMines(safe.state, { type: 'reveal', tile: 1 }, 1_000n);
+    expect(boom).toMatchObject({ payout: 0n, result: { outcome: 'mine', hit: 1 } });
+    expect(boom.result.minePositions).toEqual([0, 1, 2]);
+    expect(() => actMines(safe.state, { type: 'reveal', tile: 10 }, 1_000n)).toThrow();
   });
 });

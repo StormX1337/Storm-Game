@@ -216,6 +216,7 @@ export function RouletteGame({ game, sessionId }: { game: CasinoGameDto; session
         onClick={spin}
         disabled={busy || total < game.minStake}
         data-testid="spin"
+        data-play
       >
         {busy ? 'Kugel rollt …' : 'Drehen'}
       </Button>

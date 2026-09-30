@@ -1,6 +1,9 @@
 import type { ProviderCasinoCategory, ProviderCasinoGame } from '../provider';
 import { BACCARAT_RTP } from '../games/baccarat';
 import { BLACKJACK_RTP } from '../games/blackjack';
+import { CRASH_RTP } from '../games/crash';
+import { MINES_RTP } from '../games/mines';
+import { plinkoRtp } from '../games/plinko';
 import { ROULETTE_RTP } from '../games/roulette';
 import { SLOT_RTP } from '../games/slots';
 
@@ -12,6 +15,7 @@ export const MOCK_CATEGORIES: ProviderCasinoCategory[] = [
   { key: 'baccarat', name: 'Baccarat', sortOrder: 40 },
   { key: 'table-games', name: 'Tischspiele', sortOrder: 50 },
   { key: 'live-casino', name: 'Live Casino', sortOrder: 60 },
+  { key: 'instant', name: 'Sofortspiele', sortOrder: 15 },
 ];
 
 const slot = (
@@ -66,7 +70,59 @@ const table = (
 
 const AUTO = 'Automatisierter Tisch ohne Live-Dealer und ohne Videostream – Ergebnisse vom Server.';
 
+/** Instant games: one decision, the server's result at once (Mines: step by step). */
+const instant = (
+  n: number,
+  slug: string,
+  name: string,
+  type: 'CRASH' | 'PLINKO' | 'MINES',
+  rtp: number,
+  description: string,
+  theme: ProviderCasinoGame['theme'],
+): ProviderCasinoGame => ({
+  externalId: slug,
+  slug,
+  name,
+  type,
+  categories: ['instant'],
+  description,
+  minStake: 10,
+  maxStake: 10_000,
+  rtp: Math.round(rtp * 10_000) / 100,
+  theme,
+  isFeatured: true,
+  isNew: true,
+  sortOrder: n,
+});
+
 export const MOCK_GAMES: ProviderCasinoGame[] = [
+  instant(
+    5,
+    'storm-crash',
+    'Storm Crash',
+    'CRASH',
+    CRASH_RTP,
+    'Der Multiplikator steigt, bis er abstürzt. Lege vorher fest, bei welchem Wert du aussteigst.',
+    { from: '#0f172a', to: '#7c3aed', accent: '#f472b6', motif: 'rocket' },
+  ),
+  instant(
+    6,
+    'storm-mines',
+    'Storm Mines',
+    'MINES',
+    MINES_RTP,
+    '5×5 Felder, du wählst die Zahl der Minen. Jedes sichere Feld erhöht den Gewinn – steig rechtzeitig aus.',
+    { from: '#052e16', to: '#0d9488', accent: '#fde047', motif: 'bomb' },
+  ),
+  instant(
+    7,
+    'storm-plinko',
+    'Storm Plinko',
+    'PLINKO',
+    Math.min(plinkoRtp('low'), plinkoRtp('medium'), plinkoRtp('high')),
+    'Die Kugel fällt durch 12 Reihen Stifte in ein Gewinnfach. Drei Risikostufen.',
+    { from: '#172554', to: '#2563eb', accent: '#fb923c', motif: 'pegs' },
+  ),
   slot(
     10,
     'storm-surge',

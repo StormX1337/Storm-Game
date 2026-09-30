@@ -1,6 +1,19 @@
 import type { CasinoTheme } from '@storm-bet/types';
 import { cn } from '@storm-bet/ui';
-import { Coins, Crown, Disc3, Gem, Moon, Spade, Sparkles, Waves, Zap } from 'lucide-react';
+import {
+  Bomb,
+  Coins,
+  Crown,
+  Disc3,
+  Gem,
+  Grip,
+  Moon,
+  Rocket,
+  Spade,
+  Sparkles,
+  Waves,
+  Zap,
+} from 'lucide-react';
 
 const MOTIF = {
   bolt: Zap,
@@ -12,6 +25,9 @@ const MOTIF = {
   wheel: Disc3,
   cards: Spade,
   chip: Coins,
+  rocket: Rocket,
+  bomb: Bomb,
+  pegs: Grip,
 } as const;
 
 /** Generated cover art: gradient, glow, fine grid and the game's motif. No image files. */

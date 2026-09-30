@@ -129,11 +129,14 @@ nur Wallet, Hauptbuch, Limits/Selbstsperre, RBAC und Audit-Log.
   liefert eine Launch-URL und bucht Runden über einen Server-zu-Server-Wallet-Callback.
 - Spiel-Engines (rein, testbar, Zufall über `crypto.randomInt`): Slot 5×3 mit 10 Linien (RTP exakt 95,36 %),
   europäisches Roulette (97,30 %), Punto Banco mit 8 Decks, Blackjack mit 6 Decks (S17, 3:2, Verdoppeln).
+  Sofortspiele: Crash (Ziel vorab, P(Ziel m) = 0,97 ÷ m), Plinko (12 Reihen, 3 Risikostufen, RTP ≤ 97 %),
+  Mines (5×5, 1–24 Minen, Multiplikator = faire Quote × 0,97; Minen bleiben bis Rundenende serverseitig).
   Jede Karten-Runde mischt einen frischen Schuh; der Rest des Schuhs bleibt serverseitig (`state`).
 - Runde: Redis-Lock pro Nutzer → Transaktion: Idempotenz (`userId`, `idempotencyKey`, Request-Hash),
   offene Sitzung, Kontostatus, Selbstsperre, Einsatzlimits (Sport + Casino gemeinsam), Wallet `FOR UPDATE`,
-  Ergebnis, `casino_rounds`-Zeile, `CASINO_BET` (−Einsatz) und ggf. `CASINO_WIN`. Blackjack-Aktionen sind
-  über die Schritt-Nummer idempotent; eine abgelaufene Sitzung (30 Min. inaktiv, Worker) steht offene Hände.
+  Ergebnis, `casino_rounds`-Zeile, `CASINO_BET` (−Einsatz) und ggf. `CASINO_WIN`. Blackjack- und Mines-Aktionen sind
+  über die Schritt-Nummer idempotent; eine abgelaufene Sitzung (30 Min. inaktiv, Worker) steht offene Hände
+  bzw. zahlt offene Mines-Runden aus.
   Staff kann offene Runden mit `CASINO_REFUND` erstatten (Audit).
 - Datenbank-Guards: Ledger-Referenz (Wette, Casino-Runde oder keine), Vorzeichen der Casino-Buchungen,
   höchstens eine Auszahlung pro Runde, Auszahlung nur passend zum Rundenstatus, abgeschlossene Runden

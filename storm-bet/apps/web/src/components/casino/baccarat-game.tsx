@@ -100,6 +100,7 @@ export function BaccaratGame({ game, sessionId }: { game: CasinoGameDto; session
         onClick={deal}
         disabled={busy || total < game.minStake}
         data-testid="deal"
+        data-play
       >
         {busy ? 'Teilt aus …' : 'Austeilen'}
       </Button>

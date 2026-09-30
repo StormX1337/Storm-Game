@@ -48,6 +48,47 @@ test.describe('casino', () => {
     if (await stand.isVisible()) await stand.click();
     await expect(page.getByTestId('deal')).toBeVisible();
   });
+
+  test('crash, plinko and mines play on the server', async ({ page }) => {
+    await signIn(page);
+    const open = async (name: string) => {
+      await page.goto('/casino');
+      await page
+        .getByTestId('game-card')
+        .filter({ hasText: name })
+        .getByRole('link', { name: /Demo spielen/ })
+        .first()
+        .click();
+      await expect(page.getByTestId('game-controls')).toBeVisible();
+    };
+    const played = () =>
+      page.waitForResponse((r) => r.url().includes('/play') && r.request().method() === 'POST');
+
+    await open('Storm Crash');
+    let play = played();
+    await page.getByTestId('crash-play').click();
+    expect((await play).status()).toBe(201);
+
+    await open('Storm Plinko');
+    play = played();
+    await page.getByTestId('plinko-drop').click();
+    expect((await play).status()).toBe(201);
+
+    await open('Storm Mines');
+    // A round left open by an earlier run is resumed; cash it out first.
+    const cashout = page.getByTestId('mines-cashout');
+    if (await cashout.isVisible()) await cashout.click();
+    play = played();
+    await page.getByTestId('mines-start').click();
+    expect((await play).status()).toBe(201);
+    await expect(cashout).toBeVisible();
+    play = played();
+    await page.getByTestId('mines-tile').first().click();
+    expect((await play).status()).toBe(201);
+    // Either a mine ended the round or it goes on and can be cashed out.
+    if (await cashout.isVisible()) await cashout.click();
+    await expect(page.getByTestId('mines-start')).toBeVisible();
+  });
 });
 
 test('mobile casino: no horizontal overflow and the tab bar @mobile', async ({ page }) => {

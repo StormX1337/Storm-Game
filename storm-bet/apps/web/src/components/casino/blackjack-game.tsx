@@ -97,7 +97,14 @@ export function BlackjackGame({
         max={game.maxStake}
         disabled={busy}
       />
-      <Button size="lg" className="w-full" onClick={deal} disabled={busy} data-testid="deal">
+      <Button
+        size="lg"
+        className="w-full"
+        onClick={deal}
+        disabled={busy}
+        data-testid="deal"
+        data-play
+      >
         {busy ? 'Teilt aus …' : round ? 'Neue Hand' : 'Austeilen'}
       </Button>
     </>

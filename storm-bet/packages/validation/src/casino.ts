@@ -30,7 +30,26 @@ export const casinoPlaySchema = z
   .object({
     sessionId: uuid,
     idempotencyKey: uuid,
-    action: z.enum(['spin', 'deal', 'hit', 'stand', 'double']),
+    action: z.enum([
+      'spin',
+      'deal',
+      'hit',
+      'stand',
+      'double',
+      'play',
+      'drop',
+      'start',
+      'reveal',
+      'cashout',
+    ]),
+    /** Crash: cash-out multiplier set before the round. */
+    target: z.number().min(1.01).max(100).optional(),
+    /** Plinko risk level. */
+    risk: z.enum(['low', 'medium', 'high']).optional(),
+    /** Mines: number of mines on the 5×5 field. */
+    mines: z.number().int().min(1).max(24).optional(),
+    /** Mines: tile to reveal (0–24). */
+    tile: z.number().int().min(0).max(24).optional(),
     stake: positiveMoneyMinor.optional(),
     bets: z.array(rouletteBet).min(1).max(20).optional(),
     sides: z.array(baccaratBet).min(1).max(3).optional(),

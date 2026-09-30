@@ -101,7 +101,14 @@ export function SlotGame({ game, sessionId }: { game: CasinoGameDto; sessionId: 
         max={game.maxStake}
         disabled={busy}
       />
-      <Button size="lg" className="w-full" onClick={spin} disabled={busy} data-testid="spin">
+      <Button
+        size="lg"
+        className="w-full"
+        onClick={spin}
+        disabled={busy}
+        data-testid="spin"
+        data-play
+      >
         {busy ? 'Dreht …' : 'Drehen'}
       </Button>
     </>

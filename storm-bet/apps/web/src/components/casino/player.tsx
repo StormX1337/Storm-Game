@@ -11,6 +11,9 @@ import { formatMoney } from '@/lib/format';
 import { useSession } from '../providers/session';
 import { BaccaratGame } from './baccarat-game';
 import { BlackjackGame } from './blackjack-game';
+import { CrashGame } from './crash-game';
+import { MinesGame } from './mines-game';
+import { PlinkoGame } from './plinko-game';
 import { GameSideContext } from './controls';
 import { GameCover } from './game-cover';
 import { DEMO_MODE_LABEL, GAME_TYPE_LABELS } from './labels';
@@ -25,6 +28,12 @@ const RULES: Record<CasinoGameDto['type'], string> = {
     '6 Decks, neu gemischt je Hand. Dealer zieht bis 16 und steht auf allen 17. Blackjack 3:2, Verdoppeln auf die ersten zwei Karten, kein Teilen.',
   BACCARAT:
     'Punto Banco mit 8 Decks und festen Ziehregeln. Spieler 1:1, Bank 0,95:1, Unentschieden 8:1 (Spieler/Bank erhalten ihren Einsatz zurück).',
+  CRASH:
+    'Du legst vor der Runde fest, bei welchem Multiplikator du aussteigst (1,01× bis 100×). Erreicht der Kurs dein Ziel, bekommst du Einsatz × Ziel; stürzt er vorher ab, ist der Einsatz verloren. Die Wahrscheinlichkeit, ein Ziel m zu erreichen, beträgt 0,97 ÷ m.',
+  PLINKO:
+    'Die Kugel fällt durch 12 Reihen und springt an jedem Stift mit 50 % nach links oder rechts. Das Fach bestimmt den Multiplikator; drei Risikostufen mit eigenen Tabellen.',
+  MINES:
+    '25 Felder, 1 bis 24 Minen. Jedes sichere Feld erhöht den Multiplikator (faire Quote × 0,97). Du kannst jederzeit auszahlen; eine Mine beendet die Runde ohne Gewinn.',
 };
 
 export function GamePlayer({ game }: { game: CasinoGameDto }) {
@@ -135,6 +144,12 @@ export function GamePlayer({ game }: { game: CasinoGameDto }) {
             <SlotGame game={game} sessionId={session.id} />
           ) : game.type === 'ROULETTE' ? (
             <RouletteGame game={game} sessionId={session.id} />
+          ) : game.type === 'CRASH' ? (
+            <CrashGame game={game} sessionId={session.id} />
+          ) : game.type === 'PLINKO' ? (
+            <PlinkoGame game={game} sessionId={session.id} />
+          ) : game.type === 'MINES' ? (
+            <MinesGame game={game} sessionId={session.id} openRound={session.openRound} />
           ) : game.type === 'BLACKJACK' ? (
             <BlackjackGame game={game} sessionId={session.id} openRound={session.openRound} />
           ) : (

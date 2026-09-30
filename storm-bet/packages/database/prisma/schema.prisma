@@ -664,6 +664,9 @@ enum CasinoGameType {
   ROULETTE
   BLACKJACK
   BACCARAT
+  CRASH
+  PLINKO
+  MINES
 }
 
 enum CasinoGameStatus {

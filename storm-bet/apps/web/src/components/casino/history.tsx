@@ -21,6 +21,16 @@ function summary(r: CasinoRoundDto): string {
       return `Zahl ${x.number}`;
     case 'BLACKJACK':
       return x.outcome ? `${x.playerTotal} : ${x.dealerTotal ?? '–'}` : 'Hand läuft';
+    case 'CRASH':
+      return `Ziel ${x.target.toFixed(2)}× · Crash ${x.crashPoint.toFixed(2)}×`;
+    case 'PLINKO':
+      return `${x.multiplier}× (${x.risk === 'low' ? 'niedrig' : x.risk === 'medium' ? 'mittel' : 'hoch'})`;
+    case 'MINES':
+      return x.outcome === 'mine'
+        ? `Mine nach ${x.revealed.length} Feldern`
+        : x.outcome
+          ? `${x.revealed.length} Felder · ${x.multiplier.toFixed(2)}×`
+          : 'Runde läuft';
     case 'BACCARAT':
       return `${x.playerTotal} : ${x.bankerTotal} (${x.winner === 'player' ? 'Spieler' : x.winner === 'banker' ? 'Bank' : 'Unentschieden'})`;
   }

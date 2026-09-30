@@ -27,3 +27,13 @@ export {
   type BlackjackState,
 } from './games/blackjack';
 export { shuffledShoe } from './games/cards';
+export { playCrash, crashPoint, CRASH_RTP } from './games/crash';
+export { dropPlinko, plinkoRtp, PLINKO_MULTIPLIERS, PLINKO_ROWS } from './games/plinko';
+export {
+  actMines,
+  startMines,
+  minesMultiplier,
+  MINES_RTP,
+  MINES_TILES,
+  type MinesState,
+} from './games/mines';

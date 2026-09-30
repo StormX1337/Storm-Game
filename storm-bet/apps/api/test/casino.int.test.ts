@@ -306,6 +306,135 @@ describe('blackjack rounds', () => {
   });
 });
 
+describe('instant games', () => {
+  // (max) => max - 1: crash at 1.00, the plinko ball always falls right, mines on tiles 0–2.
+  const service = () =>
+    new CasinoService({
+      db: t.db,
+      redis: t.redis,
+      providers: [new MockCasinoProvider()],
+      rng: (m) => m - 1,
+    });
+
+  it('decides crash and plinko on the server', async () => {
+    const { user } = await player(10_000n);
+    const casino = service();
+    const crash = games['storm-crash']!;
+    const cs = await casino.openSession(user.id, crash);
+    const lost = await casino.play(user.id, crash, {
+      sessionId: cs.id,
+      idempotencyKey: randomUUID(),
+      action: 'play',
+      stake: 100,
+      target: 2,
+    });
+    expect(lost.round).toMatchObject({
+      status: 'SETTLED',
+      payout: 0,
+      result: { game: 'CRASH', target: 2, crashPoint: 1, won: false },
+    });
+    await expect(
+      casino.play(user.id, crash, {
+        sessionId: cs.id,
+        idempotencyKey: randomUUID(),
+        action: 'play',
+        stake: 100,
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+
+    const plinko = games['storm-plinko']!;
+    const ps = await casino.openSession(user.id, plinko);
+    const drop = await casino.play(user.id, plinko, {
+      sessionId: ps.id,
+      idempotencyKey: randomUUID(),
+      action: 'drop',
+      stake: 100,
+      risk: 'low',
+    });
+    expect(drop.round).toMatchObject({ status: 'SETTLED', payout: 840 });
+    expect((await wallet(user.id)).balance).toBe(10_000n - 200n + 840n);
+  });
+
+  it('keeps the mines hidden until the round ends and pays a cash-out once', async () => {
+    const { user } = await player(10_000n);
+    const casino = service();
+    const gameId = games['storm-mines']!;
+    const session = await casino.openSession(user.id, gameId);
+    const start = await casino.play(user.id, gameId, {
+      sessionId: session.id,
+      idempotencyKey: randomUUID(),
+      action: 'start',
+      stake: 100,
+      mines: 3,
+    });
+    expect(start.round).toMatchObject({ status: 'OPEN', result: { minePositions: null } });
+    expect(JSON.stringify(start)).not.toContain('"actions"');
+    const roundId = start.round.id;
+    const reveal = await casino.play(user.id, gameId, {
+      sessionId: session.id,
+      idempotencyKey: randomUUID(),
+      action: 'reveal',
+      tile: 10,
+      roundId,
+      step: 0,
+    });
+    expect(reveal.round).toMatchObject({ status: 'OPEN', result: { revealed: [10] } });
+    await expect(
+      casino.play(user.id, gameId, {
+        sessionId: session.id,
+        idempotencyKey: randomUUID(),
+        action: 'reveal',
+        tile: 10,
+        roundId,
+        step: 1,
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    const cash = await casino.play(user.id, gameId, {
+      sessionId: session.id,
+      idempotencyKey: randomUUID(),
+      action: 'cashout',
+      roundId,
+      step: 1,
+    });
+    expect(cash.round).toMatchObject({
+      status: 'SETTLED',
+      payout: 110,
+      result: { outcome: 'cashout', minePositions: [0, 1, 2] },
+    });
+    const replay = await casino.play(user.id, gameId, {
+      sessionId: session.id,
+      idempotencyKey: randomUUID(),
+      action: 'cashout',
+      roundId,
+      step: 1,
+    });
+    expect(replay.replayed).toBe(true);
+    expect((await wallet(user.id)).balance).toBe(10_010n);
+
+    const next = await casino.play(user.id, gameId, {
+      sessionId: session.id,
+      idempotencyKey: randomUUID(),
+      action: 'start',
+      stake: 100,
+      mines: 3,
+    });
+    const boom = await casino.play(user.id, gameId, {
+      sessionId: session.id,
+      idempotencyKey: randomUUID(),
+      action: 'reveal',
+      tile: 1,
+      roundId: next.round.id,
+      step: 0,
+    });
+    expect(boom.round).toMatchObject({
+      status: 'SETTLED',
+      payout: 0,
+      result: { outcome: 'mine', hit: 1 },
+    });
+    expect((await wallet(user.id)).balance).toBe(9_910n);
+  });
+});
+
 describe('casino admin', () => {
   it('manages games with RBAC and an audit trail', async () => {
     const staff = await createUser(t.db, 'ADMIN');

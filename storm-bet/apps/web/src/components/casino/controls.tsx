@@ -57,9 +57,23 @@ export function GameShell({
   controls: React.ReactNode;
 }) {
   const side = useContext(GameSideContext);
+  const areaRef = useRef<HTMLDivElement>(null);
+  // On a phone the controls sit below the game: bring the game back into view
+  // when a round starts, so the player sees it play out.
+  const showArea = (e: React.MouseEvent) => {
+    const area = areaRef.current;
+    if (!area || !(e.target as Element).closest('[data-play]')) return;
+    if (area.getBoundingClientRect().top >= 80) return;
+    // After React's commit, which may refocus (and so scroll to) the button.
+    requestAnimationFrame(() => area.scrollIntoView({ behavior: 'smooth' }));
+  };
   return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
-      <Card className="overflow-hidden lg:row-span-3 lg:[&>*]:h-full" data-testid="game-area">
+    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]" onClickCapture={showArea}>
+      <Card
+        ref={areaRef}
+        className="scroll-mt-20 overflow-hidden lg:row-span-3 lg:[&>*]:h-full"
+        data-testid="game-area"
+      >
         {area}
       </Card>
       {side.balance}

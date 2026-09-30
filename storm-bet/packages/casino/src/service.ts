@@ -27,6 +27,7 @@ import {
   type CasinoRoundResult,
   type CasinoSessionDto,
   type RouletteBet,
+  type PlinkoRisk,
 } from '@storm-bet/types';
 import { playBaccarat } from './games/baccarat';
 import {
@@ -35,6 +36,9 @@ import {
   type BlackjackAction,
   type BlackjackState,
 } from './games/blackjack';
+import { playCrash } from './games/crash';
+import { actMines, startMines, type MinesState } from './games/mines';
+import { dropPlinko } from './games/plinko';
 import { rouletteBetValid, spinRoulette } from './games/roulette';
 import { spinSlot } from './games/slots';
 import type { CasinoProvider } from './provider';
@@ -43,16 +47,33 @@ import { cryptoRng, type Rng } from './rng';
 export interface CasinoPlayInput {
   sessionId: string;
   idempotencyKey: string;
-  action: 'spin' | 'deal' | 'hit' | 'stand' | 'double';
+  action:
+    | 'spin'
+    | 'deal'
+    | 'hit'
+    | 'stand'
+    | 'double'
+    | 'play'
+    | 'drop'
+    | 'start'
+    | 'reveal'
+    | 'cashout';
   /** Slots and blackjack deal. */
   stake?: number;
   /** Roulette. */
   bets?: RouletteBet[];
   /** Baccarat. */
   sides?: { side: BaccaratSide; stake: number }[];
-  /** Blackjack follow-up actions: the hand and the step the player acted on. */
+  /** Blackjack and Mines follow-up actions: the round and the step the player acted on. */
   roundId?: string;
   step?: number;
+  /** Crash: cash-out multiplier set before the round. */
+  target?: number;
+  /** Plinko risk level. */
+  risk?: PlinkoRisk;
+  /** Mines: mines on the field (start) and the tile to reveal. */
+  mines?: number;
+  tile?: number;
 }
 
 export interface CasinoDeps {
@@ -173,11 +194,14 @@ export class CasinoService {
 
     const open = await this.deps.db.casinoRound.findMany({
       where: { sessionId, status: 'OPEN' },
-      select: { id: true },
+      select: { id: true, game: { select: { type: true } } },
     });
-    for (const { id } of open) {
+    // An unfinished hand is stood, an open mines field is cashed out.
+    for (const { id, game } of open) {
       await withTransaction(this.deps.db, (tx) =>
-        this.applyBlackjack(tx, session.userId, id, 'stand'),
+        game.type === 'MINES'
+          ? this.applyMines(tx, session.userId, id, { type: 'cashout' })
+          : this.applyBlackjack(tx, session.userId, id, 'stand'),
       );
     }
     await withTransaction(this.deps.db, async (tx) => {
@@ -288,9 +312,30 @@ export class CasinoService {
       );
     }
 
-    const expected = { SLOT: 'spin', ROULETTE: 'spin', BACCARAT: 'deal', BLACKJACK: 'deal' }[
-      game.type
-    ];
+    if (game.type === 'MINES' && input.action !== 'start') {
+      if (!input.roundId || input.step === undefined)
+        throw new AppError('VALIDATION_ERROR', 'Runde und Schritt fehlen.');
+      const action =
+        input.action === 'cashout'
+          ? ({ type: 'cashout' } as const)
+          : input.action === 'reveal' && input.tile !== undefined
+            ? ({ type: 'reveal', tile: input.tile } as const)
+            : null;
+      if (!action) throw new AppError('VALIDATION_ERROR', 'Unbekannte Aktion.');
+      return withTransaction(db, (tx) =>
+        this.applyMines(tx, userId, input.roundId!, action, { gameId, step: input.step! }),
+      );
+    }
+
+    const expected = {
+      SLOT: 'spin',
+      ROULETTE: 'spin',
+      BACCARAT: 'deal',
+      BLACKJACK: 'deal',
+      CRASH: 'play',
+      PLINKO: 'drop',
+      MINES: 'start',
+    }[game.type];
     if (input.action !== expected) throw new AppError('VALIDATION_ERROR', 'Unbekannte Aktion.');
     const stake = this.stakeOf(game.type, input);
     if (stake < game.minStake || stake > game.maxStake) {
@@ -324,7 +369,7 @@ export class CasinoService {
           },
         });
       }
-      if (game.type === 'BLACKJACK') {
+      if (game.type === 'BLACKJACK' || game.type === 'MINES') {
         const open = await tx.casinoRound.count({
           where: { sessionId: session.id, status: 'OPEN' },
         });
@@ -339,7 +384,21 @@ export class CasinoService {
       else if (game.type === 'ROULETTE') ({ result, payout } = spinRoulette(this.rng, input.bets!));
       else if (game.type === 'BACCARAT')
         ({ result, payout } = playBaccarat(this.rng, input.sides!));
-      else {
+      else if (game.type === 'CRASH') {
+        if (input.target === undefined)
+          throw new AppError('VALIDATION_ERROR', 'Auszahlungsziel fehlt.');
+        ({ result, payout } = playCrash(this.rng, stake, Math.round(input.target * 100)));
+      } else if (game.type === 'PLINKO') {
+        if (!input.risk) throw new AppError('VALIDATION_ERROR', 'Risikostufe fehlt.');
+        ({ result, payout } = dropPlinko(this.rng, stake, input.risk));
+      } else if (game.type === 'MINES') {
+        if (input.mines === undefined)
+          throw new AppError('VALIDATION_ERROR', 'Anzahl der Minen fehlt.');
+        const start = startMines(this.rng, input.mines);
+        result = start.result;
+        payout = null;
+        state = start.state;
+      } else {
         const step = dealBlackjack(this.rng, stake);
         ({ result, payout } = step);
         state = step.state;
@@ -465,6 +524,79 @@ export class CasinoService {
     return { round: toRoundDto(updated), balance: balanceOf(wallet), replayed: false };
   }
 
+  /**
+   * One Mines action (reveal a tile or cash out) on a locked field, made
+   * idempotent by the step number like a blackjack action.
+   */
+  private async applyMines(
+    tx: Tx,
+    userId: string,
+    roundId: string,
+    action: { type: 'reveal'; tile: number } | { type: 'cashout' },
+    expect?: { gameId: string; step: number },
+  ): Promise<CasinoPlayResponse> {
+    await tx.$queryRaw`SELECT "id" FROM "casino_rounds" WHERE "id" = ${roundId}::uuid FOR UPDATE`;
+    const round = await tx.casinoRound.findUnique({
+      where: { id: roundId },
+      include: { game: { select: { name: true, type: true } } },
+    });
+    if (!round || round.userId !== userId || (expect && round.gameId !== expect.gameId))
+      throw new AppError('NOT_FOUND', 'Runde nicht gefunden.');
+    const key = action.type === 'reveal' ? `reveal:${action.tile}` : 'cashout';
+    if (expect && (round.status !== 'OPEN' || round.step !== expect.step)) {
+      const applied = (round.result as unknown as { actions?: string[] }).actions;
+      if (
+        applied?.[expect.step] === key ||
+        (round.status !== 'OPEN' && round.step === expect.step + 1)
+      ) {
+        const wallet = await tx.wallet.findUniqueOrThrow({ where: { userId } });
+        return {
+          round: toRoundDto(round),
+          balance: balanceOf({ ...wallet, userId }),
+          replayed: true,
+        };
+      }
+      throw new AppError('CONFLICT', 'Das Feld hat sich geändert. Bitte neu laden.');
+    }
+    if (round.status !== 'OPEN') throw new AppError('CONFLICT', 'Die Runde ist beendet.');
+    let step;
+    try {
+      step = actMines(round.state as unknown as MinesState, action, round.stake);
+    } catch {
+      throw new AppError('VALIDATION_ERROR', 'Dieses Feld ist nicht verfügbar.');
+    }
+    const done = step.payout !== null;
+    const now = this.now();
+    const updated = await tx.casinoRound.update({
+      where: { id: round.id },
+      data: {
+        step: round.step + 1,
+        status: done ? 'SETTLED' : 'OPEN',
+        payout: step.payout ?? 0n,
+        // The visible result keeps the action list for idempotent retries.
+        result: { ...step.result, actions: step.state.actions } as unknown as Prisma.InputJsonValue,
+        state: (done ? {} : step.state) as unknown as Prisma.InputJsonValue,
+        settledAt: done ? now : null,
+      },
+      include: { game: { select: { name: true } } },
+    });
+    let wallet = await lockWallet(tx, userId);
+    if (done && step.payout)
+      wallet = await creditCasino(
+        tx,
+        wallet,
+        'CASINO_WIN',
+        step.payout,
+        round.id,
+        `Casino-Gewinn: ${round.game.name}`,
+      );
+    await tx.casinoSession.update({
+      where: { id: round.sessionId },
+      data: { lastActivityAt: now },
+    });
+    return { round: toRoundDto(updated), balance: balanceOf(wallet), replayed: false };
+  }
+
   /** Staff: returns the stake of an unfinished round. Settled rounds are final. */
   async refundRound(roundId: string, actor: AuditActor, reason: string): Promise<CasinoRoundDto> {
     return withTransaction(this.deps.db, async (tx) => {
@@ -533,7 +665,7 @@ export class CasinoService {
   }
 
   private stakeOf(type: string, input: CasinoPlayInput): bigint {
-    if (type === 'SLOT' || type === 'BLACKJACK') {
+    if (['SLOT', 'BLACKJACK', 'CRASH', 'PLINKO', 'MINES'].includes(type)) {
       if (!Number.isSafeInteger(input.stake) || input.stake! <= 0)
         throw new AppError('VALIDATION_ERROR', 'Ungültiger Einsatz.');
       return BigInt(input.stake!);
