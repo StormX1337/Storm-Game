@@ -4,6 +4,7 @@ import { ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { formatDateTime, formatMoney, formatOdds } from '@/lib/format';
 import { BET_STATUS_LABELS, BET_TYPE_LABELS, betStatusVariant } from '@/lib/labels';
+import { CashoutBar } from './cashout-bar';
 
 const RESULT_STYLE = {
   PENDING: 'bg-fg-subtle',
@@ -14,11 +15,8 @@ const RESULT_STYLE = {
 
 export function BetCard({ bet, href }: { bet: BetDto; href?: string }) {
   const payout = bet.payout ?? (bet.status === 'PENDING' ? bet.potentialReturn : 0);
-  const body = (
-    <Card
-      className="overflow-hidden transition-colors hover:border-border-strong"
-      data-testid="bet-card"
-    >
+  const content = (
+    <>
       <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2.5">
         <Badge variant={betStatusVariant(bet.status)}>{BET_STATUS_LABELS[bet.status]}</Badge>
         <span className="text-sm font-medium">{BET_TYPE_LABELS[bet.type]}</span>
@@ -59,7 +57,7 @@ export function BetCard({ bet, href }: { bet: BetDto; href?: string }) {
           <dd
             className={cn(
               'tabular font-semibold',
-              bet.status === 'WON' && 'text-up',
+              (bet.status === 'WON' || bet.status === 'CASHED_OUT') && 'text-up',
               bet.status === 'LOST' && 'text-fg-muted',
             )}
           >
@@ -67,13 +65,23 @@ export function BetCard({ bet, href }: { bet: BetDto; href?: string }) {
           </dd>
         </div>
       </dl>
-    </Card>
+    </>
   );
-  return href ? (
-    <Link href={href} className="block rounded-lg">
-      {body}
-    </Link>
-  ) : (
-    body
+  return (
+    <Card
+      className="overflow-hidden transition-colors hover:border-border-strong"
+      data-testid="bet-card"
+    >
+      {href ? (
+        <Link href={href} className="block">
+          {content}
+        </Link>
+      ) : (
+        content
+      )}
+      {bet.status === 'PENDING' && bet.type !== 'BET_BUILDER' ? (
+        <CashoutBar betId={bet.id} />
+      ) : null}
+    </Card>
   );
 }

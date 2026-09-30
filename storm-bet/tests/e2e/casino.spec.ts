@@ -44,7 +44,8 @@ test.describe('casino', () => {
     if (await stand.isVisible()) await stand.click();
     await page.getByTestId('deal').click();
     await expect(page.getByTestId('blackjack-table')).toBeVisible();
-    if (await stand.isEnabled().catch(() => false)) await stand.click();
+    // A natural blackjack ends the hand at once; otherwise stand.
+    if (await stand.isVisible()) await stand.click();
     await expect(page.getByTestId('deal')).toBeVisible();
   });
 });

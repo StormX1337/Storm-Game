@@ -3,7 +3,7 @@ import { Prisma } from '@storm-bet/database';
 import { createRedis } from '@storm-bet/redis';
 import { AppError } from '@storm-bet/types';
 import { afterAll, describe, expect, it } from 'vitest';
-import { BetPlacementService, SettlementService } from '../src';
+import { BetPlacementService, CashoutService, SettlementService } from '../src';
 import { createEvent, createUser, db, finishEvent, limits, wallet } from './fixtures';
 
 const redis = createRedis(process.env.REDIS_URL!);
@@ -475,5 +475,57 @@ describe('Bet Builder', () => {
     const bet = await db.bet.findUniqueOrThrow({ where: { id: placed.bets[0]!.id } });
     expect(bet).toMatchObject({ status: 'VOID', payout: 500n });
     expect((await wallet(user.id)).balance).toBe(100_000n);
+  });
+});
+
+describe('cashout', () => {
+  const cashout = new CashoutService({ db, redis, marginPct: 5 });
+
+  it('pays the value at current prices once, books it and ends the bet', async () => {
+    const user = await createUser(100_000n);
+    const m = await createEvent({ odds: [2.0, 3.4, 3.8] });
+    const placed = await placement.place(user.id, single(m.home.id, 2.0, 1_000));
+    const betId = placed.bets[0]!.id;
+    // The home side shortened: the bet is worth more now.
+    await db.selection.update({
+      where: { id: m.home.id },
+      data: { odds: new Prisma.Decimal(1.6) },
+    });
+
+    const [quote] = await cashout.quotes(user.id, [betId]);
+    // 10,00 × 2.00 / 1.60 × 0.95 = 11,87
+    expect(quote).toEqual({ betId, available: true, amount: 1_187, reason: null });
+
+    await expectCode(cashout.cashOut(user.id, betId, 1_300n), 'ODDS_CHANGED');
+    const result = await cashout.cashOut(user.id, betId, 1_187n);
+    expect(result.bet).toMatchObject({ status: 'CASHED_OUT', payout: 1_187 });
+    expect(result.wallet).toMatchObject({ balance: 100_187, reserved: 0 });
+    // A repeat answers with the result and pays nothing twice.
+    expect((await cashout.cashOut(user.id, betId, 1_187n)).wallet.balance).toBe(100_187);
+    const ledger = await db.transaction.findMany({ where: { betId, type: 'CASH_OUT' } });
+    expect(ledger).toHaveLength(1);
+    expect(await db.auditLog.count({ where: { action: 'bet.cashed_out', targetId: betId } })).toBe(
+      1,
+    );
+
+    // The later result changes nothing.
+    await finishEvent(m.event.id, 0, 1);
+    await settlement.settleEvent(m.event.id);
+    expect((await db.bet.findUniqueOrThrow({ where: { id: betId } })).status).toBe('CASHED_OUT');
+    expect((await wallet(user.id)).balance).toBe(100_187n);
+  });
+
+  it('offers nothing for suspended markets, other players or lost legs', async () => {
+    const user = await createUser(100_000n);
+    const other = await createUser(100_000n);
+    const m = await createEvent();
+    const betId = (await placement.place(user.id, single(m.home.id, 1.65, 1_000))).bets[0]!.id;
+    expect(await cashout.quotes(other.id, [betId])).toEqual([]);
+    await expectCode(cashout.cashOut(other.id, betId, 100n), 'NOT_FOUND');
+    await db.market.update({ where: { id: m.market.id }, data: { status: 'SUSPENDED' } });
+    const [quote] = await cashout.quotes(user.id, [betId]);
+    expect(quote).toMatchObject({ available: false, amount: null });
+    await expectCode(cashout.cashOut(user.id, betId, 100n), 'MARKET_SUSPENDED');
+    expect((await wallet(user.id)).reserved).toBe(1_000n);
   });
 });

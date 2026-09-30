@@ -1,7 +1,14 @@
 import { BET_INCLUDE, toBetDto } from '@storm-bet/betting-engine';
 import type { Prisma } from '@storm-bet/database';
 import { AppError, type BetStatus } from '@storm-bet/types';
-import { betListQuery, idParam, placeBetSchema, validateSlipSchema } from '@storm-bet/validation';
+import {
+  betListQuery,
+  cashoutQuotesSchema,
+  cashoutSchema,
+  idParam,
+  placeBetSchema,
+  validateSlipSchema,
+} from '@storm-bet/validation';
 import type { FastifyInstance } from 'fastify';
 import type { AppContext } from '../context';
 import { cursorArgs, page } from '../lib/pagination';
@@ -15,7 +22,7 @@ const FILTERS: Record<string, BetStatus[] | undefined> = {
   won: ['WON'],
   lost: ['LOST'],
   void: ['VOID', 'REFUNDED'],
-  settled: ['WON', 'LOST', 'VOID', 'REFUNDED'],
+  settled: ['WON', 'LOST', 'VOID', 'REFUNDED', 'CASHED_OUT'],
 };
 
 export function betRoutes(ctx: AppContext) {
@@ -36,6 +43,23 @@ export function betRoutes(ctx: AppContext) {
       });
       reply.status(result.replayed ? 200 : 201);
       return result;
+    });
+
+    app.post('/bets/cashout/quotes', { preHandler: authenticated }, async (request) => {
+      const session = requireSession(request);
+      const { betIds } = parse(cashoutQuotesSchema, request.body);
+      return { quotes: await ctx.cashout.quotes(session.userId, betIds) };
+    });
+
+    app.post('/bets/:id/cashout', { preHandler: authenticated }, async (request, reply) => {
+      const session = requireSession(request);
+      await enforceRateLimit(ctx.redis, RATE_LIMITS.placeBet, session.userId, reply);
+      const { id } = parse(idParam, request.params);
+      const { amount } = parse(cashoutSchema, request.body);
+      return ctx.cashout.cashOut(session.userId, id, BigInt(amount), {
+        ip: ctx.env.AUDIT_LOG_IP ? request.ip : null,
+        userAgent: request.headers['user-agent'] ?? null,
+      });
     });
 
     app.get('/bets', { preHandler: authenticated }, async (request) => {

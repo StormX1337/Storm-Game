@@ -92,6 +92,35 @@ test.describe('player journey', () => {
     await expect(page.getByTestId('bet-card').first()).toContainText('Bet Builder');
   });
 
+  test('an open bet can be cashed out at its current value', async ({ page }) => {
+    await login(page, ADMIN_EMAIL, ADMIN_PASSWORD);
+    await openUpcomingEvent(page);
+    await placeFirstOpenSelection(page, '3');
+    const reference = (await page
+      .getByTestId('bet-receipt')
+      .locator('.font-mono')
+      .first()
+      .textContent())!;
+    await page.goto('/dashboard/bets');
+    const card = page.getByTestId('bet-card').filter({ hasText: reference });
+    await card.getByTestId('cashout-button').click();
+    // A moved value asks again; the player confirms explicitly each time.
+    const done = page.getByText(/Cashout: .* gutgeschrieben/);
+    const confirm = card.getByTestId('cashout-confirm');
+    for (let attempt = 0; attempt < 3 && (await confirm.isVisible()); attempt += 1) {
+      await confirm.click();
+      const paid = await done
+        .waitFor({ state: 'visible', timeout: 5_000 })
+        .then(() => true)
+        .catch(() => false);
+      if (paid) break;
+    }
+    await page.reload();
+    await expect(page.getByTestId('bet-card').filter({ hasText: reference })).toContainText(
+      'Ausgezahlt',
+    );
+  });
+
   test('a live bet goes through although live prices keep moving', async ({ page }) => {
     await login(page, ADMIN_EMAIL, ADMIN_PASSWORD, '/live');
     await placeFirstOpenSelection(page, '2');

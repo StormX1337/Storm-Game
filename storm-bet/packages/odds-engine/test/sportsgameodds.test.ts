@@ -193,6 +193,19 @@ describe('SportsGameOddsProvider', () => {
     expect((await p.getMarkets('sgo-live')).some((m) => m.derived)).toBe(false);
   });
 
+  it('shows the running period, the clock and the team figures the feed reports', async () => {
+    const { provider: p } = provider();
+    const live = (await p.getEvents(window)).find((e) => e.externalId === 'sgo-live')!;
+    expect(live.liveState).toEqual({ period: '1H', clock: "38'" });
+    expect(live.statistics).toEqual({
+      sport: 'football',
+      goals: { home: 1, away: 0 },
+      corners: { home: 4, away: 2 },
+      yellowCards: { home: 1, away: 2 },
+      redCards: { home: 0, away: 0 },
+    });
+  });
+
   it('skips quarter lines and markets without bookmaker margin', async () => {
     const { provider: p } = provider();
     await p.getEvents(window);

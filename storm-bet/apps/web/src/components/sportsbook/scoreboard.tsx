@@ -7,12 +7,19 @@ import { formatDateTime, formatKickoff } from '@/lib/format';
 import { EVENT_STATUS_LABELS } from '@/lib/labels';
 import { useLiveEvent } from './hooks';
 import { DemoDataBadge, LiveBadge } from './live-indicator';
+import { MatchField } from './match-field';
 import { SportIcon } from './sport-icon';
 
 export function Scoreboard({ event }: { event: EventDetailDto }) {
   const live = useLiveEvent(event);
   const stats = live.statistics ?? event.statistics;
   const started = live.score !== null;
+  const statusLine = [
+    PERIOD_LABELS[live.liveState?.period ?? ''] ?? live.liveState?.period,
+    live.liveState?.clock,
+  ]
+    .filter(Boolean)
+    .join(' · ');
   return (
     <Card className="overflow-hidden">
       <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2.5 text-xs text-fg-muted">
@@ -25,41 +32,59 @@ export function Scoreboard({ event }: { event: EventDetailDto }) {
           {live.isLive ? <LiveBadge /> : <span>{EVENT_STATUS_LABELS[live.status]}</span>}
         </span>
       </div>
-      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4 px-4 py-6 sm:px-8">
-        <TeamName name={event.home.name} short={event.home.shortName} align="right" />
-        <div className="text-center">
-          {started && live.score ? (
-            <p
-              className="tabular text-4xl font-semibold tracking-tight sm:text-5xl"
-              data-testid="score"
-            >
-              {live.score.home}
-              <span className="px-2 text-fg-subtle">:</span>
-              {live.score.away}
+      {started && live.score && event.sport.key !== 'tennis' ? (
+        <MatchField
+          sport={event.sport.key}
+          home={event.home.name}
+          away={event.away.name}
+          score={live.score}
+          live={live.isLive}
+          status={[
+            live.isLive ? statusLine : EVENT_STATUS_LABELS[live.status],
+            stats && stats.sport !== 'tennis' && stats.firstHalf
+              ? `HZ ${stats.firstHalf.home}:${stats.firstHalf.away}`
+              : null,
+          ]
+            .filter(Boolean)
+            .join(' · ')}
+        />
+      ) : (
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4 px-4 py-6 sm:px-8">
+          <TeamName name={event.home.name} short={event.home.shortName} align="right" />
+          <div className="text-center">
+            {started && live.score ? (
+              <p
+                className="tabular text-4xl font-semibold tracking-tight sm:text-5xl"
+                data-testid="score"
+              >
+                {live.score.home}
+                <span className="px-2 text-fg-subtle">:</span>
+                {live.score.away}
+              </p>
+            ) : (
+              <p className="text-sm font-medium text-fg-muted">{formatKickoff(event.startTime)}</p>
+            )}
+            <p className={cn('mt-1 text-xs', live.isLive ? 'text-live' : 'text-fg-subtle')}>
+              {live.isLive
+                ? [
+                    PERIOD_LABELS[live.liveState?.period ?? ''] ?? live.liveState?.period,
+                    live.liveState?.clock,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')
+                : started
+                  ? EVENT_STATUS_LABELS[live.status]
+                  : formatDateTime(event.startTime)}
             </p>
-          ) : (
-            <p className="text-sm font-medium text-fg-muted">{formatKickoff(event.startTime)}</p>
-          )}
-          <p className={cn('mt-1 text-xs', live.isLive ? 'text-live' : 'text-fg-subtle')}>
-            {live.isLive
-              ? [
-                  PERIOD_LABELS[live.liveState?.period ?? ''] ?? live.liveState?.period,
-                  live.liveState?.clock,
-                ]
-                  .filter(Boolean)
-                  .join(' · ')
-              : started
-                ? EVENT_STATUS_LABELS[live.status]
-                : formatDateTime(event.startTime)}
-          </p>
-          {stats && stats.sport !== 'tennis' && stats.firstHalf ? (
-            <p className="tabular mt-0.5 text-xs text-fg-subtle">
-              Halbzeit {stats.firstHalf.home}:{stats.firstHalf.away}
-            </p>
-          ) : null}
+            {stats && stats.sport !== 'tennis' && stats.firstHalf ? (
+              <p className="tabular mt-0.5 text-xs text-fg-subtle">
+                Halbzeit {stats.firstHalf.home}:{stats.firstHalf.away}
+              </p>
+            ) : null}
+          </div>
+          <TeamName name={event.away.name} short={event.away.shortName} align="left" />
         </div>
-        <TeamName name={event.away.name} short={event.away.shortName} align="left" />
-      </div>
+      )}
       {stats ? (
         <StatisticsPanel stats={stats} home={event.home.shortName} away={event.away.shortName} />
       ) : null}

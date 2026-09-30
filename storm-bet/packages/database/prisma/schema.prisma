@@ -127,6 +127,7 @@ enum BetStatus {
   LOST
   VOID
   REFUNDED
+  CASHED_OUT
 }
 
 enum BetType {
@@ -155,6 +156,7 @@ enum TransactionType {
   BET_LOST
   BET_VOID
   BET_REFUND
+  CASH_OUT
   CASINO_BET
   CASINO_WIN
   CASINO_REFUND

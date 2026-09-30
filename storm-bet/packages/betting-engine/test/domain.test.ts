@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   acceptOdds,
   betTypeFor,
+  cashoutValue,
   combineOdds,
   decideBet,
   evaluateSlip,
@@ -427,5 +428,37 @@ describe('decideBet', () => {
       status: 'VOID',
       payout: 1_000n,
     });
+  });
+});
+
+describe('cashoutValue', () => {
+  const bet = { type: 'DOUBLE' as const, stake: 1_000n, potentialReturn: 4_000n };
+  const open = (placed: number, current: number) => ({
+    oddsMilli: placed,
+    result: 'PENDING' as const,
+    book: book('x', { oddsMilli: current }),
+  });
+
+  it('values won legs at their odds and open legs at placed ÷ current, less the margin', () => {
+    const won = { oddsMilli: 2_000, result: 'WON' as const, book: undefined };
+    // 10,00 × 2.00 × (2.00 / 1.25) × 0.95 = 30,40
+    expect(cashoutValue(bet, [won, open(2_000, 1_250)], now, 5)).toEqual({
+      available: true,
+      amount: 3_040n,
+    });
+    // Never above the potential return.
+    expect(
+      cashoutValue({ ...bet, potentialReturn: 3_000n }, [won, open(2_000, 1_010)], now, 0),
+    ).toEqual({ available: true, amount: 3_000n });
+  });
+
+  it('offers nothing for a lost leg, a suspended market or a Bet Builder', () => {
+    const lost = { oddsMilli: 2_000, result: 'LOST' as const, book: undefined };
+    expect(cashoutValue(bet, [lost, open(2_000, 1_500)], now, 5).available).toBe(false);
+    const suspended = { ...open(2_000, 1_500), book: book('x', { marketStatus: 'SUSPENDED' }) };
+    expect(cashoutValue(bet, [suspended], now, 5).available).toBe(false);
+    expect(
+      cashoutValue({ ...bet, type: 'BET_BUILDER' }, [open(2_000, 1_500)], now, 5).available,
+    ).toBe(false);
   });
 });

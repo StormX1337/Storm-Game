@@ -125,6 +125,9 @@ interface SgoStatus {
   finalized?: boolean;
   cancelled?: boolean;
   periods?: { started?: string[]; ended?: string[] };
+  /** Running games: the period being played ("1h", "2q" …) and the game clock. */
+  currentPeriodID?: string;
+  clock?: string | number;
 }
 
 interface SgoPlayer {
@@ -251,6 +254,30 @@ const TEAM_ENTITIES = new Set(['home', 'away', 'all']);
 const FOOTBALL_REGULAR = new Set(['game', 'reg', ...H1, ...H2]);
 
 const PAGE_SIZE = 50;
+
+/** The feed's period ids as the book's live-state periods. */
+const LIVE_PERIODS: Record<string, string> = {
+  '1h': '1H',
+  '2h': '2H',
+  ht: 'HT',
+  '1q': 'Q1',
+  '2q': 'Q2',
+  '3q': 'Q3',
+  '4q': 'Q4',
+  ot: 'OT',
+  '1s': 'S1',
+  '2s': 'S2',
+  '3s': 'S3',
+};
+
+/** Team figures by the feed's stat ids, first match wins; only what the feed reports. */
+const FOOTBALL_TEAM_STATS: [keyof FootballStatistics, string[]][] = [
+  ['possession', ['possessionPercent', 'possession']],
+  ['shotsOnTarget', ['shots_onGoal', 'shotsOnGoal', 'shots_onTarget', 'shotsOnTarget']],
+  ['corners', ['cornerKicks', 'corners']],
+  ['yellowCards', ['yellowCards']],
+  ['redCards', ['redCards']],
+];
 const MAX_PAGES = 20;
 const USAGE_TTL_MS = 10 * 60_000;
 const LEAGUES_TTL_MS = 3_600_000;
@@ -649,7 +676,7 @@ export class SportsGameOddsProvider implements OddsProvider {
     } else if (this.hasStarted(event, this.now())) {
       status = 'LIVE';
       score = live;
-      liveState = { period: 'LIVE', clock: null };
+      liveState = this.liveState(league.sport, st);
     } else {
       status = 'SCHEDULED';
       liveState = { period: 'PRE', clock: null };
@@ -667,7 +694,7 @@ export class SportsGameOddsProvider implements OddsProvider {
       statistics: final
         ? this.resultStatistics(league.sport, event, final)
         : score
-          ? scoreStatistics(league.sport, score)
+          ? this.liveStatistics(league.sport, event, score)
           : null,
       resultFinal,
     };
@@ -692,6 +719,68 @@ export class SportsGameOddsProvider implements OddsProvider {
     return period('reg') ?? period('game') ?? teams;
   }
 
+  private liveState(sport: SportKey, st: SgoStatus): LiveState {
+    const period = LIVE_PERIODS[(st.currentPeriodID ?? '').toLowerCase()] ?? 'LIVE';
+    const raw = st.clock === undefined || st.clock === null ? '' : String(st.clock).trim();
+    let clock: string | null = raw ? raw.slice(0, 8) : null;
+    // Football clocks are minutes.
+    if (clock && sport === 'football' && /^\d+(\+\d+)?$/.test(clock)) clock = `${clock}'`;
+    return { period, clock };
+  }
+
+  /** A pair of one team figure from a result block, if the feed reports it for both sides. */
+  private teamFigure(block: Record<string, Record<string, number>> | undefined, ids: string[]) {
+    for (const id of ids) {
+      const pair = pairOf(block?.home?.[id], block?.away?.[id]);
+      if (pair) return pair;
+    }
+    return null;
+  }
+
+  /** Figures so far in a running game: score, finished periods and team stats. */
+  private liveStatistics(sport: SportKey, event: SgoEvent, score: Pair): EventStatistics {
+    const results = event.results ?? {};
+    const period = (ids: string[]) => {
+      for (const id of ids) {
+        const pair = pairOf(results[id]?.home?.points, results[id]?.away?.points);
+        if (pair) return pair;
+      }
+      return null;
+    };
+    const stats = scoreStatistics(sport, score);
+    const block = results.game ?? results.reg;
+    if (stats.sport === 'football') {
+      const football: FootballStatistics = { ...stats };
+      const firstHalf = period(H1);
+      if (firstHalf) football.firstHalf = firstHalf;
+      this.addTeamStats(football, block);
+      return football;
+    }
+    if (stats.sport === 'basketball') {
+      const basketball: BasketballStatistics = { ...stats };
+      // Quarters played so far, in order.
+      for (const ids of QUARTERS) {
+        const q = period(ids);
+        if (!q) break;
+        basketball.periods.push(q);
+      }
+      const fouls = this.teamFigure(block, ['fouls', 'personalFouls']);
+      if (fouls) basketball.fouls = fouls;
+      return basketball;
+    }
+    return stats;
+  }
+
+  private addTeamStats(
+    football: FootballStatistics,
+    block: Record<string, Record<string, number>> | undefined,
+  ) {
+    for (const [key, ids] of FOOTBALL_TEAM_STATS) {
+      const pair = this.teamFigure(block, ids);
+      if (pair) (football as unknown as Record<string, Pair>)[key] = pair;
+    }
+  }
+
   /** Official figures: the score, the halves and player stat lines — only what the feed reports. */
   private resultStatistics(sport: SportKey, event: SgoEvent, final: Pair): EventStatistics {
     const results = event.results ?? {};
@@ -709,6 +798,7 @@ export class SportsGameOddsProvider implements OddsProvider {
       const secondHalf = period(H2);
       if (firstHalf) football.firstHalf = firstHalf;
       if (secondHalf) football.secondHalf = secondHalf;
+      this.addTeamStats(football, results.reg ?? results.game);
       const players = this.playerLines(sport, event);
       if (players) football.players = players;
       return football;

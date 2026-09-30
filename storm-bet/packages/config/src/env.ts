@@ -47,6 +47,8 @@ const sharedServerEnv = {
   BET_MAX_TOTAL_ODDS: int(10_000, 2, HARD_LIMITS.maxTotalOdds),
   /** ACCEPT_HIGHER never takes a price that rose more than this (percent). */
   ODDS_ACCEPT_HIGHER_MAX_PCT: int(10, 0, 100),
+  /** Cashout: published deduction from the value at current prices (percent). */
+  CASHOUT_MARGIN_PCT: int(5, 0, 20),
 
   DEMO_STARTING_BALANCE: int(1_000_00, 0),
   DEMO_TOPUP_AMOUNT: int(500_00, 0),

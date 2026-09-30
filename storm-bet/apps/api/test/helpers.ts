@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { BetPlacementService, SettlementService } from '@storm-bet/betting-engine';
+import { BetPlacementService, CashoutService, SettlementService } from '@storm-bet/betting-engine';
 import {
   apiEnvSchema,
   bettingLimitsFrom,
@@ -53,6 +53,7 @@ export async function createTestApp() {
     limits,
     demoWallet: demoWalletPolicyFrom(env),
     placement: new BetPlacementService({ db, redis, limits, requireEmailVerification: false, now }),
+    cashout: new CashoutService({ db, redis, marginPct: 5, now }),
     settlement: new SettlementService({ db, redis, now }),
     casino: new CasinoService({ db, redis, providers: [new MockCasinoProvider()], now }),
     queues: [],

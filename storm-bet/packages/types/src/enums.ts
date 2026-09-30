@@ -68,6 +68,8 @@ export const BetStatus = {
   LOST: 'LOST',
   VOID: 'VOID',
   REFUNDED: 'REFUNDED',
+  /** Closed early by the player at the offered cashout value. */
+  CASHED_OUT: 'CASHED_OUT',
 } as const;
 export type BetStatus = (typeof BetStatus)[keyof typeof BetStatus];
 export const BET_STATUSES = values(BetStatus);
@@ -114,6 +116,7 @@ export const TransactionType = {
   BET_LOST: 'BET_LOST',
   BET_VOID: 'BET_VOID',
   BET_REFUND: 'BET_REFUND',
+  CASH_OUT: 'CASH_OUT',
   CASINO_BET: 'CASINO_BET',
   CASINO_WIN: 'CASINO_WIN',
   CASINO_REFUND: 'CASINO_REFUND',

@@ -87,3 +87,12 @@ export const betListQuery = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
 });
 export type BetListQuery = z.infer<typeof betListQuery>;
+
+export const cashoutQuotesSchema = z.object({
+  betIds: z.array(uuid).min(1).max(50),
+});
+export type CashoutQuotesInput = z.infer<typeof cashoutQuotesSchema>;
+
+/** The cashout value the player accepted; a lower current value is refused. */
+export const cashoutSchema = z.object({ amount: positiveMoneyMinor });
+export type CashoutInput = z.infer<typeof cashoutSchema>;

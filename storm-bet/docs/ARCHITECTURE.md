@@ -137,6 +137,15 @@ nur Wallet, Hauptbuch, Limits/Selbstsperre, RBAC und Audit-Log.
   höchstens eine Auszahlung pro Runde, Auszahlung nur passend zum Rundenstatus, abgeschlossene Runden
   weder änderbar noch löschbar.
 
+## Cashout
+
+Wert einer offenen Wette zu aktuellen Quoten: Einsatz × Π(gewonnene Auswahl: Quote) × Π(offene Auswahl:
+Annahmequote ÷ aktuelle Quote) × (1 − `CASHOUT_MARGIN_PCT`), abgerundet, höchstens der mögliche Gewinn. Nur
+wenn alle offenen Märkte gerade wettbar sind (kein Bet Builder). Auszahlung unter Redis-Lock in einer
+Transaktion: Wette `FOR UPDATE`, Auswahlen `FOR SHARE`, Wert neu berechnen, ein niedrigerer Wert als der
+bestätigte wird abgelehnt (`ODDS_CHANGED`), dann `CASHED_OUT` + Hauptbuch `CASH_OUT` + Audit. Die DB erlaubt
+genau eine Abrechnungsbuchung pro Wette (auch Cashout).
+
 ## Settlement
 
 Ein Event mit bestätigtem Ergebnis (oder abgesagt) wird unter einem Redis-Lock abgerechnet: jede Auswahl wird

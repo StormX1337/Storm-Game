@@ -219,7 +219,13 @@ export function events(): Record<string, unknown>[] {
         home: team('VFB_STUTTGART_BUNDESLIGA', 'VfB Stuttgart', 'VFB', 1),
         away: team('WERDER_BREMEN_BUNDESLIGA', 'Werder Bremen', 'SVW', 0),
       },
-      status: status(iso(-40), { started: true, live: true, currentPeriodID: '1h' }),
+      status: status(iso(-40), { started: true, live: true, currentPeriodID: '1h', clock: '38' }),
+      results: {
+        game: {
+          home: { points: 1, cornerKicks: 4, yellowCards: 1, redCards: 0 },
+          away: { points: 0, cornerKicks: 2, yellowCards: 2, redCards: 0 },
+        },
+      },
       odds: odds(
         odd('points-home-reg-ml3way-home', { odds: '-250' }),
         odd('points-all-reg-ml3way-draw', { odds: '+320' }),

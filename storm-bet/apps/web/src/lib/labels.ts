@@ -21,6 +21,7 @@ export const BET_STATUS_LABELS: Record<BetStatus, string> = {
   LOST: 'Verloren',
   VOID: 'Storniert',
   REFUNDED: 'Erstattet',
+  CASHED_OUT: 'Ausgezahlt',
 };
 
 export const BET_TYPE_LABELS: Record<BetType, string> = {
@@ -47,6 +48,7 @@ export const TRANSACTION_LABELS: Record<TransactionType, string> = {
   BET_LOST: 'Verlust',
   BET_VOID: 'Storno',
   BET_REFUND: 'Erstattung',
+  CASH_OUT: 'Cashout',
   CASINO_BET: 'Casino-Einsatz',
   CASINO_WIN: 'Casino-Gewinn',
   CASINO_REFUND: 'Casino-Erstattung',
@@ -75,6 +77,7 @@ export const LIMIT_LABELS: Record<LimitType, string> = {
 export function betStatusVariant(status: BetStatus) {
   switch (status) {
     case 'WON':
+    case 'CASHED_OUT':
       return 'success' as const;
     case 'LOST':
       return 'danger' as const;

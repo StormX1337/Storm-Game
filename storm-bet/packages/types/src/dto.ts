@@ -167,6 +167,20 @@ export interface BetDto {
   selections: BetSelectionDto[];
 }
 
+/** What an open bet can be closed for right now. */
+export interface CashoutQuoteDto {
+  betId: string;
+  available: boolean;
+  amount: Money | null;
+  /** Why no cashout is offered right now. */
+  reason: string | null;
+}
+
+export interface CashoutResponse {
+  bet: BetDto;
+  wallet: WalletDto;
+}
+
 export interface SlipIssueDto {
   code: ErrorCode;
   message: string;
