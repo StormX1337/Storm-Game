@@ -1,12 +1,13 @@
 import type { BetDto } from '@storm-bet/types';
 import { Badge, Card, cn } from '@storm-bet/ui';
-import { BarChart3, CheckCircle2, ChevronRight, Circle, MinusCircle, XCircle } from 'lucide-react';
+import { CheckCircle2, ChevronRight, Circle, MinusCircle, XCircle } from 'lucide-react';
 import Link from 'next/link';
 import { formatDateTime, formatMoney, formatOdds } from '@/lib/format';
 import { BET_STATUS_LABELS, BET_TYPE_LABELS, betStatusVariant } from '@/lib/labels';
 import { ShareButton } from '../betslip/share-button';
 import { TeamBadge } from '../sportsbook/team-badge';
 import { CashoutBar } from './cashout-bar';
+import { LegLive } from './leg-live';
 
 type Leg = BetDto['selections'][number];
 
@@ -19,27 +20,6 @@ function ResultIcon({ result }: { result: Leg['result'] }) {
   if (result === 'VOID')
     return <MinusCircle className="size-4 shrink-0 text-warning" aria-label="Storniert" />;
   return <Circle className="size-4 shrink-0 text-fg-subtle" aria-label="Offen" />;
-}
-
-/** "Ergebnis 2:1" once finished, the running score in play. */
-function ScorePill({ leg }: { leg: Leg }) {
-  const { status, score } = leg.event;
-  if (!score || (status !== 'FINISHED' && status !== 'LIVE')) {
-    if (status === 'CANCELLED') return <span className="text-[11px] text-fg-subtle">Abgesagt</span>;
-    return null;
-  }
-  const live = status === 'LIVE';
-  return (
-    <span
-      className={cn(
-        'tabular inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold',
-        live ? 'bg-live/15 text-live' : 'bg-surface-3 text-fg-muted',
-      )}
-    >
-      <BarChart3 className="size-3" aria-hidden="true" />
-      {live ? 'Live' : 'Ergebnis'} {score.home}:{score.away}
-    </span>
-  );
 }
 
 function Teams({ leg }: { leg: Leg }) {
@@ -70,7 +50,7 @@ function Legs({ bet }: { bet: BetDto }) {
           </div>
           <div className="flex items-end justify-between gap-2 pl-6">
             <Teams leg={leg} />
-            <ScorePill leg={leg} />
+            <LegLive leg={leg} />
           </div>
         </li>
       ))}
@@ -86,7 +66,7 @@ function BuilderLegs({ bet }: { bet: BetDto }) {
     <div className="space-y-3 px-4 py-3">
       <div className="flex items-end justify-between gap-2">
         <Teams leg={first} />
-        <ScorePill leg={first} />
+        <LegLive leg={first} />
       </div>
       <ol>
         {bet.selections.map((leg, i) => (

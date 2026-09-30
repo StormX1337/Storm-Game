@@ -154,6 +154,10 @@ export interface BetSelectionDto {
     away: string;
     status: EventStatus;
     score: { home: number; away: number } | null;
+    liveState: LiveState | null;
+    /** Football figures some markets are decided on, when the feed reports them. */
+    corners: { home: number; away: number } | null;
+    cards: { home: number; away: number } | null;
   };
 }
 

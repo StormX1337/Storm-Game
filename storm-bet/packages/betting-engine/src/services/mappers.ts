@@ -1,5 +1,6 @@
 import { decimalToNumber, moneyToNumber, oddsToMilli, type Prisma } from '@storm-bet/database';
-import type { BetDto, SportKey, TransactionDto } from '@storm-bet/types';
+import type { BetDto, EventStatistics, SportKey, TransactionDto } from '@storm-bet/types';
+import { parseLiveState, parseStatistics } from '@storm-bet/validation';
 
 /** Everything a BetDto needs, in one query (no N+1 over legs). */
 export const BET_INCLUDE = {
@@ -15,6 +16,8 @@ export const BET_INCLUDE = {
           status: true,
           homeScore: true,
           awayScore: true,
+          liveState: true,
+          statistics: true,
           sport: { select: { key: true } },
           homeTeam: { select: { name: true } },
           awayTeam: { select: { name: true } },
@@ -28,6 +31,19 @@ export const BET_INCLUDE = {
 export type BetWithLegs = Prisma.BetGetPayload<{ include: typeof BET_INCLUDE }>;
 
 const odds = (value: Prisma.Decimal) => oddsToMilli(value) / 1000;
+
+/** Corners and cards (yellow + red) of a football match, when recorded. */
+function legFigures(stats: EventStatistics | null) {
+  if (stats?.sport !== 'football') return { corners: null, cards: null };
+  const cards =
+    stats.yellowCards && stats.redCards
+      ? {
+          home: stats.yellowCards.home + stats.redCards.home,
+          away: stats.yellowCards.away + stats.redCards.away,
+        }
+      : null;
+  return { corners: stats.corners ?? null, cards };
+}
 
 export function toBetDto(bet: BetWithLegs): BetDto {
   return {
@@ -73,6 +89,8 @@ export function toBetDto(bet: BetWithLegs): BetDto {
           leg.event.homeScore == null || leg.event.awayScore == null
             ? null
             : { home: leg.event.homeScore, away: leg.event.awayScore },
+        liveState: parseLiveState(leg.event.liveState),
+        ...legFigures(parseStatistics(leg.event.statistics)),
       },
       snapshot: leg.snapshot
         ? {
