@@ -1,7 +1,7 @@
 import { cn } from '@storm-bet/ui';
 
 /** A stable hue per team name, so a team always carries the same colours. */
-function hue(name: string): number {
+export function teamHue(name: string): number {
   let h = 0;
   for (const c of name) h = (h * 31 + c.charCodeAt(0)) % 360;
   return h;
@@ -30,7 +30,7 @@ export function TeamBadge({
   short?: string;
   className?: string;
 }) {
-  const h = hue(name);
+  const h = teamHue(name);
   return (
     <span
       aria-hidden="true"

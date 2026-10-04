@@ -86,7 +86,7 @@ function BoostCard({
   };
 
   return (
-    <Card className="flex flex-col gap-3 p-4" data-testid="boost-card">
+    <Card className="flex min-w-0 flex-col gap-3 p-4" data-testid="boost-card">
       <div className="flex items-start gap-2">
         <SportIcon sport={boost.sportKey} className="mt-0.5 text-fg-muted" />
         <div className="min-w-0 flex-1">

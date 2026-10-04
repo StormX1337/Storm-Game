@@ -39,7 +39,19 @@ export function MobileBetSlipBar() {
   const open = useBetSlip((s) => s.open);
   const setOpen = useBetSlip((s) => s.setOpen);
   const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  // From lg the slip is in the sidebar; the sheet (and its overlay) must not open there.
+  const [wide, setWide] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+    const mq = window.matchMedia('(min-width: 1024px)');
+    const sync = () => setWide(mq.matches);
+    sync();
+    mq.addEventListener('change', sync);
+    return () => mq.removeEventListener('change', sync);
+  }, []);
+  useEffect(() => {
+    if (wide && open) setOpen(false);
+  }, [wide, open, setOpen]);
   if (!mounted) return null;
 
   // A Bet Builder has its own (model) price; only a Kombi shows the product here.
@@ -47,9 +59,9 @@ export function MobileBetSlipBar() {
   const total = items.reduce((acc, i) => (acc * Math.round(i.odds * 1000)) / 1000, 1);
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open && !wide} onOpenChange={setOpen}>
       {items.length > 0 ? (
-        <div className="fixed inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-40 p-3 md:bottom-0 md:pb-[calc(0.75rem+env(safe-area-inset-bottom))] lg:hidden">
+        <div className="fixed inset-x-0 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-40 px-3 pb-1 pt-3 md:bottom-0 md:pb-[calc(0.75rem+env(safe-area-inset-bottom))] lg:hidden">
           <button
             onClick={() => setOpen(true)}
             className="flex w-full items-center gap-3 rounded-lg bg-accent px-4 py-3 text-accent-fg shadow-[var(--shadow-pop)] animate-slide-up"

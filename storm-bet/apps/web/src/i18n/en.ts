@@ -986,4 +986,23 @@ export const EN: Record<string, string> = {
   '. Bei der Abrechnung wird er freigegeben: Gewinne werden gutgeschrieben, verlorene Einsätze abgebucht, stornierte Einsätze erstattet. Aufladen ist einmal pro Tag möglich, wenn weniger als 50 € verfügbar sind.':
     '. At settlement it is released: winnings are credited, lost stakes deducted, void stakes refunded. You can top up once a day when less than €50 is available.',
   Start: 'Home',
+  'Im Tipp-Feed geteilt': 'Shared in the tip feed',
+  'Aus dem Tipp-Feed entfernt': 'Removed from the tip feed',
+  'Im Feed · entfernen': 'In feed · remove',
+  'Im Feed teilen': 'Share in feed',
+  '(du)': '(you)',
+  Übernehmen: 'Copy picks',
+  'Tipp-Feed': 'Tip feed',
+  'Wettscheine, die andere Spieler teilen – mit Quoten und Ergebnis, ohne Einsätze. Übernimm offene Tipps zu den aktuellen Quoten.':
+    'Bet slips other players share – with odds and results, without stakes. Copy open picks at the current odds.',
+  'Noch keine geteilten Tipps': 'No shared tips yet',
+  'Teile eine deiner Wetten unter „Meine Wetten“ – sie erscheint dann hier.':
+    'Share one of your bets under “My bets” – it then appears here.',
+  Suche: 'Search',
+  Ansicht: 'View',
+  Schnellzugriff: 'Quick access',
+  'Keine Treffer': 'No results',
+  'Mindestens 2 Zeichen eingeben.': 'Enter at least 2 characters.',
+  'Team oder Liga suchen …': 'Search team or league …',
+  'Versuch einen anderen Team- oder Liganamen.': 'Try another team or league name.',
 };

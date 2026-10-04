@@ -225,6 +225,38 @@ export class CatalogService {
     return { sport, leagues };
   }
 
+  /** Competitions with the most open events, across sports (home page chips). */
+  async topLeagues(limit: number): Promise<LeagueDto[]> {
+    return this.cache.wrap(`catalog:top-leagues:${limit}`, 30, async () => {
+      const now = this.now();
+      const counts = await this.db.event.groupBy({
+        by: ['leagueId'],
+        where: this.openEventsWhere(now),
+        _count: { _all: true },
+        orderBy: { _count: { leagueId: 'desc' } },
+        take: limit,
+      });
+      const rows = await this.db.league.findMany({
+        where: { id: { in: counts.map((c) => c.leagueId) }, isActive: true },
+        include: { sport: { select: { key: true } } },
+      });
+      return counts.flatMap((c) => {
+        const l = rows.find((r) => r.id === c.leagueId);
+        return l
+          ? [
+              {
+                id: l.id,
+                name: l.name,
+                country: l.country,
+                sportKey: l.sport.key as SportKey,
+                eventCount: c._count._all,
+              },
+            ]
+          : [];
+      });
+    });
+  }
+
   async listEvents(query: EventListQuery): Promise<Paginated<EventSummaryDto>> {
     const key = `catalog:events:${JSON.stringify(query)}`;
     return this.cache.wrap(key, 3, async () => {
@@ -232,6 +264,19 @@ export class CatalogService {
       const where: Prisma.EventWhereInput = { isActive: true };
       if (query.sport) where.sport = { key: query.sport };
       if (query.league) where.leagueId = query.league;
+      if (query.q) {
+        const contains = { contains: query.q, mode: 'insensitive' as const };
+        // AND keeps this apart from the OR the open-events filter brings along.
+        where.AND = [
+          {
+            OR: [
+              { homeTeam: { name: contains } },
+              { awayTeam: { name: contains } },
+              { league: { name: contains } },
+            ],
+          },
+        ];
+      }
       if (query.status === 'live') {
         where.status = { in: ['LIVE', 'SUSPENDED'] };
       } else if (query.status === 'upcoming') {

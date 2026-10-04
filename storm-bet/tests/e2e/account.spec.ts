@@ -1,5 +1,5 @@
 import { createHmac, randomUUID } from 'node:crypto';
-import { expect, test } from '@playwright/test';
+import { clientIp, expect, test } from './fixtures';
 import { register } from './helpers';
 
 /** RFC 6238 code for a base32 secret (what an authenticator app shows). */
@@ -41,7 +41,7 @@ test('two-factor login: set up with an authenticator, then log in with a code', 
   await page.getByTestId('totp-enable').click();
   await expect(page.getByTestId('recovery-codes').locator('li')).toHaveCount(10);
 
-  const fresh = await browser.newContext();
+  const fresh = await browser.newContext({ extraHTTPHeaders: { 'x-forwarded-for': clientIp() } });
   const other = await fresh.newPage();
   await other.goto('/login');
   await other.getByLabel('E-Mail-Adresse').fill(email);
@@ -55,10 +55,10 @@ test('two-factor login: set up with an authenticator, then log in with a code', 
 
 test('the language switch turns the site English and back', async ({ page }) => {
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'Demnächst' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Jetzt wetten' })).toBeVisible();
   await page.getByTestId('lang-en').first().click();
-  await expect(page.getByRole('heading', { name: 'Coming up' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Bet now' })).toBeVisible();
   await expect(page.locator('html')).toHaveAttribute('lang', 'en');
   await page.getByTestId('lang-de').first().click();
-  await expect(page.getByRole('heading', { name: 'Demnächst' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Jetzt wetten' })).toBeVisible();
 });

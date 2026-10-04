@@ -219,6 +219,7 @@ model User {
 
   sessions        Session[]
   recoveryCodes   RecoveryCode[]
+  sharedBets      SharedBet[]
   authTokens      AuthToken[]
   wallet          Wallet?
   transactions    Transaction[]
@@ -235,6 +236,20 @@ model User {
   @@index([status])
   @@index([createdAt])
   @@map("users")
+}
+
+/// A bet its owner shows in the tip feed (picks and odds only, never money).
+model SharedBet {
+  id        String   @id @default(uuid()) @db.Uuid
+  betId     String   @unique @map("bet_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+
+  bet  Bet  @relation(fields: [betId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
+  @@map("shared_bets")
 }
 
 /// Single-use two-factor recovery codes, stored as SHA-256 hashes only.
@@ -633,6 +648,7 @@ model Bet {
   slip         BetSlip        @relation(fields: [slipId], references: [id], onDelete: Restrict)
   selections   BetSelection[]
   cashouts     BetCashout[]
+  shared       SharedBet?
   boost        OddsBoost?     @relation(fields: [boostId], references: [id], onDelete: Restrict)
   transactions Transaction[]
 

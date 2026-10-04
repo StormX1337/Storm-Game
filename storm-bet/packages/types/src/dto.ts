@@ -245,7 +245,21 @@ export interface BetDto {
   boosted: boolean;
   /** System bet: selections per combination and number of combinations. */
   system: { size: number; lines: number } | null;
+  /** Shown in the tip feed by its owner. */
+  shared: boolean;
   selections: BetSelectionDto[];
+}
+
+/** A bet in the tip feed: picks, odds and result – never stakes or payouts. */
+export interface FeedItemDto {
+  id: string;
+  sharedAt: string;
+  author: string;
+  /** The viewer's own bet. */
+  own: boolean;
+  bet: Pick<BetDto, 'id' | 'type' | 'status' | 'totalOdds' | 'system' | 'boosted' | 'placedAt'> & {
+    selections: Omit<BetSelectionDto, 'snapshot'>[];
+  };
 }
 
 /** What an open bet can be closed for right now. */

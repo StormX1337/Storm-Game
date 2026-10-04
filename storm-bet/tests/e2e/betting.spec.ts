@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import { expect, test } from '@playwright/test';
+import { clientIp, expect, test } from './fixtures';
 import {
   ADMIN_EMAIL,
   ADMIN_PASSWORD,
+  expectNoHorizontalOverflow,
   login,
   openUpcomingEvent,
   placeFirstOpenSelection,
@@ -172,7 +173,7 @@ test.describe('platform', () => {
     await page.getByRole('link', { name: 'Audit-Log' }).click();
     await expect(page.getByRole('heading', { name: 'Audit-Log' })).toBeVisible();
 
-    const player = await browser.newPage();
+    const player = await browser.newPage({ extraHTTPHeaders: { 'x-forwarded-for': clientIp() } });
     await register(player, uniqueEmail(), PASSWORD, 'Kein Admin');
     const res = await player.goto('/admin');
     expect(res!.status()).toBe(404);
@@ -182,12 +183,56 @@ test.describe('platform', () => {
 
 test('mobile: no horizontal overflow and the sticky slip opens @mobile', async ({ page }) => {
   await page.goto('/sports/tennis');
-  const [scrollWidth, innerWidth] = await page.evaluate(() => [
-    document.documentElement.scrollWidth,
-    window.innerWidth,
-  ]);
-  expect(scrollWidth).toBeLessThanOrEqual(innerWidth);
+  await expectNoHorizontalOverflow(page);
   await page.locator('[data-testid=odds-button]:not([disabled])').first().click();
   await page.getByTestId('mobile-slip-button').click();
   await expect(page.getByRole('dialog').getByTestId('slip-item')).toHaveCount(1);
+});
+
+test('a bet shared in the tip feed can be copied by another player', async ({ page, browser }) => {
+  const author = `Tipper ${randomUUID().slice(0, 6)}`;
+  await register(page, uniqueEmail(), PASSWORD, author);
+  await openUpcomingEvent(page);
+  await placeFirstOpenSelection(page, '2');
+  await page.goto('/dashboard/bets');
+  await page.getByTestId('feed-toggle').first().click();
+  await expect(page.getByTestId('feed-toggle').first()).toContainText('Im Feed · entfernen');
+
+  const ctx = await browser.newContext({ extraHTTPHeaders: { 'x-forwarded-for': clientIp() } });
+  const other = await ctx.newPage();
+  await register(other, uniqueEmail(), PASSWORD, 'Mitleser');
+  await other.goto('/feed');
+  // Scoped to <main>: streamed HTML briefly holds a hidden copy of the list.
+  const card = other.getByRole('main').getByTestId('feed-card').filter({ hasText: author });
+  await expect(card).toHaveCount(1);
+  await expect(card).not.toContainText('2,00 €');
+  await card.getByTestId('feed-copy').click();
+  await expect(other).toHaveURL(/\/share\?ids=/);
+  await other.getByTestId('take-shared').click();
+  await expect(other.getByTestId('slip-item')).toHaveCount(1);
+  await ctx.close();
+});
+
+test('search finds events by team name', async ({ page }) => {
+  await page.goto('/sports/football');
+  const team = (await page
+    .getByTestId('event-link')
+    .first()
+    .locator('.truncate.text-sm')
+    .first()
+    .textContent())!.trim();
+  const term = team.split(/\s+/).find((w) => w.length >= 3) ?? team;
+  await page.getByTestId('search-link').click();
+  await page.getByTestId('search-input').fill(term);
+  await expect(page.getByTestId('event-row').first()).toContainText(term);
+  await expect(page).toHaveURL(new RegExp(`/search\\?q=`));
+});
+
+test('mobile: app-style home with top matches, tiles and tab bar @mobile', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('top-match').first()).toBeVisible();
+  await expect(page.getByTestId('quick-tile').first()).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+  await page.getByTestId('tab-casino').click();
+  await expect(page).toHaveURL(/\/(casino|login)/);
 });

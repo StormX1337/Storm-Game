@@ -1,5 +1,5 @@
-import { expect, test } from '@playwright/test';
-import { ADMIN_EMAIL, ADMIN_PASSWORD, login } from './helpers';
+import { expect, test } from './fixtures';
+import { ADMIN_EMAIL, ADMIN_PASSWORD, expectNoHorizontalOverflow, login } from './helpers';
 
 // Staff accounts can play too; logging in avoids the registration rate limit.
 const signIn = (page: Parameters<typeof login>[0]) =>
@@ -144,10 +144,6 @@ test.describe('casino', () => {
 test('mobile casino: no horizontal overflow and the tab bar @mobile', async ({ page }) => {
   await signIn(page);
   await expect(page.getByTestId('game-card').first()).toBeVisible();
-  const [scrollWidth, innerWidth] = await page.evaluate(() => [
-    document.documentElement.scrollWidth,
-    window.innerWidth,
-  ]);
-  expect(scrollWidth).toBeLessThanOrEqual(innerWidth);
+  await expectNoHorizontalOverflow(page);
   await expect(page.getByRole('navigation', { name: 'Schnellnavigation' })).toBeVisible();
 });

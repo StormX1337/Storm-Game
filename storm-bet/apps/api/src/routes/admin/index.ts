@@ -1,3 +1,4 @@
+import { recordAudit } from '@storm-bet/database';
 import { ipAllowed } from '@storm-bet/security';
 import { AppError, Permission } from '@storm-bet/types';
 import {
@@ -125,6 +126,22 @@ export function adminRoutes(
         parse(adminUnlockSchema, request.body).reason,
       );
       return admin.getUser(id);
+    });
+    // Tip feed: take an entry out (e.g. an offensive display name).
+    app.delete('/feed/:id', async (request) => {
+      requirePermission(request, Permission.USERS_MANAGE);
+      const { id } = parse(idParam, request.params);
+      const { reason } = parse(adminUnlockSchema, request.body);
+      const entry = await ctx.db.sharedBet.findUnique({ where: { id } });
+      if (!entry) throw new AppError('NOT_FOUND', 'Eintrag nicht gefunden.');
+      await ctx.db.sharedBet.delete({ where: { id } });
+      await recordAudit(ctx.db, actor(request), {
+        action: 'admin.feed_entry_removed',
+        targetType: 'bet',
+        targetId: entry.betId,
+        metadata: { reason, userId: entry.userId },
+      });
+      return { ok: true };
     });
     app.post('/users/:id/sessions/revoke', async (request) => {
       requirePermission(request, Permission.USERS_MANAGE);

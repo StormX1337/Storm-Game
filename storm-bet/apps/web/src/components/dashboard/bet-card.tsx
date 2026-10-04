@@ -11,6 +11,7 @@ import { TeamBadge } from '../sportsbook/team-badge';
 import { CashoutBar } from './cashout-bar';
 import { LegLive } from './leg-live';
 import { useT } from '@/i18n/client';
+import { FeedToggle } from '../feed/feed-toggle';
 
 type Leg = BetDto['selections'][number];
 
@@ -185,7 +186,8 @@ export function BetCard({ bet, href }: { bet: BetDto; href?: string }) {
       {bet.status === 'PENDING' && bet.type !== 'BET_BUILDER' ? (
         <CashoutBar betId={bet.id} />
       ) : null}
-      <div className="flex justify-end border-t border-border px-4 py-1.5">
+      <div className="flex items-center justify-end gap-4 border-t border-border px-4 py-1.5">
+        <FeedToggle betId={bet.id} initial={bet.shared} />
         <ShareButton
           selectionIds={bet.selections.map((s) => s.selectionId)}
           label={t('Tipp teilen')}

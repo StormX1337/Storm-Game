@@ -27,6 +27,7 @@ export const BET_INCLUDE = {
     },
   },
   cashouts: { orderBy: { createdAt: 'asc' } },
+  shared: { select: { id: true } },
 } satisfies Prisma.BetInclude;
 
 export type BetWithLegs = Prisma.BetGetPayload<{ include: typeof BET_INCLUDE }>;
@@ -69,6 +70,7 @@ export function toBetDto(bet: BetWithLegs): BetDto {
     })),
     autoCashout: bet.autoCashoutAmount == null ? null : moneyToNumber(bet.autoCashoutAmount),
     boosted: bet.boostId !== null,
+    shared: bet.shared !== null,
     system:
       bet.systemSize === null
         ? null

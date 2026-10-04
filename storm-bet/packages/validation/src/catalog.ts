@@ -21,6 +21,8 @@ export const eventListQuery = z.object({
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, 'Datum im Format JJJJ-MM-TT')
     .optional(),
+  /** Team or competition name contains this text. */
+  q: z.string().trim().min(2).max(40).optional(),
   cursor: z.string().max(200).optional(),
   limit: z.coerce.number().int().min(1).max(100).default(30),
 });

@@ -14,10 +14,12 @@ import { isStaff } from '@storm-bet/types';
 import {
   LayoutDashboard,
   LogOut,
+  Plus,
   Receipt,
   Settings,
   Shield,
   ShieldCheck,
+  Users,
   Wallet,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -39,10 +41,19 @@ export function UserMenu() {
   if (!user) {
     return (
       <div className="flex items-center gap-1 sm:gap-2">
-        <Button variant="ghost" size="sm" className="px-2 sm:px-3" asChild>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="px-2 max-md:text-white max-md:hover:bg-white/10 sm:px-3"
+          asChild
+        >
           <Link href="/login">{t('Anmelden')}</Link>
         </Button>
-        <Button size="sm" className="px-2.5 sm:px-3" asChild>
+        <Button
+          size="sm"
+          className="px-2.5 max-md:bg-white max-md:text-[#2337c6] max-md:hover:bg-white/90 sm:px-3"
+          asChild
+        >
           <Link href="/register">{t('Registrieren')}</Link>
         </Button>
       </div>
@@ -70,22 +81,36 @@ export function UserMenu() {
     .toUpperCase();
 
   return (
-    <div className="flex items-center gap-2">
-      <Link
-        href="/dashboard/wallet"
-        className="flex items-center gap-2 rounded-md border border-border bg-surface-2 px-2 py-1.5 transition-colors hover:border-border-strong sm:px-3"
-        aria-label={t('Guthaben (Spielgeld)')}
-      >
-        <Wallet className="hidden size-4 text-fg-muted sm:block" aria-hidden="true" />
-        <span className="tabular text-sm font-semibold text-fg" data-testid="header-balance">
-          {wallet ? formatMoney(wallet.available) : '—'}
-        </span>
-      </Link>
+    <div className="flex items-center gap-1.5 sm:gap-2">
+      <div className="flex items-stretch overflow-hidden rounded-md border border-white/25 bg-white/15 md:border-border md:bg-surface-2">
+        <Link
+          href="/dashboard/wallet"
+          className="flex items-center gap-2 px-2 py-1.5 transition-colors hover:bg-white/10 sm:px-3 md:hover:bg-surface-3"
+          aria-label={t('Guthaben (Spielgeld)')}
+        >
+          <Wallet className="hidden size-4 text-fg-muted sm:block" aria-hidden="true" />
+          <span
+            className="tabular text-sm font-semibold text-white md:text-fg"
+            data-testid="header-balance"
+          >
+            {wallet ? formatMoney(wallet.available) : '—'}
+          </span>
+        </Link>
+        <Link
+          href="/dashboard/wallet"
+          className="grid place-items-center bg-white px-2 text-[#2337c6] transition-colors hover:bg-white/90 md:bg-accent md:text-accent-fg md:hover:bg-accent/90"
+          aria-label={t('Aufladen')}
+          title={t('Aufladen')}
+          data-testid="header-top-up"
+        >
+          <Plus className="size-4" aria-hidden="true" />
+        </Link>
+      </div>
       <NotificationBell />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button
-            className="grid size-9 place-items-center rounded-full bg-accent-soft text-xs font-semibold text-accent-strong transition-colors hover:bg-accent/25"
+            className="grid size-9 place-items-center rounded-full bg-white/20 text-xs font-semibold text-white transition-colors hover:bg-white/30 md:bg-accent-soft md:text-accent-strong md:hover:bg-accent/25"
             aria-label={t('Konto-Menü')}
             data-testid="user-menu"
           >
@@ -106,6 +131,11 @@ export function UserMenu() {
           <DropdownMenuItem asChild>
             <Link href="/dashboard/bets">
               <Receipt /> {t('Meine Wetten')}
+            </Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <Link href="/feed">
+              <Users /> {t('Tipp-Feed')}
             </Link>
           </DropdownMenuItem>
           <DropdownMenuItem asChild>

@@ -11,6 +11,7 @@ import { accountRoutes } from './routes/account';
 import { adminRoutes } from './routes/admin';
 import { authRoutes } from './routes/auth';
 import { betRoutes } from './routes/bets';
+import { feedRoutes } from './routes/feed';
 import { casinoRoutes } from './routes/casino';
 import { catalogRoutes } from './routes/catalog';
 import { InsightsService } from './services/insights';
@@ -143,6 +144,7 @@ export async function buildApp(
       await api.register(authRoutes(ctx, auth, sessions));
       await api.register(catalogRoutes(catalog, insights));
       await api.register(betRoutes(ctx));
+      await api.register(feedRoutes(ctx));
       await api.register(walletRoutes(ctx));
       await api.register(accountRoutes(ctx, accounts, sessions, twoFactor));
       await api.register(contactRoutes(ctx));

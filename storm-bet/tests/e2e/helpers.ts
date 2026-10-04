@@ -66,3 +66,12 @@ export async function placeSlip(page: Page, stake: string) {
   }
   await expect(receipt).toBeVisible();
 }
+
+/**
+ * A page wider than the screen makes mobile browsers zoom out, which inflates
+ * innerWidth as well – so compare against the device viewport instead.
+ */
+export async function expectNoHorizontalOverflow(page: Page) {
+  const width = await page.evaluate(() => document.documentElement.scrollWidth);
+  expect(width).toBeLessThanOrEqual(page.viewportSize()!.width);
+}

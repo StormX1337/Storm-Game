@@ -20,6 +20,8 @@ export function catalogRoutes(catalog: CatalogService, insights: InsightsService
 
     app.get('/events', async (request) => catalog.listEvents(parse(eventListQuery, request.query)));
 
+    app.get('/leagues/top', async () => catalog.topLeagues(12));
+
     app.get('/live', async (request) => {
       const query = parse(eventListQuery, {
         ...(request.query as object),
