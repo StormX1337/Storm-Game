@@ -8,6 +8,7 @@ import { useT } from '@/i18n/client';
 import { formatKickoff, formatOdds, formatRelative } from '@/lib/format';
 import { BET_STATUS_LABELS, BET_TYPE_LABELS, betStatusVariant } from '@/lib/labels';
 import { SportIcon } from '../sportsbook/sport-icon';
+import { FollowButton, LikeButton } from './feed-social';
 
 const initials = (name: string) =>
   name
@@ -42,6 +43,7 @@ export function FeedCard({ item }: { item: FeedItemDto }) {
             {t(formatRelative(item.sharedAt))}
           </p>
         </div>
+        <FollowButton item={item} />
         <Badge variant={betStatusVariant(bet.status)}>{t(BET_STATUS_LABELS[bet.status])}</Badge>
       </div>
       <ul className="divide-y divide-border">
@@ -76,8 +78,9 @@ export function FeedCard({ item }: { item: FeedItemDto }) {
           </li>
         ))}
       </ul>
-      <div className="flex items-center justify-between gap-3 border-t border-border bg-surface-2/50 px-4 py-2.5">
-        <p className="text-xs text-fg-muted">
+      <div className="flex items-center gap-2 border-t border-border bg-surface-2/50 py-2.5 pl-2 pr-4">
+        <LikeButton item={item} />
+        <p className="mr-auto text-xs text-fg-muted">
           {bet.system ? t('Ø Quote') : t('Gesamtquote')}{' '}
           <span className="tabular text-sm font-semibold text-fg">{formatOdds(bet.totalOdds)}</span>
           {bet.boosted ? (

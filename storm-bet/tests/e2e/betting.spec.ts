@@ -206,11 +206,75 @@ test('a bet shared in the tip feed can be copied by another player', async ({ pa
   const card = other.getByRole('main').getByTestId('feed-card').filter({ hasText: author });
   await expect(card).toHaveCount(1);
   await expect(card).not.toContainText('2,00 €');
+  await card.getByTestId('feed-like').click();
+  await expect(card.getByTestId('feed-like')).toHaveAttribute('aria-pressed', 'true');
+  await expect(card.getByTestId('feed-like')).toContainText('1');
+  await card.getByTestId('feed-follow').click();
+  await expect(card.getByTestId('feed-follow')).toContainText('Gefolgt');
+  await other.goto('/feed?filter=following');
+  await expect(
+    other.getByRole('main').getByTestId('feed-card').filter({ hasText: author }),
+  ).toHaveCount(1);
   await card.getByTestId('feed-copy').click();
   await expect(other).toHaveURL(/\/share\?ids=/);
   await other.getByTestId('take-shared').click();
   await expect(other.getByTestId('slip-item')).toHaveCount(1);
   await ctx.close();
+});
+
+test('the last bet can be repeated and slips saved for later', async ({ page }) => {
+  await register(page, uniqueEmail(), PASSWORD);
+  await openUpcomingEvent(page);
+  await placeFirstOpenSelection(page, '3');
+  await page.getByRole('button', { name: 'Weiter wetten' }).click();
+  await page.getByTestId('repeat-last-bet').click();
+  await expect(page.getByTestId('slip-item')).toHaveCount(1);
+  await expect(page.getByTestId('stake-input')).toHaveValue('3,00');
+
+  await page.getByTestId('save-slip').click();
+  await expect(page.getByText('Wettschein gespeichert')).toBeVisible();
+  await page.getByRole('button', { name: 'Leeren' }).click();
+  await expect(page.getByTestId('saved-slip')).toHaveCount(1);
+  await page.getByTestId('load-saved-slip').click();
+  await expect(page.getByTestId('slip-item')).toHaveCount(1);
+});
+
+test('mobile: the last bet is repeated from "Meine Wetten" @mobile', async ({ page }) => {
+  await register(page, uniqueEmail(), PASSWORD);
+  await page.goto('/sports/football');
+  await page.locator('[data-testid=odds-button]:not([disabled])').first().click();
+  await page.getByTestId('mobile-slip-button').click();
+  const sheet = page.getByRole('dialog');
+  await sheet.getByTestId('stake-input').fill('4');
+  const receipt = sheet.getByTestId('bet-receipt');
+  for (let i = 0; i < 4 && !(await receipt.isVisible()); i += 1) {
+    await page.waitForTimeout(500);
+    if (await sheet.getByTestId('odds-changed').isVisible())
+      await sheet.getByRole('button', { name: 'Neue Quoten übernehmen' }).click();
+    else if (await sheet.getByTestId('place-bet').isEnabled())
+      await sheet.getByTestId('place-bet').click();
+    await receipt.waitFor({ timeout: 4_000 }).catch(() => undefined);
+  }
+  await expect(receipt).toBeVisible();
+  await page.goto('/dashboard/bets');
+  await page.getByTestId('repeat-last-bet').click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole('dialog').getByTestId('slip-item')).toHaveCount(1);
+  await expect(page.getByRole('dialog').getByTestId('stake-input')).toHaveValue('4,00');
+});
+
+test('players can join and leave the leaderboard', async ({ page }) => {
+  await page.goto('/leaderboard');
+  await expect(page.getByRole('heading', { name: 'Rangliste' })).toBeVisible();
+  await register(page, uniqueEmail(), PASSWORD);
+  await page.goto('/leaderboard?period=month');
+  const me = page.getByTestId('leaderboard-me');
+  await expect(me).toContainText('Du bist nicht in der Rangliste.');
+  await page.getByTestId('leaderboard-join').click();
+  await expect(page.getByTestId('leaderboard-join')).toHaveText('Nicht mehr anzeigen');
+  await expect(me).toContainText('Noch keine abgerechnete Wette im Zeitraum.');
+  await page.getByTestId('leaderboard-join').click();
+  await expect(page.getByTestId('leaderboard-join')).toHaveText('Mitmachen');
 });
 
 test('search finds events by team name', async ({ page }) => {

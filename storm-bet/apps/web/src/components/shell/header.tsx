@@ -14,6 +14,7 @@ const NAV = [
   { href: '/live', label: 'Live', live: true },
   { href: '/casino', label: 'Casino' },
   { href: '/feed', label: 'Tipp-Feed' },
+  { href: '/leaderboard', label: 'Rangliste' },
   { href: '/promotions', label: 'Aktionen' },
   { href: '/dashboard/bets', label: 'Meine Wetten' },
   { href: '/dashboard/wallet', label: 'Wallet' },
@@ -38,7 +39,7 @@ export function Header({ liveCount }: { liveCount?: number }) {
                 className={cn(
                   'flex items-center gap-1.5 whitespace-nowrap rounded-md px-2 py-1.5 text-sm font-medium transition-colors sm:px-2.5',
                   active ? 'bg-surface-3 text-fg' : 'text-fg-muted hover:text-fg',
-                  i > 4 && 'hidden xl:flex',
+                  i > 5 && 'hidden xl:flex',
                 )}
               >
                 {item.live ? <LiveDot /> : null}

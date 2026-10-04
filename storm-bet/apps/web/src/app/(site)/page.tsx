@@ -81,10 +81,10 @@ export default async function HomePage() {
       gradient: 'linear-gradient(135deg,#4c1d95,#db2777)',
     },
     {
-      href: '/live',
-      label: 'Live',
-      icon: 'live',
-      gradient: 'linear-gradient(135deg,#7f1d1d,#ef4444)',
+      href: '/leaderboard',
+      label: 'Rangliste',
+      icon: 'trophy',
+      gradient: 'linear-gradient(135deg,#713f12,#eab308)',
     },
   ];
 

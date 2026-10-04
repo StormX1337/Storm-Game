@@ -28,6 +28,7 @@ import { announceWalletChange, useSession } from '../providers/session';
 import { useRealtimeTopics } from '../providers/realtime';
 import { SportIcon } from '../sportsbook/sport-icon';
 import { ShareButton } from './share-button';
+import { SaveSlipButton, SlipShortcuts } from './slip-shortcuts';
 import { useT } from '@/i18n/client';
 
 /** Quick stakes add to the typed amount (minor units). */
@@ -421,12 +422,13 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
 
   if (slip.items.length === 0) {
     return (
-      <div className={className}>
+      <div className={cn('overflow-y-auto', className)}>
         <EmptyState
           icon={<Ticket />}
           title={t('Dein Wettschein ist leer')}
           description={t('Tippe auf eine Quote, um eine Auswahl hinzuzufügen.')}
         />
+        <SlipShortcuts />
       </div>
     );
   }
@@ -714,6 +716,7 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
         <div className="flex items-center justify-between text-xs text-fg-subtle">
           <span>{t('Nur Demo-Guthaben · kein Echtgeld')}</span>
           <span className="flex items-center gap-3">
+            <SaveSlipButton />
             <ShareButton selectionIds={slip.items.map((i) => i.selectionId)} />
             <button
               onClick={() => slip.clear()}

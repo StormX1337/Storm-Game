@@ -19,6 +19,7 @@ import {
   Settings,
   Shield,
   ShieldCheck,
+  Trophy,
   Users,
   Wallet,
 } from 'lucide-react';
@@ -136,6 +137,11 @@ export function UserMenu() {
           <DropdownMenuItem asChild>
             <Link href="/feed">
               <Users /> {t('Tipp-Feed')}
+            </Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <Link href="/leaderboard">
+              <Trophy /> {t('Rangliste')}
             </Link>
           </DropdownMenuItem>
           <DropdownMenuItem asChild>

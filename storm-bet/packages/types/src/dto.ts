@@ -255,11 +255,56 @@ export interface FeedItemDto {
   id: string;
   sharedAt: string;
   author: string;
+  authorId: string;
   /** The viewer's own bet. */
   own: boolean;
+  /** The viewer follows the author. */
+  following: boolean;
+  likes: number;
+  liked: boolean;
   bet: Pick<BetDto, 'id' | 'type' | 'status' | 'totalOdds' | 'system' | 'boosted' | 'placedAt'> & {
     selections: Omit<BetSelectionDto, 'snapshot'>[];
   };
+}
+
+/** Picks a player saved for later. */
+export interface SavedSlipDto {
+  id: string;
+  name: string;
+  selectionIds: string[];
+  createdAt: string;
+}
+
+export type LeaderboardPeriod = 'week' | 'month';
+export type LeaderboardRanking = 'profit' | 'hitrate';
+
+/** Settled sportsbook bets of one player in the period (play money). */
+export interface LeaderboardStatsDto {
+  settled: number;
+  won: number;
+  lost: number;
+  /** Returns (payouts and cashouts) minus stakes. */
+  profit: Money;
+  /** Won among won and lost, 0–1; null without a decided bet. */
+  hitRate: number | null;
+}
+
+export interface LeaderboardEntryDto extends LeaderboardStatsDto {
+  rank: number;
+  userId: string;
+  name: string;
+  me: boolean;
+}
+
+export interface LeaderboardDto {
+  period: LeaderboardPeriod;
+  by: LeaderboardRanking;
+  from: string;
+  /** Decided bets needed to be ranked by hit rate. */
+  minDecided: number;
+  entries: LeaderboardEntryDto[];
+  /** The viewer's own numbers (also when not taking part); null for guests. */
+  me: (LeaderboardStatsDto & { optIn: boolean; rank: number | null }) | null;
 }
 
 /** What an open bet can be closed for right now. */

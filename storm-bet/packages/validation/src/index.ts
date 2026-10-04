@@ -9,3 +9,4 @@ export * from './admin';
 export { z } from 'zod';
 export { germanErrorMap } from './error-map';
 export * from './casino';
+export * from './social';

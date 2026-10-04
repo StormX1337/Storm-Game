@@ -18,6 +18,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
 const FILTERS = [
   { key: 'all', label: 'Alle' },
+  { key: 'following', label: 'Gefolgt' },
   { key: 'open', label: 'Offen' },
   { key: 'won', label: 'Gewonnen' },
 ] as const;
@@ -40,7 +41,7 @@ export default async function FeedPage({
           'Wettscheine, die andere Spieler teilen – mit Quoten und Ergebnis, ohne Einsätze. Übernimm offene Tipps zu den aktuellen Quoten.',
         )}
       />
-      <nav className="flex gap-2" aria-label={t('Filter')}>
+      <nav className="flex flex-wrap gap-2" aria-label={t('Filter')}>
         {FILTERS.map((f) => (
           <Link
             key={f.key}
@@ -56,13 +57,23 @@ export default async function FeedPage({
         ))}
       </nav>
       {first.items.length === 0 ? (
-        <EmptyState
-          icon={<Users />}
-          title={t('Noch keine geteilten Tipps')}
-          description={t(
-            'Teile eine deiner Wetten unter „Meine Wetten“ – sie erscheint dann hier.',
-          )}
-        />
+        filter === 'following' ? (
+          <EmptyState
+            icon={<Users />}
+            title={t('Noch nichts von Spielern, denen du folgst')}
+            description={t(
+              'Tippe bei einem Tipp auf „Folgen“ – neue Tipps dieser Spieler erscheinen dann hier.',
+            )}
+          />
+        ) : (
+          <EmptyState
+            icon={<Users />}
+            title={t('Noch keine geteilten Tipps')}
+            description={t(
+              'Teile eine deiner Wetten unter „Meine Wetten“ – sie erscheint dann hier.',
+            )}
+          />
+        )
       ) : (
         <FeedList initial={first} filter={filter} />
       )}

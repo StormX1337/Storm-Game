@@ -4,6 +4,7 @@ import { Receipt } from 'lucide-react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { BetCard } from '@/components/dashboard/bet-card';
+import { BetsPageShortcuts } from '@/components/betslip/slip-shortcuts';
 import { MoreBets } from '@/components/dashboard/bet-list';
 import { PageHeader } from '@/components/sportsbook/page-header';
 import { serverApi } from '@/lib/server-api';
@@ -37,6 +38,7 @@ export default async function BetsPage({
         title={t('Meine Wetten')}
         description={t('Alle Wetten mit Einsatz, Quote zum Annahmezeitpunkt und Ergebnis.')}
       />
+      <BetsPageShortcuts />
       <nav className="scrollbar-none flex gap-1 overflow-x-auto" aria-label={t('Filter')}>
         {FILTERS.map((f) => (
           <Link

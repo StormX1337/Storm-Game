@@ -12,6 +12,7 @@ import { adminRoutes } from './routes/admin';
 import { authRoutes } from './routes/auth';
 import { betRoutes } from './routes/bets';
 import { feedRoutes } from './routes/feed';
+import { socialRoutes } from './routes/social';
 import { casinoRoutes } from './routes/casino';
 import { catalogRoutes } from './routes/catalog';
 import { InsightsService } from './services/insights';
@@ -25,6 +26,7 @@ import { AdminService } from './services/admin';
 import { AuthService } from './services/auth';
 import { CasinoCatalogService } from './services/casino';
 import { CatalogService } from './services/catalog';
+import { LeaderboardService } from './services/leaderboard';
 import { SessionService } from './services/sessions';
 
 function trustProxySetting(value: string): FastifyServerOptions['trustProxy'] {
@@ -109,6 +111,7 @@ export async function buildApp(
     ctx.env.ODDS_PROVIDER,
   );
   const casinoCatalog = new CasinoCatalogService(ctx.db, ctx.cache, ctx.now);
+  const leaderboard = new LeaderboardService(ctx.db, ctx.cache, ctx.now);
   const tracker = new LiveEventTracker(ctx.db);
 
   await app.register(cookie);
@@ -145,6 +148,7 @@ export async function buildApp(
       await api.register(catalogRoutes(catalog, insights));
       await api.register(betRoutes(ctx));
       await api.register(feedRoutes(ctx));
+      await api.register(socialRoutes(ctx, leaderboard));
       await api.register(walletRoutes(ctx));
       await api.register(accountRoutes(ctx, accounts, sessions, twoFactor));
       await api.register(contactRoutes(ctx));

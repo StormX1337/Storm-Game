@@ -122,7 +122,7 @@ export const autoCashoutSchema = z.object({ amount: positiveMoneyMinor.nullable(
 export type AutoCashoutInput = z.infer<typeof autoCashoutSchema>;
 export type CashoutInput = z.infer<typeof cashoutSchema>;
 
-export const FEED_FILTERS = ['all', 'open', 'won'] as const;
+export const FEED_FILTERS = ['all', 'following', 'open', 'won'] as const;
 export const feedQuery = z.object({
   filter: z.enum(FEED_FILTERS).default('all'),
   cursor: z.string().max(200).optional(),

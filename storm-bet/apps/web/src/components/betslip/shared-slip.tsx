@@ -8,6 +8,7 @@ import { api } from '@/lib/api-client';
 import { formatKickoff, formatOdds } from '@/lib/format';
 import { useBetSlip } from '@/stores/bet-slip';
 import { SportIcon } from '../sportsbook/sport-icon';
+import { toSlipItem } from './slip-shortcuts';
 import { useT } from '@/i18n/client';
 
 export function SharedSlip({ ids }: { ids: string[] }) {
@@ -42,22 +43,7 @@ export function SharedSlip({ ids }: { ids: string[] }) {
   }
 
   const take = () => {
-    addMany(
-      open.map((s) => ({
-        selectionId: s.selectionId,
-        marketId: s.marketId,
-        eventId: s.eventId,
-        eventName: s.eventName,
-        marketName: s.marketName,
-        selectionName: s.selectionName,
-        sportKey: s.sportKey,
-        startTime: s.startTime,
-        odds: s.odds,
-        status: 'OPEN',
-        isLive: s.isLive,
-        multi: s.marketType === 'PLAYER_TO_SCORE',
-      })),
-    );
+    addMany(open.map(toSlipItem));
     setOpen(true);
     toast.success(
       t('{0} {1} im Wettschein', [open.length, open.length === 1 ? t('Tipp') : t('Tipps')]),

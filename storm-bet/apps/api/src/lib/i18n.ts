@@ -185,6 +185,15 @@ const EN: Record<string, string> = {
   'Das Passwort muss mindestens 10 Zeichen lang sein':
     'The password must be at least 10 characters long',
   'Auswahl nicht mehr verfügbar.': 'Selection no longer available.',
+  'Tipp nicht gefunden.': 'Tip not found.',
+  'Eigene Tipps kannst du nicht liken.': 'You cannot like your own tips.',
+  'Du kannst dir nicht selbst folgen.': 'You cannot follow yourself.',
+  'Spieler nicht gefunden.': 'Player not found.',
+  'Du kannst höchstens 500 Spielern folgen.': 'You can follow at most 500 players.',
+  'Du kannst höchstens 20 Wettscheine speichern. Lösche zuerst einen alten.':
+    'You can save at most 20 bet slips. Delete an old one first.',
+  'Wettschein nicht gefunden.': 'Bet slip not found.',
+  'Jeder Tipp nur einmal.': 'Each pick only once.',
 };
 
 const PATTERNS: [RegExp, string][] = [

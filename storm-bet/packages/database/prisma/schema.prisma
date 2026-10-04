@@ -214,12 +214,18 @@ model User {
   totpEnabledAt     DateTime?  @map("totp_enabled_at")
   /// Last 30-second step a code was accepted for; older or equal steps are refused.
   totpLastStep      Int?       @map("totp_last_step")
+  /// Shown in the public leaderboard (display name, results). Off until the player opts in.
+  leaderboardOptIn  Boolean    @default(false) @map("leaderboard_opt_in")
   createdAt         DateTime   @default(now()) @map("created_at")
   updatedAt         DateTime   @updatedAt @map("updated_at")
 
   sessions        Session[]
   recoveryCodes   RecoveryCode[]
   sharedBets      SharedBet[]
+  savedSlips      SavedSlip[]
+  feedLikes       FeedLike[]
+  following       Follow[]         @relation("Following")
+  followers       Follow[]         @relation("Followers")
   authTokens      AuthToken[]
   wallet          Wallet?
   transactions    Transaction[]
@@ -248,8 +254,53 @@ model SharedBet {
   bet  Bet  @relation(fields: [betId], references: [id], onDelete: Cascade)
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  likes FeedLike[]
+
   @@index([createdAt])
+  @@index([userId, createdAt])
   @@map("shared_bets")
+}
+
+/// A like on a tip in the feed; one per player and tip.
+model FeedLike {
+  sharedBetId String   @map("shared_bet_id") @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  sharedBet SharedBet @relation(fields: [sharedBetId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([sharedBetId, userId])
+  @@index([userId])
+  @@map("feed_likes")
+}
+
+/// A player following another player's shared tips.
+model Follow {
+  followerId String   @map("follower_id") @db.Uuid
+  followeeId String   @map("followee_id") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  follower User @relation("Following", fields: [followerId], references: [id], onDelete: Cascade)
+  followee User @relation("Followers", fields: [followeeId], references: [id], onDelete: Cascade)
+
+  @@id([followerId, followeeId])
+  @@index([followeeId])
+  @@map("follows")
+}
+
+/// Picks a player keeps for later; loaded again at the then current odds.
+model SavedSlip {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  name         String   @db.VarChar(40)
+  selectionIds String[] @map("selection_ids") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("saved_slips")
 }
 
 /// Single-use two-factor recovery codes, stored as SHA-256 hashes only.
@@ -657,6 +708,7 @@ model Bet {
   @@index([userId, placedAt])
   @@index([status])
   @@index([placedAt])
+  @@index([settledAt])
   @@map("bets")
 }
 

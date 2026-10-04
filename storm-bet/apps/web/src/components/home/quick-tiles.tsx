@@ -1,7 +1,7 @@
 'use client';
 
 import type { CasinoTheme } from '@storm-bet/types';
-import { Disc3, Layers, Radio, Rocket, Users, Zap } from 'lucide-react';
+import { Disc3, Layers, Radio, Rocket, Trophy, Users, Zap } from 'lucide-react';
 import Link from 'next/link';
 import { useT } from '@/i18n/client';
 import { GameCover } from '../casino/game-cover';
@@ -11,7 +11,7 @@ export interface QuickTile {
   label: string;
   /** Casino tiles show the game's cover; the others an icon on a gradient. */
   theme?: CasinoTheme;
-  icon?: 'boost' | 'builder' | 'feed' | 'live' | 'crash' | 'wheel';
+  icon?: 'boost' | 'builder' | 'feed' | 'live' | 'crash' | 'wheel' | 'trophy';
   gradient?: string;
 }
 
@@ -22,6 +22,7 @@ const ICONS = {
   live: Radio,
   crash: Rocket,
   wheel: Disc3,
+  trophy: Trophy,
 };
 
 /** Shortcuts row: games and features, swiped sideways on phones. */
