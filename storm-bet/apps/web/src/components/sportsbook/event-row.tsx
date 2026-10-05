@@ -3,7 +3,7 @@
 import type { EventSummaryDto } from '@storm-bet/types';
 import { OUTCOME_LABELS } from '@storm-bet/types';
 import { cn } from '@storm-bet/ui';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, Zap } from 'lucide-react';
 import Link from 'next/link';
 import { formatKickoff } from '@/lib/format';
 import { useLiveEvent } from './hooks';
@@ -19,9 +19,12 @@ export function eventName(e: Pick<EventSummaryDto, 'home' | 'away'>) {
 export function EventRow({
   event,
   showLeague = false,
+  boost,
 }: {
   event: EventSummaryDto;
   showLeague?: boolean;
+  /** Uplift of an open odds boost on this match, in percent. */
+  boost?: number;
 }) {
   const t = useT();
   const live = useLiveEvent(event);
@@ -32,7 +35,7 @@ export function EventRow({
 
   return (
     <div
-      className="grid grid-cols-1 gap-2.5 border-b border-border/70 px-3 py-3 transition-colors last:border-b-0 hover:bg-surface-2/40 md:grid-cols-[minmax(0,1fr)_minmax(250px,300px)_52px] md:items-center md:gap-4 md:px-4"
+      className="grid grid-cols-1 gap-2.5 border-b border-border/70 px-3 py-3 transition-colors last:border-b-0 hover:bg-surface-2/40 md:grid-cols-[minmax(0,1fr)_minmax(270px,340px)_56px] md:items-center md:gap-5 md:px-5 md:py-3.5"
       data-testid="event-row"
     >
       <Link
@@ -40,7 +43,7 @@ export function EventRow({
         className="group min-w-0 space-y-1.5"
         data-testid="event-link"
       >
-        <div className="flex items-center gap-2 text-xs">
+        <div className="flex items-center gap-2 text-xs md:text-[13px]">
           {live.isLive ? (
             <>
               <LiveBadge />
@@ -60,6 +63,11 @@ export function EventRow({
           {showLeague ? (
             <span className="min-w-0 truncate text-fg-subtle">· {event.league.name}</span>
           ) : null}
+          {boost ? (
+            <span className="inline-flex shrink-0 items-center gap-0.5 rounded-md bg-violet-soft px-1.5 py-px text-[10px] font-bold text-violet-strong md:text-[11px]">
+              <Zap className="size-3" aria-hidden="true" />+{boost} %
+            </span>
+          ) : null}
           {more > 0 ? (
             <span className="ml-auto flex shrink-0 items-center text-fg-subtle md:hidden">
               +{more}
@@ -72,7 +80,7 @@ export function EventRow({
             <span className="flex min-w-0 items-center gap-2">
               <TeamBadge name={team.name} />
               <span
-                className="truncate text-sm font-medium text-fg transition-colors group-hover:text-accent-strong"
+                className="truncate text-sm font-semibold text-fg transition-colors group-hover:text-accent-strong md:text-[15px]"
                 data-testid="team-name"
               >
                 {team.name}
@@ -99,6 +107,7 @@ export function EventRow({
               selection={s}
               label={t(OUTCOME_LABELS[s.outcome])}
               layout="stacked"
+              className="md:min-h-12"
               context={{
                 eventId: event.id,
                 eventName: eventName(event),
@@ -119,7 +128,7 @@ export function EventRow({
       )}
       <Link
         href={`/events/${event.id}`}
-        className="hidden h-11 items-center justify-center gap-0.5 rounded-lg border border-transparent text-xs font-semibold text-fg-muted transition-colors hover:border-border hover:bg-surface-2 hover:text-fg md:flex"
+        className="hidden h-12 items-center justify-center gap-0.5 rounded-lg border border-transparent text-xs font-semibold text-fg-muted transition-colors hover:border-border hover:bg-surface-2 hover:text-fg md:flex"
         aria-label={t('Alle Märkte für {0}', [eventName(event)])}
       >
         +{more}

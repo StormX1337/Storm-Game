@@ -22,13 +22,13 @@ export default async function CasinoLayout({ children }: { children: React.React
       <Header />
       <div className="border-b border-accent/20 bg-accent-soft/40">
         <p
-          className="mx-auto max-w-[1440px] px-4 py-1.5 text-center text-xs font-semibold tracking-wide text-accent-strong lg:px-6"
+          className="mx-auto max-w-[1760px] px-4 py-1.5 text-center text-xs font-semibold tracking-wide text-accent-strong lg:px-6"
           data-testid="casino-demo-mode"
         >
           {DEMO_MODE_LABEL}
         </p>
       </div>
-      <main className="mx-auto max-w-[1440px] space-y-6 px-4 py-6 lg:px-6">{children}</main>
+      <main className="mx-auto max-w-[1760px] space-y-6 px-4 py-6 lg:px-6">{children}</main>
       <Footer />
       <MobileTabBar />
     </>

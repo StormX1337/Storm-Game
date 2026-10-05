@@ -121,7 +121,7 @@ export function OddsButton({
           <span
             key={live.version}
             className={cn(
-              'tabular rounded-sm px-0.5 text-[15px] font-bold leading-5 text-fg',
+              'tabular rounded-sm px-0.5 text-[15px] font-bold leading-5 text-fg lg:text-base',
               moved === 'up' && 'animate-flash-up text-up',
               moved === 'down' && 'animate-flash-down text-down',
             )}

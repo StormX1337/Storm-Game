@@ -1,4 +1,11 @@
-import type { EventSummaryDto, LeagueDto, Paginated, SportDto, SportKey } from '@storm-bet/types';
+import type {
+  BoostDto,
+  EventSummaryDto,
+  LeagueDto,
+  Paginated,
+  SportDto,
+  SportKey,
+} from '@storm-bet/types';
 import { SPORT_KEYS } from '@storm-bet/types';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
@@ -43,7 +50,7 @@ export default async function SportPage({
 
   const { odds } = await getPlatformMeta();
   const within = odds.isSimulated ? 36 : 7 * 24;
-  const [detail, events] = await Promise.all([
+  const [detail, events, boostList] = await Promise.all([
     loadSport(sport),
     tryServerApi<Paginated<EventSummaryDto>>(
       tab === 'live'
@@ -52,7 +59,11 @@ export default async function SportPage({
             day ? `&day=${day}` : `&withinHours=${within}`
           }`,
     ),
+    tryServerApi<{ boosts: BoostDto[] }>('/boosts'),
   ]);
+  const boosts = Object.fromEntries(
+    (boostList?.boosts ?? []).filter((b) => b.open).map((b) => [b.eventId, b.upliftPct]),
+  );
   if (detail === 'missing') notFound();
   if (detail === null) return <LoadError />;
 
@@ -157,6 +168,7 @@ export default async function SportPage({
       ) : (
         <EventList
           events={events.items}
+          boosts={boosts}
           subscribeLive={tab === 'live'}
           emptyTitle={tab === 'live' ? t('Gerade läuft kein Event') : t('Keine anstehenden Events')}
           emptyDescription={

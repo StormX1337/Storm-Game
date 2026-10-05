@@ -40,11 +40,11 @@ export function LeagueHeader({
   simulated: boolean;
 }) {
   return (
-    <div className="flex items-center gap-2.5 border-b border-border bg-surface-2/50 px-3 py-2.5 md:px-4">
+    <div className="flex items-center gap-2.5 border-b border-border bg-surface-2/50 px-3 py-2.5 md:px-5 md:py-3">
       <span className="grid size-6 shrink-0 place-items-center rounded-md bg-surface-3 text-fg-muted">
         <SportIcon sport={sport} className="size-3.5" />
       </span>
-      <h3 className="truncate text-[13px] font-bold tracking-tight text-fg">{name}</h3>
+      <h3 className="truncate text-[13px] font-bold tracking-tight text-fg md:text-sm">{name}</h3>
       {country ? <span className="truncate text-xs text-fg-subtle">{country}</span> : null}
       <span className="ml-auto flex items-center gap-2.5">
         {simulated ? <DemoDataBadge /> : null}
@@ -60,9 +60,12 @@ export function EventList({
   subscribeLive = false,
   emptyTitle = 'Keine Events',
   emptyDescription,
+  boosts,
 }: {
   events: EventSummaryDto[];
   subscribeLive?: boolean;
+  /** Open odds boosts: event id → uplift in percent. */
+  boosts?: Record<string, number>;
   emptyTitle?: string;
   emptyDescription?: string;
 }) {
@@ -91,7 +94,7 @@ export function EventList({
           />
           <div>
             {group.events.map((e) => (
-              <EventRow key={e.id} event={e} />
+              <EventRow key={e.id} event={e} boost={boosts?.[e.id]} />
             ))}
           </div>
         </Card>

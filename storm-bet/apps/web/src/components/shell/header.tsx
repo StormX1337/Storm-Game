@@ -14,9 +14,6 @@ const NAV = [
   { href: '/live', label: 'Live', live: true },
   { href: '/promotions', label: 'Aktionen' },
   { href: '/bet-builder', label: 'Bet Builder' },
-  { href: '/casino', label: 'Casino', wide: true },
-  { href: '/feed', label: 'Tipp-Feed', wide: true },
-  { href: '/leaderboard', label: 'Rangliste', wide: true },
 ];
 
 export function Header({ liveCount }: { liveCount?: number }) {
@@ -24,7 +21,7 @@ export function Header({ liveCount }: { liveCount?: number }) {
   const pathname = usePathname();
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-bg/85 pt-[env(safe-area-inset-top)] backdrop-blur-xl supports-[backdrop-filter]:bg-bg/70">
-      <div className="mx-auto flex h-14 max-w-[1440px] items-center gap-3 px-4 md:h-16 lg:gap-6 lg:px-6">
+      <div className="mx-auto flex h-14 max-w-[1760px] items-center gap-3 px-4 md:h-16 lg:gap-6 lg:px-6">
         <Brand />
         {/* Phones use the bottom navigation instead. */}
         <nav aria-label={t('Hauptnavigation')} className="hidden h-full items-stretch md:flex">
@@ -38,9 +35,8 @@ export function Header({ liveCount }: { liveCount?: number }) {
                 href={item.href}
                 aria-current={active ? 'page' : undefined}
                 className={cn(
-                  'relative flex items-center gap-1.5 whitespace-nowrap px-3 text-sm font-medium transition-colors',
+                  'relative flex items-center gap-1.5 whitespace-nowrap px-3 text-sm font-semibold transition-colors lg:px-4 lg:text-[15px]',
                   active ? 'text-fg' : 'text-fg-muted hover:text-fg',
-                  item.wide && 'hidden xl:flex',
                 )}
               >
                 {item.live ? <LiveDot /> : null}

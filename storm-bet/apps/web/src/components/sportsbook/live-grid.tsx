@@ -8,7 +8,7 @@ import { MatchCard } from './match-card';
 export function LiveGrid({ events }: { events: EventSummaryDto[] }) {
   useRealtimeTopics(['live', ...events.slice(0, 48).map((e) => `event:${e.id}`)]);
   return (
-    <div className="grid gap-3 md:grid-cols-2" data-testid="live-grid">
+    <div className="grid gap-3 md:grid-cols-2 min-[1700px]:grid-cols-3" data-testid="live-grid">
       {events.map((event) => (
         <MatchCard key={event.id} event={event} variant="live" />
       ))}

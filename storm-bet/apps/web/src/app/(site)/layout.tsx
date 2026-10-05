@@ -18,7 +18,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
     <>
       <DemoBanner />
       <Header liveCount={liveCount} />
-      <div className="mx-auto max-w-[1440px] px-4 py-4 lg:grid lg:grid-cols-[minmax(0,1fr)_330px] lg:gap-6 lg:px-6 lg:py-6 xl:grid-cols-[220px_minmax(0,1fr)_340px]">
+      <div className="mx-auto max-w-[1760px] px-4 py-4 lg:grid lg:grid-cols-[minmax(0,1fr)_350px] lg:gap-5 lg:px-6 lg:py-5 xl:grid-cols-[228px_minmax(0,1fr)_370px] 2xl:gap-6">
         <aside className="hidden xl:block">
           <div className="scrollbar-none sticky top-[5.5rem] max-h-[calc(100dvh-6.5rem)] overflow-y-auto">
             <Sidebar sports={sports} />

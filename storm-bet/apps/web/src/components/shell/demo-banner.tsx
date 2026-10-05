@@ -9,7 +9,7 @@ export async function DemoBanner() {
   const { odds } = await getPlatformMeta();
   return (
     <div className="border-b border-border bg-surface/70" role="note" data-testid="demo-banner">
-      <div className="mx-auto flex max-w-[1440px] items-center justify-center gap-2 px-4 py-1.5 text-[11px] leading-4 sm:text-xs lg:px-6">
+      <div className="mx-auto flex max-w-[1760px] items-center justify-center gap-2 px-4 py-1.5 text-[11px] leading-4 sm:text-xs lg:px-6">
         <span className="shrink-0 rounded-[5px] bg-warning-soft px-1.5 py-px font-bold uppercase tracking-wider text-warning">
           {t('Demo-Modus')}
         </span>

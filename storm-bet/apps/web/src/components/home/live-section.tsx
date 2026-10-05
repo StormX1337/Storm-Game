@@ -24,7 +24,7 @@ export function LiveSection({ events, total }: { events: EventSummaryDto[]; tota
         linkLabel={t('Alle')}
       />
       {events.length ? (
-        <div className="scrollbar-none -mx-4 flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto overscroll-x-contain px-4 pb-1 md:mx-0 md:grid md:grid-cols-2 md:overflow-visible md:px-0">
+        <div className="scrollbar-none -mx-4 flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto overscroll-x-contain px-4 pb-1 md:mx-0 md:grid md:grid-cols-2 md:overflow-visible min-[1700px]:grid-cols-3 md:px-0">
           {events.map((event) => (
             <MatchCard
               key={event.id}

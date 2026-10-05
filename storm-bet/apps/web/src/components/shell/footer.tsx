@@ -18,7 +18,7 @@ export async function Footer() {
   const { odds } = await getPlatformMeta();
   return (
     <footer className="mt-16 border-t border-border bg-surface/60">
-      <div className="mx-auto grid max-w-[1440px] gap-8 px-4 py-10 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] lg:px-6">
+      <div className="mx-auto grid max-w-[1760px] gap-8 px-4 py-10 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] lg:px-6">
         <div className="space-y-4">
           <div className="flex items-center justify-between gap-3">
             <Brand alwaysShowName />
@@ -69,7 +69,7 @@ export async function Footer() {
         </nav>
       </div>
       <div className="border-t border-border">
-        <p className="mx-auto max-w-[1440px] px-4 py-4 text-xs text-fg-subtle lg:px-6">
+        <p className="mx-auto max-w-[1760px] px-4 py-4 text-xs text-fg-subtle lg:px-6">
           © {new Date().getFullYear()}{' '}
           {t('STORM BET · Demo-Software ohne Glücksspiellizenz · Kein Echtgeldbetrieb')}
         </p>

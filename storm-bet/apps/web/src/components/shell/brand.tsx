@@ -34,14 +34,19 @@ export function Brand({
       className={cn('flex shrink-0 items-center gap-2 rounded-md', className)}
       aria-label={t('STORM BET Startseite')}
     >
-      <BrandMark />
-      <span className="text-[15px] font-extrabold tracking-[0.12em] text-fg">
+      <BrandMark className={alwaysShowName ? undefined : 'md:size-8'} />
+      <span
+        className={cn(
+          'text-[15px] font-extrabold tracking-[0.12em] text-fg',
+          !alwaysShowName && 'md:text-[18px]',
+        )}
+      >
         STORM
         <span
           className={cn(
             'font-semibold text-accent-strong',
             // Narrow phones keep the room for balance and account.
-            !alwaysShowName && 'max-[399px]:hidden',
+            !alwaysShowName && 'max-[429px]:hidden',
           )}
         >
           {' '}

@@ -47,8 +47,8 @@ export const MatchCard = memo(function MatchCard({
   return (
     <article
       className={cn(
-        'relative flex flex-col overflow-hidden rounded-xl border bg-surface p-3.5 shadow-[var(--shadow-card)] transition-colors hover:border-border-strong',
-        live.isLive ? 'border-live/25' : 'border-border',
+        'relative flex flex-col overflow-hidden rounded-xl border bg-surface p-3 shadow-[var(--shadow-card)] transition-colors hover:border-border-strong lg:p-3.5',
+        live.isLive ? 'border-live/30' : 'border-border',
         className,
       )}
       data-testid={variant === 'live' ? 'live-card' : 'top-match'}
@@ -58,7 +58,10 @@ export const MatchCard = memo(function MatchCard({
         aria-hidden="true"
         className="pointer-events-none absolute inset-x-0 top-0 h-0.5 opacity-80"
         style={{
-          background: `linear-gradient(90deg, hsl(${h1} 70% 55%), hsl(${h2} 70% 55%))`,
+          // Live: a red-to-violet accent; otherwise the teams' colours.
+          background: live.isLive
+            ? 'linear-gradient(90deg, var(--color-live), var(--color-violet))'
+            : `linear-gradient(90deg, hsl(${h1} 70% 55%), hsl(${h2} 70% 55%))`,
         }}
       />
       <Link href={`/events/${event.id}`} className="group block flex-1">
@@ -91,15 +94,17 @@ export const MatchCard = memo(function MatchCard({
             </span>
           ) : null}
         </div>
-        <div className="mt-3 space-y-2">
+        <div className="mt-2.5 space-y-1.5">
           {[event.home, event.away].map((team, i) => (
             <div key={team.id} className="flex items-center gap-2.5">
               <TeamBadge name={team.name} className="size-6 text-[9px]" />
               <span
                 className={cn(
-                  'min-w-0 flex-1 truncate font-semibold tracking-tight transition-colors group-hover:text-accent-strong',
+                  'min-w-0 flex-1 truncate font-bold tracking-tight transition-colors group-hover:text-accent-strong',
                   // Featured cards set the teams like a fixture poster; live cards stay compact.
-                  variant === 'featured' ? 'text-[14px] uppercase' : 'text-[15px]',
+                  variant === 'featured'
+                    ? 'text-[14px] uppercase lg:text-[15px]'
+                    : 'text-[15px] lg:text-base',
                 )}
               >
                 {team.name}
@@ -107,7 +112,7 @@ export const MatchCard = memo(function MatchCard({
               {live.score ? (
                 <span
                   className={cn(
-                    'tabular min-w-6 text-right text-lg font-extrabold leading-none',
+                    'tabular min-w-6 text-right text-xl font-extrabold leading-none',
                     live.isLive ? 'text-fg' : 'text-fg-muted',
                   )}
                 >
@@ -121,7 +126,7 @@ export const MatchCard = memo(function MatchCard({
       {market && !closed ? (
         <div
           className={cn(
-            'mt-3.5 grid gap-1.5',
+            'mt-3 grid gap-1.5',
             market.selections.length === 3 ? 'grid-cols-3' : 'grid-cols-2',
           )}
         >
@@ -148,7 +153,7 @@ export const MatchCard = memo(function MatchCard({
       {more > 0 ? (
         <Link
           href={`/events/${event.id}`}
-          className="mt-2.5 flex items-center justify-center gap-0.5 text-xs font-medium text-fg-muted transition-colors hover:text-fg"
+          className="mt-2 flex items-center justify-center gap-0.5 text-[11px] font-medium text-fg-muted transition-colors hover:text-fg lg:text-xs"
         >
           {t('{0} weitere Märkte', [more])}
           <ChevronRight className="size-3.5" aria-hidden="true" />

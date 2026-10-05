@@ -72,7 +72,7 @@ export default async function HomePage() {
   const failed = live === null && upcoming === null;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 lg:space-y-8">
       <BalanceCard startCredit={START_CREDIT} />
       {failed ? (
         <LoadError />
