@@ -107,7 +107,10 @@ export default async function AdminEventsPage({
               {page.items.map((e) => (
                 <tr key={e.id} className="hover:bg-surface-2/50">
                   <Td>
-                    <Link href={`/admin/events/${e.id}`} className="font-medium hover:text-accent">
+                    <Link
+                      href={`/admin/events/${e.id}`}
+                      className="font-medium hover:text-accent-strong"
+                    >
                       {e.home.name} – {e.away.name}
                     </Link>
                     <p className="text-xs text-fg-muted">

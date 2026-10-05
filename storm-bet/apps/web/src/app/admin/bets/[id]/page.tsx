@@ -37,7 +37,10 @@ export default async function AdminBetPage({ params }: { params: Promise<{ id: s
         description={
           <>
             von{' '}
-            <Link href={`/admin/users/${bet.user.id}`} className="text-accent hover:underline">
+            <Link
+              href={`/admin/users/${bet.user.id}`}
+              className="text-accent-strong hover:underline"
+            >
               {bet.user.email}
             </Link>
           </>

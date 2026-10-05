@@ -76,7 +76,10 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: P
               {page.items.map((u) => (
                 <tr key={u.id} className="hover:bg-surface-2/50">
                   <Td>
-                    <Link href={`/admin/users/${u.id}`} className="font-medium hover:text-accent">
+                    <Link
+                      href={`/admin/users/${u.id}`}
+                      className="font-medium hover:text-accent-strong"
+                    >
                       {u.displayName}
                     </Link>
                     <p className="text-xs text-fg-muted">{u.email}</p>

@@ -48,7 +48,7 @@ export default async function WalletPage() {
         </div>
       </Card>
       <div className="flex gap-3 rounded-lg border border-border bg-surface-2/60 p-4 text-sm text-fg-muted">
-        <Info className="mt-0.5 size-4 shrink-0 text-accent" aria-hidden="true" />
+        <Info className="mt-0.5 size-4 shrink-0 text-accent-strong" aria-hidden="true" />
         <p>
           {t('Beim Platzieren wird dein Einsatz')} <strong className="text-fg">reserviert</strong>
           {t(
@@ -59,7 +59,10 @@ export default async function WalletPage() {
       <Card className="overflow-hidden">
         <CardHeader>
           <CardTitle>{t('Letzte Buchungen')}</CardTitle>
-          <Link href="/dashboard/transactions" className="text-sm text-accent hover:underline">
+          <Link
+            href="/dashboard/transactions"
+            className="text-sm text-accent-strong hover:underline"
+          >
             {t('Alle anzeigen')}
           </Link>
         </CardHeader>

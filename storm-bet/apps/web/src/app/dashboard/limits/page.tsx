@@ -24,7 +24,7 @@ export default async function LimitsPage() {
         description={
           <>
             {t('Werkzeuge für verantwortungsvolles Spielen.')}{' '}
-            <Link href="/responsible-gaming" className="text-accent hover:underline">
+            <Link href="/responsible-gaming" className="text-accent-strong hover:underline">
               {t('Mehr erfahren')}
             </Link>
           </>

@@ -40,9 +40,11 @@ export function LeagueHeader({
   simulated: boolean;
 }) {
   return (
-    <div className="flex items-center gap-2.5 border-b border-border bg-surface-2/60 px-3 py-2.5 md:px-4">
-      <SportIcon sport={sport} className="text-fg-muted" />
-      <h3 className="truncate text-sm font-semibold text-fg">{name}</h3>
+    <div className="flex items-center gap-2.5 border-b border-border bg-surface-2/50 px-3 py-2.5 md:px-4">
+      <span className="grid size-6 shrink-0 place-items-center rounded-md bg-surface-3 text-fg-muted">
+        <SportIcon sport={sport} className="size-3.5" />
+      </span>
+      <h3 className="truncate text-[13px] font-bold tracking-tight text-fg">{name}</h3>
       {country ? <span className="truncate text-xs text-fg-subtle">{country}</span> : null}
       <span className="ml-auto flex items-center gap-2.5">
         {simulated ? <DemoDataBadge /> : null}

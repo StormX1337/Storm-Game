@@ -67,16 +67,19 @@ export default async function AdminEventPage({ params }: { params: Promise<{ id:
             ]}
           />
           <div className="mt-4 flex gap-3 text-sm">
-            <Link href={`/admin/bets?eventId=${event.id}`} className="text-accent hover:underline">
+            <Link
+              href={`/admin/bets?eventId=${event.id}`}
+              className="text-accent-strong hover:underline"
+            >
               Wetten auf dieses Event
             </Link>
             <Link
               href={`/admin/audit?targetId=${event.id}`}
-              className="text-accent hover:underline"
+              className="text-accent-strong hover:underline"
             >
               Audit-Log
             </Link>
-            <Link href={`/events/${event.id}`} className="text-accent hover:underline">
+            <Link href={`/events/${event.id}`} className="text-accent-strong hover:underline">
               Öffentliche Ansicht
             </Link>
           </div>

@@ -79,14 +79,14 @@ export default async function AdminTransactionsPage({
                     {formatDateTime(t.createdAt)}
                   </Td>
                   <Td className="text-xs">
-                    <Link href={`/admin/users/${t.user.id}`} className="hover:text-accent">
+                    <Link href={`/admin/users/${t.user.id}`} className="hover:text-accent-strong">
                       {t.user.email}
                     </Link>
                   </Td>
                   <Td>{TRANSACTION_LABELS[t.type]}</Td>
                   <Td className="font-mono text-xs">
                     {t.betId ? (
-                      <Link href={`/admin/bets/${t.betId}`} className="hover:text-accent">
+                      <Link href={`/admin/bets/${t.betId}`} className="hover:text-accent-strong">
                         {t.betReference}
                       </Link>
                     ) : (

@@ -41,12 +41,23 @@ export default async function EventPage({ params }: { params: Promise<{ eventId:
   const t = await getT();
   return (
     <div className="space-y-4">
-      <Link
-        href={`/sports/${event.sport.key}`}
-        className="inline-flex items-center gap-1 text-sm text-fg-muted hover:text-fg"
-      >
-        <ChevronLeft className="size-4" aria-hidden="true" /> {t(event.sport.name)}
-      </Link>
+      <nav aria-label={t('Brotkrumen')} className="flex min-w-0 items-center gap-1 text-sm">
+        <Link
+          href={`/sports/${event.sport.key}`}
+          className="inline-flex shrink-0 items-center gap-1 font-medium text-fg-muted hover:text-fg"
+        >
+          <ChevronLeft className="size-4" aria-hidden="true" /> {t(event.sport.name)}
+        </Link>
+        <span className="text-fg-subtle" aria-hidden="true">
+          /
+        </span>
+        <Link
+          href={`/sports/${event.sport.key}?league=${event.league.id}`}
+          className="truncate text-fg-subtle hover:text-fg"
+        >
+          {event.league.name}
+        </Link>
+      </nav>
       <Scoreboard event={event} />
       <MatchInfo event={event} />
       <EventMarkets event={event} />

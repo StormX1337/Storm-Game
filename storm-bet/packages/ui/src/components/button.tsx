@@ -4,17 +4,17 @@ import * as React from 'react';
 import { cn } from '../lib/cn';
 
 export const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-[background-color,color,border-color,box-shadow,transform] duration-150 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0',
+  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-semibold transition-[background-color,color,border-color,box-shadow,transform] duration-150 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0',
   {
     variants: {
       variant: {
         primary:
-          'bg-accent text-accent-fg hover:bg-accent-strong shadow-[0_0_0_1px_rgb(255_255_255/0.06)_inset]',
+          'bg-accent text-accent-fg hover:bg-accent-hover shadow-[0_0_0_1px_rgb(255_255_255/0.08)_inset,0_6px_16px_-8px_rgb(79_91_255/0.6)]',
         secondary: 'bg-surface-3 text-fg hover:bg-border-strong',
         outline: 'border border-border-strong bg-transparent text-fg hover:bg-surface-2',
         ghost: 'text-fg-muted hover:bg-surface-2 hover:text-fg',
         destructive: 'bg-down/90 text-white hover:bg-down',
-        link: 'text-accent underline-offset-4 hover:underline px-0 h-auto',
+        link: 'text-accent-strong underline-offset-4 hover:underline px-0 h-auto',
       },
       size: {
         sm: 'h-8 px-3 text-xs',

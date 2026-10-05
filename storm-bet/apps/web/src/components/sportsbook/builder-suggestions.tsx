@@ -7,8 +7,8 @@ import type {
   Outcome,
   ValidateSlipResponse,
 } from '@storm-bet/types';
-import { Card } from '@storm-bet/ui';
-import { Sparkles } from 'lucide-react';
+import { Card, cn } from '@storm-bet/ui';
+import { Plus, Sparkles } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '@/lib/api-client';
 import { formatOdds } from '@/lib/format';
@@ -86,7 +86,16 @@ function presets(
   });
 }
 
-export function BuilderSuggestions({ event }: { event: EventDetailDto }) {
+export function BuilderSuggestions({
+  event,
+  header,
+  className,
+}: {
+  event: EventDetailDto;
+  /** Replaces the default title row (the home page shows the match there). */
+  header?: React.ReactNode;
+  className?: string;
+}) {
   const t = useT();
   const live = useLiveEvent(event);
   const replaceEvent = useBetSlip((s) => s.replaceEvent);
@@ -150,29 +159,47 @@ export function BuilderSuggestions({ event }: { event: EventDetailDto }) {
   };
 
   return (
-    <Card className="overflow-hidden" data-testid="builder-suggestions">
-      <div className="flex items-center gap-2 border-b border-border px-4 py-2.5">
-        <Sparkles className="size-4 text-accent-strong" aria-hidden="true" />
-        <h3 className="text-sm font-semibold">{t('Bet-Builder-Vorschläge')}</h3>
-        {live.isLive ? <span className="text-xs font-semibold text-live">LIVE</span> : null}
-      </div>
+    <Card className={cn('overflow-hidden', className)} data-testid="builder-suggestions">
+      {header ?? (
+        <div className="flex items-center gap-2 border-b border-border px-4 py-2.5">
+          <Sparkles className="size-4 text-accent-strong" aria-hidden="true" />
+          <h3 className="text-sm font-semibold">{t('Bet-Builder-Vorschläge')}</h3>
+          {live.isLive ? <span className="text-xs font-semibold text-live">LIVE</span> : null}
+        </div>
+      )}
       <ul className="grid gap-2 p-3 sm:grid-cols-2">
         {suggestions.map((s) => (
           <li key={s.title} className="min-w-0">
             <button
               type="button"
               onClick={() => add(s)}
-              className="flex w-full items-center gap-3 rounded-md border border-border bg-surface-2 px-3 py-2.5 text-left transition-colors hover:border-accent"
+              className="group flex w-full items-center gap-3 rounded-lg border border-border bg-surface-2 px-3 py-2.5 text-left transition-colors hover:border-accent/60 hover:bg-surface-3 active:scale-[0.99]"
+              aria-label={t('{0} – Quote {1} – in den Wettschein', [s.title, formatOdds(s.odds!)])}
               data-testid="builder-suggestion"
             >
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium">{s.title}</span>
-                <span className="block truncate text-xs text-fg-muted">
-                  {s.legs.map((l) => t(l.selection.name)).join(' · ')}
+                <span className="line-clamp-2 block text-sm font-semibold leading-snug">
+                  {s.title}
+                </span>
+                <span className="mt-0.5 flex flex-wrap gap-1">
+                  {s.legs.map((l) => (
+                    <span
+                      key={l.selection.id}
+                      className="truncate rounded bg-surface-3 px-1.5 py-0.5 text-[10px] font-medium text-fg-muted"
+                    >
+                      {t(l.selection.name)}
+                    </span>
+                  ))}
                 </span>
               </span>
-              <span className="tabular rounded bg-surface-3 px-2 py-1 text-sm font-semibold">
-                {formatOdds(s.odds!)}
+              <span className="flex shrink-0 items-center gap-1.5">
+                <span className="tabular rounded-md bg-accent-soft px-2 py-1 text-sm font-bold text-accent-strong">
+                  {formatOdds(s.odds!)}
+                </span>
+                <Plus
+                  className="size-4 text-fg-subtle transition-colors group-hover:text-fg"
+                  aria-hidden="true"
+                />
               </span>
             </button>
           </li>

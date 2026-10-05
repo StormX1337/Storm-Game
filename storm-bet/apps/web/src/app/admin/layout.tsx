@@ -25,7 +25,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       <Header />
       <div className="mx-auto max-w-[1500px] px-4 py-6 lg:grid lg:grid-cols-[210px_minmax(0,1fr)] lg:gap-8 lg:px-6">
         <aside className="mb-5 space-y-4 lg:mb-0">
-          <div className="lg:sticky lg:top-[4.5rem] lg:space-y-4">
+          <div className="lg:sticky lg:top-[5rem] lg:space-y-4">
             <div className="hidden rounded-lg border border-border bg-surface p-3 lg:block">
               <p className="text-xs text-fg-subtle">Angemeldet als</p>
               <p className="truncate text-sm font-medium">{user.displayName}</p>

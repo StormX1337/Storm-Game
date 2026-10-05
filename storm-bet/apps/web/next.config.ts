@@ -34,6 +34,29 @@ const config: NextConfig = {
   experimental: {
     optimizePackageImports: ['lucide-react'],
   },
+  // Short, memorable entry points onto the existing routes (nothing is moved).
+  async redirects() {
+    const sports = [
+      'football',
+      'tennis',
+      'basketball',
+      'hockey',
+      'american_football',
+      'baseball',
+      'handball',
+      'mma',
+    ];
+    return [
+      { source: '/home', destination: '/', permanent: false },
+      { source: '/bets', destination: '/dashboard/bets', permanent: false },
+      { source: '/account', destination: '/dashboard', permanent: false },
+      ...sports.map((sport) => ({
+        source: `/${sport}`,
+        destination: `/sports/${sport}`,
+        permanent: false,
+      })),
+    ];
+  },
   async headers() {
     return [{ source: '/:path*', headers: securityHeaders }];
   },

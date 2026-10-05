@@ -239,7 +239,7 @@ export function SlipShortcuts({
             <button
               type="button"
               onClick={() => setAll(true)}
-              className="text-xs text-accent hover:underline"
+              className="text-xs text-accent-strong hover:underline"
             >
               {t('Alle anzeigen ({0})', [saved.length])}
             </button>

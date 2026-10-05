@@ -1,12 +1,12 @@
 import type { EventSummaryDto, LeagueDto, Paginated, SportDto, SportKey } from '@storm-bet/types';
 import { SPORT_KEYS } from '@storm-bet/types';
-import { cn } from '@storm-bet/ui';
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { EventList } from '@/components/sportsbook/event-list';
+import { FilterChips, ViewTabs } from '@/components/sportsbook/filter-chips';
 import { LiveDot } from '@/components/sportsbook/live-indicator';
-import { PageHeader, SectionTitle } from '@/components/sportsbook/page-header';
+import { SectionTitle } from '@/components/sportsbook/page-header';
+import { SportIcon } from '@/components/sportsbook/sport-icon';
 import { SPORT_LABELS } from '@/lib/labels';
 import { getPlatformMeta, tryServerApi } from '@/lib/server-api';
 import { getT } from '@/i18n/server';
@@ -28,114 +28,145 @@ export default async function SportPage({
   searchParams,
 }: {
   params: Promise<{ sport: string }>;
-  searchParams: Promise<{ league?: string; day?: string }>;
+  searchParams: Promise<{ league?: string; day?: string; tab?: string }>;
 }) {
   const t = await getT();
   const { sport } = await params;
-  const { league, day: dayParam } = await searchParams;
+  const { league, day: dayParam, tab: tabParam } = await searchParams;
+  if (!(SPORT_KEYS as readonly string[]).includes(sport)) notFound();
   const days = calendarDays();
   const day = days.some((d) => d.value === dayParam) ? dayParam : undefined;
-  if (!(SPORT_KEYS as readonly string[]).includes(sport)) notFound();
-  const leagueFilter = league && /^[0-9a-f-]{36}$/i.test(league) ? `&league=${league}` : '';
+  const tab = tabParam === 'live' ? 'live' : day ? 'day' : 'popular';
+  const leagueId = league && /^[0-9a-f-]{36}$/i.test(league) ? league : undefined;
+  const leagueFilter = leagueId ? `&league=${leagueId}` : '';
 
   const { odds } = await getPlatformMeta();
   const within = odds.isSimulated ? 36 : 7 * 24;
-  const [detail, live, upcoming] = await Promise.all([
+  const [detail, events] = await Promise.all([
     tryServerApi<{ sport: SportDto; leagues: LeagueDto[] }>(`/sports/${sport}`),
     tryServerApi<Paginated<EventSummaryDto>>(
-      `/events?sport=${sport}&status=live&limit=50${leagueFilter}`,
-    ),
-    tryServerApi<Paginated<EventSummaryDto>>(
-      `/events?sport=${sport}&status=upcoming&limit=60${leagueFilter}${
-        day ? `&day=${day}` : `&withinHours=${within}`
-      }`,
+      tab === 'live'
+        ? `/events?sport=${sport}&status=live&limit=50${leagueFilter}`
+        : `/events?sport=${sport}&status=upcoming&limit=60${leagueFilter}${
+            day ? `&day=${day}` : `&withinHours=${within}`
+          }`,
     ),
   ]);
   if (!detail) notFound();
 
-  const chip = (active: boolean) =>
-    cn(
-      'shrink-0 rounded-full border px-3 py-1.5 text-sm transition-colors',
-      active
-        ? 'border-accent/40 bg-accent-soft text-fg'
-        : 'border-border bg-surface text-fg-muted hover:text-fg',
-    );
+  const href = (next: { tab?: string; day?: string; league?: string | null }) => {
+    const q = new URLSearchParams();
+    const l = next.league === undefined ? leagueId : next.league;
+    if (next.tab) q.set('tab', next.tab);
+    if (next.day) q.set('day', next.day);
+    if (l) q.set('league', l);
+    const qs = q.toString();
+    return `/sports/${sport}${qs ? `?${qs}` : ''}`;
+  };
+  const [today, tomorrow, ...later] = days;
+  const keepView = tab === 'live' ? { tab: 'live' } : day ? { day } : {};
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title={t(detail.sport.name)}
-        description={t('{0} Events · {1} live · {2}', [
-          detail.sport.eventCount,
-          detail.sport.liveCount,
-          odds.isSimulated ? t('simulierte Demo-Daten') : t('Quoten: {0}', [odds.name]),
-        ])}
-      />
-      {detail.leagues.length > 1 ? (
-        <div
-          className="scrollbar-none -mx-4 flex gap-2 overflow-x-auto px-4"
-          aria-label={t('Wettbewerbe')}
-        >
-          <Link href={`/sports/${sport}`} className={chip(!league)}>
-            {t('Alle Wettbewerbe')}
-          </Link>
-          {detail.leagues.map((l) => (
-            <Link
-              key={l.id}
-              href={`/sports/${sport}?league=${l.id}`}
-              className={chip(league === l.id)}
-            >
-              {l.name} <span className="tabular text-xs text-fg-subtle">{l.eventCount}</span>
-            </Link>
-          ))}
+    <div className="space-y-5">
+      <header className="flex items-center gap-3">
+        <span className="grid size-12 shrink-0 place-items-center rounded-2xl border border-accent/25 bg-accent-soft text-accent-strong">
+          <SportIcon sport={sport} className="size-6" />
+        </span>
+        <div className="min-w-0">
+          <h1 className="text-2xl font-extrabold tracking-tight">{t(detail.sport.name)}</h1>
+          <p className="text-sm text-fg-muted">
+            {t('{0} Events · {1} live · {2}', [
+              detail.sport.eventCount,
+              detail.sport.liveCount,
+              odds.isSimulated ? t('simulierte Demo-Daten') : t('Quoten: {0}', [odds.name]),
+            ])}
+          </p>
         </div>
+      </header>
+
+      <ViewTabs
+        label={t('Ansicht')}
+        items={[
+          { key: 'popular', href: href({}), label: t('Beliebt'), active: tab === 'popular' },
+          {
+            key: 'live',
+            href: href({ tab: 'live' }),
+            active: tab === 'live',
+            label: (
+              <>
+                <LiveDot /> {t('Live')}
+                <span className="tabular text-xs text-fg-subtle">{detail.sport.liveCount}</span>
+              </>
+            ),
+          },
+          {
+            key: 'today',
+            href: href({ day: today!.value }),
+            label: t('Heute'),
+            active: day === today!.value,
+          },
+          {
+            key: 'tomorrow',
+            href: href({ day: tomorrow!.value }),
+            label: t('Morgen'),
+            active: day === tomorrow!.value,
+          },
+        ]}
+      />
+      {tab !== 'live' ? (
+        <FilterChips
+          label={t('Tage')}
+          items={later.map((d) => ({
+            key: d.value,
+            href: href({ day: d.value }),
+            label: t(d.label),
+            active: day === d.value,
+            testId: 'day-chip',
+          }))}
+        />
       ) : null}
-      {live && live.items.length > 0 ? (
-        <section className="space-y-3">
-          <SectionTitle>
-            <LiveDot /> {t('Live')}
-          </SectionTitle>
-          <EventList events={live.items} subscribeLive />
+
+      {detail.leagues.length > 1 ? (
+        <section className="space-y-2.5">
+          <SectionTitle>{t('Wettbewerbe')}</SectionTitle>
+          <FilterChips
+            label={t('Wettbewerbe')}
+            items={[
+              {
+                key: 'all',
+                href: href({ ...keepView, league: null }),
+                label: t('Alle Wettbewerbe'),
+                active: !leagueId,
+              },
+              ...detail.leagues.map((l) => ({
+                key: l.id,
+                href: href({ ...keepView, league: l.id }),
+                label: l.name,
+                active: leagueId === l.id,
+                count: l.eventCount,
+              })),
+            ]}
+          />
         </section>
       ) : null}
-      <section className="space-y-3">
-        <SectionTitle>{t('Demnächst')}</SectionTitle>
-        <div
-          className="scrollbar-none -mx-4 flex gap-2 overflow-x-auto px-4"
-          aria-label={t('Tage')}
-        >
-          {[{ value: undefined, label: t('Alle') }, ...days].map((d) => {
-            const query = new URLSearchParams();
-            if (league) query.set('league', league);
-            if (d.value) query.set('day', d.value);
-            const qs = query.toString();
-            return (
-              <Link
-                key={d.label}
-                href={`/sports/${sport}${qs ? `?${qs}` : ''}`}
-                className={chip(day === d.value)}
-                data-testid="day-chip"
-              >
-                {t(d.label)}
-              </Link>
-            );
-          })}
-        </div>
-        <EventList
-          events={upcoming?.items ?? []}
-          emptyTitle={t('Keine anstehenden Events')}
-          emptyDescription={
-            day
+
+      <EventList
+        events={events?.items ?? []}
+        subscribeLive={tab === 'live'}
+        emptyTitle={tab === 'live' ? t('Gerade läuft kein Event') : t('Keine anstehenden Events')}
+        emptyDescription={
+          tab === 'live'
+            ? t('Neue Spiele beginnen laufend – schau gleich wieder vorbei.')
+            : day
               ? t('An diesem Tag sind keine Spiele angesetzt.')
               : t('In diesem Wettbewerb sind aktuell keine Spiele angesetzt.')
-          }
-        />
-      </section>
+        }
+      />
     </div>
   );
 }
 
-/** Today and the next six days (Europe/Berlin) as filter chips. */
+/** Today and the next six days (Europe/Berlin). */
 function calendarDays(): { value: string; label: string }[] {
   const key = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Berlin' });
   const label = new Intl.DateTimeFormat('de-DE', {

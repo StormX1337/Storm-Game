@@ -7,7 +7,7 @@ export const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDi
     <div
       ref={ref}
       className={cn(
-        'rounded-lg border border-border bg-surface shadow-[var(--shadow-card)]',
+        'rounded-xl border border-border bg-surface shadow-[var(--shadow-card)]',
         className,
       )}
       {...props}
@@ -220,12 +220,12 @@ export function EmptyState({
       )}
     >
       {icon ? (
-        <div className="grid size-11 place-items-center rounded-full bg-surface-3 text-fg-muted [&_svg]:size-5">
+        <div className="grid size-12 place-items-center rounded-2xl border border-border bg-surface-2 text-fg-muted [&_svg]:size-5">
           {icon}
         </div>
       ) : null}
       <div className="space-y-1">
-        <p className="text-sm font-medium text-fg">{title}</p>
+        <p className="text-[15px] font-semibold text-fg">{title}</p>
         {description ? (
           <p className="mx-auto max-w-sm text-sm text-fg-muted">{description}</p>
         ) : null}

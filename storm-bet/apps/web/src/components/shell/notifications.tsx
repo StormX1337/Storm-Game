@@ -94,7 +94,7 @@ export function NotificationBell() {
     <DropdownMenu onOpenChange={(open) => open && markRead()}>
       <DropdownMenuTrigger asChild>
         <button
-          className="relative grid size-9 place-items-center rounded-full text-white/90 transition-colors hover:bg-white/10 md:text-fg-muted md:hover:bg-surface-2 md:hover:text-fg"
+          className="relative grid size-9 place-items-center rounded-full text-fg-muted transition-colors hover:bg-surface-2 hover:text-fg max-[399px]:hidden"
           aria-label={unread ? t('{0} neue Benachrichtigungen', [unread]) : t('Benachrichtigungen')}
         >
           <Bell className="size-4" />

@@ -438,7 +438,7 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
       {slip.items.length > 1 ? (
         <div
           className={cn(
-            'grid gap-1 border-b border-border p-2',
+            'mx-3 mt-3 grid gap-0.5 rounded-lg border border-border bg-surface-2 p-0.5',
             systemPossible(slip.items) ? 'grid-cols-3' : 'grid-cols-2',
           )}
           role="tablist"
@@ -457,8 +457,10 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
               aria-selected={mode === m}
               onClick={() => slip.setMode(m)}
               className={cn(
-                'rounded-md py-1.5 text-sm font-medium transition-colors',
-                mode === m ? 'bg-surface-3 text-fg' : 'text-fg-muted hover:text-fg',
+                'h-8 rounded-md text-[13px] font-semibold transition-colors',
+                mode === m
+                  ? 'bg-surface-3 text-fg shadow-[0_1px_0_0_rgb(255_255_255/0.04)_inset]'
+                  : 'text-fg-muted hover:text-fg',
               )}
             >
               {t(MODE_LABELS[m])}
@@ -477,12 +479,20 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
           />
         </div>
       ) : (
-        <ul className="min-h-0 flex-1 divide-y divide-border overflow-y-auto">
+        <ul className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
           {slip.items.map((item) => (
-            <li key={item.selectionId} className="p-3" data-testid="slip-item">
+            <li
+              key={item.selectionId}
+              className={cn(
+                'rounded-lg border bg-surface-2/60 p-3',
+                item.status !== 'OPEN' ? 'border-warning/30' : 'border-border',
+              )}
+              data-testid="slip-item"
+            >
               <div className="flex items-start gap-2">
+                <SportIcon sport={item.sportKey} className="mt-0.5 size-3.5 text-fg-subtle" />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-fg">{t(item.selectionName)}</p>
+                  <p className="truncate text-sm font-semibold text-fg">{t(item.selectionName)}</p>
                   <p className="truncate text-xs text-fg-muted">{t(item.marketName)}</p>
                   <p className="truncate text-xs text-fg-subtle">
                     {item.isLive ? (
@@ -511,7 +521,9 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
                       </span>
                     </span>
                   ) : (
-                    <span className="tabular text-sm font-semibold">{formatOdds(item.odds)}</span>
+                    <span className="tabular rounded-md bg-surface-3 px-2 py-1 text-sm font-bold">
+                      {formatOdds(item.odds)}
+                    </span>
                   )}
                 </div>
                 <button
@@ -534,7 +546,7 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
         </ul>
       )}
 
-      <div className="space-y-3 border-t border-border p-3">
+      <div className="space-y-3 border-t border-border bg-surface p-3">
         {toAccept > 0 ? (
           <div
             className="rounded-md border border-warning/30 bg-warning-soft p-3"
@@ -653,11 +665,11 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
             <dt>{mode === 'SYSTEM' ? t('Einsatz ({0} Wetten)', [systemLines]) : t('Einsatz')}</dt>
             <dd className="tabular">{formatMoney(totalStake)}</dd>
           </div>
-          <div className="flex justify-between">
-            <dt className="text-fg-muted">
+          <div className="flex items-baseline justify-between border-t border-border pt-2">
+            <dt className="font-medium text-fg">
               {mode === 'SYSTEM' ? t('Möglicher Gewinn (alle richtig)') : t('Möglicher Gewinn')}
             </dt>
-            <dd className="tabular font-semibold text-up" data-testid="potential-return">
+            <dd className="tabular text-lg font-extrabold text-up" data-testid="potential-return">
               {formatMoney(potentialReturn)}
             </dd>
           </div>
@@ -703,7 +715,7 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
             data-testid="place-bet"
           >
             {totalStake > 0
-              ? t('Wette platzieren · {0}', [formatMoney(totalStake)])
+              ? t('Demo-Wette platzieren · {0}', [formatMoney(totalStake)])
               : t('Einsatz eingeben')}
           </Button>
         ) : (
@@ -713,19 +725,19 @@ export function BetSlip({ className, onPlaced }: { className?: string; onPlaced?
             </Link>
           </Button>
         )}
-        <div className="flex items-center justify-between text-xs text-fg-subtle">
-          <span>{t('Nur Demo-Guthaben · kein Echtgeld')}</span>
-          <span className="flex items-center gap-3">
-            <SaveSlipButton />
-            <ShareButton selectionIds={slip.items.map((i) => i.selectionId)} />
-            <button
-              onClick={() => slip.clear()}
-              className="inline-flex items-center gap-1 hover:text-fg"
-            >
-              <Trash2 className="size-3" /> {t('Leeren')}
-            </button>
-          </span>
+        <div className="flex items-center justify-center gap-4 text-xs text-fg-muted">
+          <SaveSlipButton />
+          <ShareButton selectionIds={slip.items.map((i) => i.selectionId)} />
+          <button
+            onClick={() => slip.clear()}
+            className="inline-flex items-center gap-1 hover:text-fg"
+          >
+            <Trash2 className="size-3" /> {t('Leeren')}
+          </button>
         </div>
+        <p className="text-center text-[11px] text-fg-subtle">
+          {t('Nur Demo-Guthaben · kein Echtgeld')}
+        </p>
       </div>
     </div>
   );
@@ -745,9 +757,10 @@ function StakeInput({
   /** Highest allowed stake (minor units), for the MAX button. */
   max?: number | null;
 }) {
+  const t = useT();
   const invalid = value !== '' && parseStake(value) === null;
   const quickClass =
-    'tabular rounded-md border border-border bg-surface-2 py-1.5 text-xs font-semibold text-fg-muted transition-colors hover:border-border-strong hover:text-fg disabled:opacity-40';
+    'tabular h-8 rounded-md border border-border bg-surface-2 text-xs font-semibold text-fg-muted transition-colors hover:border-border-strong hover:text-fg active:scale-[0.97] disabled:opacity-40';
   return (
     <div className="mt-2 space-y-2">
       <div className="relative">
@@ -759,10 +772,16 @@ function StakeInput({
           placeholder="0,00"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="tabular h-10 w-full rounded-md border border-border-strong bg-surface-2 pl-3 pr-16 text-right text-sm font-semibold text-fg placeholder:text-fg-subtle focus-visible:border-accent focus-visible:outline-none aria-[invalid]:border-down/70"
+          className="tabular h-11 w-full rounded-lg border border-border-strong bg-surface-2 pl-3 pr-8 text-right text-base font-bold text-fg placeholder:text-fg-subtle focus-visible:border-accent focus-visible:outline-none aria-[invalid]:border-down/70"
           data-testid="stake-input"
         />
-        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-fg-subtle">
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs font-medium text-fg-subtle"
+        >
+          {t('Einsatz')}
+        </span>
+        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-fg-subtle">
           €
         </span>
       </div>
@@ -809,7 +828,7 @@ function BuilderCard({
   const first = items[0]!;
   return (
     <div
-      className="overflow-hidden rounded-lg border border-accent/40 bg-surface-2"
+      className="overflow-hidden rounded-lg border border-accent/40 bg-surface-2/60"
       data-testid="builder-card"
     >
       <div className="flex items-center gap-2 border-b border-border px-3 py-2">

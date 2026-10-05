@@ -23,7 +23,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       <Header />
       <div className="mx-auto max-w-6xl px-4 py-6 lg:grid lg:grid-cols-[200px_minmax(0,1fr)] lg:gap-8 lg:px-6 lg:py-8">
         <aside className="mb-5 lg:mb-0">
-          <div className="lg:sticky lg:top-[4.5rem]">
+          <div className="lg:sticky lg:top-[5rem]">
             <DashboardNav />
           </div>
         </aside>

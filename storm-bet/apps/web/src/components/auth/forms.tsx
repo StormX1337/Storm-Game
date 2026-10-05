@@ -114,7 +114,7 @@ export function LoginForm() {
           />
         </Field>
         <div className="flex justify-end">
-          <Link href="/forgot-password" className="text-xs text-accent hover:underline">
+          <Link href="/forgot-password" className="text-xs text-accent-strong hover:underline">
             {t('Passwort vergessen?')}
           </Link>
         </div>
@@ -124,7 +124,7 @@ export function LoginForm() {
       </form>
       <p className="mt-6 text-center text-sm text-fg-muted">
         {t('Noch kein Konto?')}{' '}
-        <Link href="/register" className="text-accent hover:underline">
+        <Link href="/register" className="text-accent-strong hover:underline">
           {t('Jetzt registrieren')}
         </Link>
       </p>
@@ -300,11 +300,11 @@ export function RegisterForm() {
             label={
               <>
                 {t('Ich akzeptiere die')}{' '}
-                <Link href="/terms" className="text-accent hover:underline">
+                <Link href="/terms" className="text-accent-strong hover:underline">
                   {t('Nutzungsbedingungen')}
                 </Link>{' '}
                 {t('und habe die')}{' '}
-                <Link href="/privacy" className="text-accent hover:underline">
+                <Link href="/privacy" className="text-accent-strong hover:underline">
                   {t('Datenschutzhinweise')}
                 </Link>{' '}
                 gelesen.
@@ -326,7 +326,7 @@ export function RegisterForm() {
       </form>
       <p className="mt-6 text-center text-sm text-fg-muted">
         {t('Bereits registriert?')}{' '}
-        <Link href="/login" className="text-accent hover:underline">
+        <Link href="/login" className="text-accent-strong hover:underline">
           {t('Anmelden')}
         </Link>
       </p>
@@ -355,7 +355,7 @@ export function ForgotPasswordForm() {
   if (sent) {
     return (
       <Card className="p-6 text-center">
-        <MailCheck className="mx-auto size-8 text-accent" aria-hidden="true" />
+        <MailCheck className="mx-auto size-8 text-accent-strong" aria-hidden="true" />
         <h1 className="mt-3 text-lg font-semibold">{t('E-Mail unterwegs')}</h1>
         <p className="mt-2 text-sm text-fg-muted">
           {t(

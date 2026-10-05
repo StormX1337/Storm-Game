@@ -159,7 +159,7 @@ export default async function LeaderboardPage({
           <p className="text-sm text-fg-muted">{t('Melde dich an, um mitzumachen.')}</p>
           <Link
             href="/login?next=/leaderboard"
-            className="text-sm font-medium text-accent hover:underline"
+            className="text-sm font-medium text-accent-strong hover:underline"
           >
             {t('Anmelden')}
           </Link>

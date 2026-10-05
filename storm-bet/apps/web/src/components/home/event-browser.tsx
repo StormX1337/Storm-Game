@@ -53,13 +53,14 @@ export function EventBrowser({
   return (
     <section className="space-y-3" aria-labelledby="browse-title">
       <div className="flex items-center justify-between gap-3">
-        <h2
-          id="browse-title"
-          className="whitespace-nowrap text-base font-extrabold uppercase tracking-tight sm:text-lg"
-        >
+        <h2 id="browse-title" className="whitespace-nowrap text-[17px] font-bold tracking-tight">
           {t('Jetzt wetten')}
         </h2>
-        <div className="flex gap-1.5" role="tablist" aria-label={t('Ansicht')}>
+        <div
+          className="flex rounded-lg border border-border bg-surface p-0.5"
+          role="tablist"
+          aria-label={t('Ansicht')}
+        >
           {(
             [
               ['live', t('Live'), Zap],
@@ -76,10 +77,8 @@ export function EventBrowser({
                 setSport(null);
               }}
               className={cn(
-                'inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-sm font-medium transition-colors sm:px-3',
-                mode === key
-                  ? 'border-accent bg-accent-soft text-fg'
-                  : 'border-border text-fg-muted hover:text-fg',
+                'inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-[13px] font-semibold transition-colors sm:px-3',
+                mode === key ? 'bg-surface-3 text-fg' : 'text-fg-muted hover:text-fg',
               )}
               data-testid={`browse-${key}`}
             >
@@ -89,9 +88,9 @@ export function EventBrowser({
           ))}
         </div>
       </div>
-      <div className="-mx-4 lg:mx-0">
+      <div className="-mx-4 md:mx-0">
         <div
-          className="flex gap-1 overflow-x-auto px-4 [scrollbar-width:none] lg:px-0 [&::-webkit-scrollbar]:hidden"
+          className="scrollbar-none flex gap-1 overflow-x-auto overscroll-x-contain px-4 md:px-0"
           role="tablist"
           aria-label={t('Sportarten')}
         >
@@ -106,10 +105,10 @@ export function EventBrowser({
                 aria-selected={on}
                 onClick={() => setSport(key)}
                 className={cn(
-                  'flex min-w-20 shrink-0 flex-col items-center gap-1 rounded-xl border px-3 py-2 text-xs font-medium transition-colors',
+                  'flex min-w-[4.5rem] shrink-0 flex-col items-center gap-1 rounded-xl border px-3 py-2 text-xs font-semibold transition-colors',
                   on
-                    ? 'border-accent bg-surface-2 text-fg'
-                    : 'border-transparent text-fg-muted hover:text-fg',
+                    ? 'border-accent/50 bg-accent-soft text-fg [&_svg]:text-accent-strong'
+                    : 'border-transparent text-fg-muted hover:bg-surface hover:text-fg',
                 )}
               >
                 {key ? (

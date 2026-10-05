@@ -67,13 +67,13 @@ export function GameCard({
             <Heart className={cn('size-4', favorite && 'fill-down text-down')} />
           </button>
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5">
           {game.isNew ? <Badge variant="accent">{t('Neu')}</Badge> : null}
           {game.categories.includes('live-casino') ? (
             <Badge variant="outline">{t('Automatisiert')}</Badge>
           ) : null}
           {unavailable ? <Badge variant="warning">{t('Wartung')}</Badge> : null}
-          <Button asChild size="sm" className="ml-auto" disabled={unavailable}>
+          <Button asChild size="sm" className="ml-auto max-sm:w-full" disabled={unavailable}>
             <Link href={`/casino/${game.id}`}>
               <Play /> {t('Demo spielen')}
             </Link>

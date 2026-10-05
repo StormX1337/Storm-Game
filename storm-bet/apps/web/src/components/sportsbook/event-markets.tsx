@@ -8,7 +8,7 @@ import {
   OUTCOME_LABELS,
 } from '@storm-bet/types';
 import { Card, cn, EmptyState, Tabs, TabsList, TabsTrigger } from '@storm-bet/ui';
-import { Lock, Timer } from 'lucide-react';
+import { ChevronDown, Lock, Timer } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLive } from '@/stores/live';
@@ -232,13 +232,28 @@ function MarketCard({
       : first.name.replace(/\s[+-]?\d+(\.\d+)?$/, '');
   const player = first.type === 'PLAYER_TO_SCORE';
   const wide = player || playerTotal || markets.length > 1;
+  const [open, setOpen] = useState(true);
   return (
     <Card className={cn('overflow-hidden', wide && 'xl:col-span-2')} data-testid="market-card">
-      <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
-        <h3 className="text-sm font-semibold">{t(title)}</h3>
+      <div className="flex items-center gap-2 border-b border-border px-4 py-2.5">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          className="flex min-w-0 flex-1 items-center gap-2 text-left"
+        >
+          <ChevronDown
+            className={cn(
+              'size-4 shrink-0 text-fg-subtle transition-transform duration-150',
+              !open && '-rotate-90',
+            )}
+            aria-hidden="true"
+          />
+          <h3 className="truncate text-sm font-bold tracking-tight">{t(title)}</h3>
+        </button>
         {early ? (
           <span
-            className="ml-auto mr-2 rounded bg-up-soft px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-up"
+            className="rounded bg-up-soft px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-up"
             title={t(
               'Frühe Auszahlung: Führt dein Team mit 2 Toren, ist der Tipp sofort gewonnen.',
             )}
@@ -256,18 +271,20 @@ function MarketCard({
           </span>
         ) : null}
       </div>
-      <div className="space-y-2 p-3">
-        {markets.map((m) => (
-          <MarketRow
-            key={m.id}
-            market={m}
-            context={context(m)}
-            showLine={markets.length > 1 && !playerTotal}
-            player={player}
-            playerTotal={playerTotal}
-          />
-        ))}
-      </div>
+      {open ? (
+        <div className="space-y-2 p-3">
+          {markets.map((m) => (
+            <MarketRow
+              key={m.id}
+              market={m}
+              context={context(m)}
+              showLine={markets.length > 1 && !playerTotal}
+              player={player}
+              playerTotal={playerTotal}
+            />
+          ))}
+        </div>
+      ) : null}
     </Card>
   );
 }

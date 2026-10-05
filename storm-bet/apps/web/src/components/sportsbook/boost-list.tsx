@@ -2,13 +2,14 @@
 
 import type { BoostDto, PlaceBetResponse } from '@storm-bet/types';
 import { Button, Card, toast } from '@storm-bet/ui';
-import { Rocket } from 'lucide-react';
+import { ArrowRight, Zap } from 'lucide-react';
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { ApiError, api } from '@/lib/api-client';
 import { formatKickoff, formatMoney, formatOdds, parseStake } from '@/lib/format';
 import { uuid } from '@/lib/uuid';
 import { announceWalletChange, useSession } from '../providers/session';
+import { SectionHeader } from '../home/section-header';
 import { SportIcon } from './sport-icon';
 import { useT } from '@/i18n/client';
 
@@ -31,10 +32,13 @@ export function BoostList() {
   if (boosts.length === 0) return null;
   return (
     <section className="space-y-3" aria-labelledby="boosts-title" data-testid="boosts">
-      <h2 id="boosts-title" className="flex items-center gap-2 text-base font-semibold">
-        <Rocket className="size-4 text-accent-strong" aria-hidden="true" /> {t('Quoten-Boosts')}
-      </h2>
-      <div className="grid gap-3 md:grid-cols-3">
+      <SectionHeader
+        id="boosts-title"
+        title={t('Quoten-Boosts')}
+        icon={<Zap className="size-4 text-violet-strong" aria-hidden="true" />}
+        count={boosts.length}
+      />
+      <div className="scrollbar-none -mx-4 flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto overscroll-x-contain px-4 pb-1 md:mx-0 md:grid md:grid-cols-2 md:overflow-visible md:px-0 2xl:grid-cols-3">
         {boosts.map((b) => (
           <BoostCard key={b.id} boost={b} loggedIn={!!user} onChange={load} />
         ))}
@@ -86,59 +90,89 @@ function BoostCard({
   };
 
   return (
-    <Card className="flex min-w-0 flex-col gap-3 p-4" data-testid="boost-card">
-      <div className="flex items-start gap-2">
-        <SportIcon sport={boost.sportKey} className="mt-0.5 text-fg-muted" />
+    <Card
+      className="flex w-[85%] min-w-0 shrink-0 snap-start flex-col overflow-hidden md:w-auto"
+      data-testid="boost-card"
+    >
+      <div className="flex items-start gap-3 p-4 pb-3">
+        <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-violet-soft text-violet-strong">
+          <Zap className="size-4" aria-hidden="true" />
+        </span>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold">{t(boost.title)}</p>
-          <p className="truncate text-xs text-fg-muted">
-            {boost.eventName} · {t(formatKickoff(boost.startTime))}
+          <p className="line-clamp-2 text-[15px] font-bold leading-snug tracking-tight">
+            {t(boost.title)}
+          </p>
+          <p className="mt-0.5 flex items-center gap-1 truncate text-xs text-fg-muted">
+            <SportIcon sport={boost.sportKey} className="size-3" />
+            <span className="truncate">
+              {boost.eventName} · {t(formatKickoff(boost.startTime))}
+            </span>
           </p>
         </div>
-        <span className="rounded bg-accent-soft px-1.5 py-0.5 text-[10px] font-bold text-accent-strong">
-          +{boost.upliftPct} %
+        <span className="shrink-0 rounded-md bg-violet-soft px-2 py-1 text-xs font-extrabold text-violet-strong">
+          +{boost.upliftPct}%
         </span>
       </div>
-      <p className="flex items-baseline gap-2">
-        <span className="tabular text-sm text-fg-subtle line-through">
-          {formatOdds(boost.odds)}
-        </span>
-        <span className="tabular text-2xl font-semibold text-up">
-          {formatOdds(boost.boostedOdds)}
-        </span>
-        <span className="ml-auto text-xs text-fg-muted">max. {formatMoney(boost.maxStake)}</span>
-      </p>
-      {!loggedIn ? (
-        <Button variant="secondary" asChild>
-          <Link href="/login">{t('Anmelden, um zu wetten')}</Link>
-        </Button>
-      ) : boost.used ? (
-        <Button variant="secondary" disabled>
-          {t('Bereits genutzt')}
-        </Button>
-      ) : !boost.open ? (
-        <Button variant="secondary" disabled>
-          {t('Gerade nicht verfügbar')}
-        </Button>
-      ) : (
-        <div className="flex gap-2">
-          <input
-            inputMode="decimal"
-            value={stake}
-            onChange={(e) => setStake(e.target.value)}
-            aria-label={t('Einsatz')}
-            className="tabular h-10 w-24 rounded-md border border-border-strong bg-surface-2 px-2 text-right text-sm font-semibold focus-visible:border-accent focus-visible:outline-none"
-          />
-          <Button
-            className="flex-1"
-            onClick={() => void place()}
-            loading={busy}
-            data-testid="boost-place"
-          >
-            {t('Boost wetten')}
-          </Button>
+      <div className="mx-4 grid grid-cols-[1fr_auto_1fr] items-center gap-2 rounded-lg border border-border bg-surface-2/60 px-3 py-2.5">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-fg-subtle">
+            {t('Alte Quote')}
+          </p>
+          <p className="tabular text-base font-semibold text-fg-subtle line-through decoration-fg-subtle/70">
+            {formatOdds(boost.odds)}
+          </p>
         </div>
-      )}
+        <ArrowRight className="size-4 text-fg-subtle" aria-hidden="true" />
+        <div className="text-right">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-up">
+            {t('Geboostet')}
+          </p>
+          <p className="tabular text-2xl font-extrabold leading-7 text-up">
+            {formatOdds(boost.boostedOdds)}
+          </p>
+        </div>
+      </div>
+      <div className="mt-auto space-y-2 p-4 pt-3">
+        <p className="text-[11px] text-fg-subtle">
+          {t('Max. Einsatz {0} · einmal pro Spieler', [formatMoney(boost.maxStake)])}
+        </p>
+        {!loggedIn ? (
+          <Button variant="secondary" className="w-full" asChild>
+            <Link href="/login">{t('Anmelden, um zu wetten')}</Link>
+          </Button>
+        ) : boost.used ? (
+          <Button variant="secondary" className="w-full" disabled>
+            {t('Bereits genutzt')}
+          </Button>
+        ) : !boost.open ? (
+          <Button variant="secondary" className="w-full" disabled>
+            {t('Gerade nicht verfügbar')}
+          </Button>
+        ) : (
+          <div className="flex gap-2">
+            <label className="relative">
+              <span className="sr-only">{t('Einsatz')}</span>
+              <input
+                inputMode="decimal"
+                value={stake}
+                onChange={(e) => setStake(e.target.value)}
+                className="tabular h-10 w-24 rounded-lg border border-border-strong bg-surface-2 pl-2 pr-6 text-right text-sm font-semibold focus-visible:border-accent focus-visible:outline-none"
+              />
+              <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-fg-subtle">
+                €
+              </span>
+            </label>
+            <Button
+              className="flex-1"
+              onClick={() => void place()}
+              loading={busy}
+              data-testid="boost-place"
+            >
+              {t('Boost wetten')}
+            </Button>
+          </div>
+        )}
+      </div>
     </Card>
   );
 }

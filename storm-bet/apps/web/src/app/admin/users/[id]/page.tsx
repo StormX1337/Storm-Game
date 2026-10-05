@@ -55,16 +55,22 @@ export default async function AdminUserPage({ params }: { params: Promise<{ id: 
         <CardHeader>
           <CardTitle>Konto</CardTitle>
           <div className="flex gap-3 text-sm">
-            <Link href={`/admin/bets?userId=${user.id}`} className="text-accent hover:underline">
+            <Link
+              href={`/admin/bets?userId=${user.id}`}
+              className="text-accent-strong hover:underline"
+            >
               Wetten ({user.betCount})
             </Link>
             <Link
               href={`/admin/transactions?userId=${user.id}`}
-              className="text-accent hover:underline"
+              className="text-accent-strong hover:underline"
             >
               Transaktionen
             </Link>
-            <Link href={`/admin/audit?targetId=${user.id}`} className="text-accent hover:underline">
+            <Link
+              href={`/admin/audit?targetId=${user.id}`}
+              className="text-accent-strong hover:underline"
+            >
               Audit-Log
             </Link>
           </div>

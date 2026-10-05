@@ -163,7 +163,7 @@ test.describe('platform', () => {
     );
     expect(headers['x-frame-options']).toBe('DENY');
     expect(headers['x-content-type-options']).toBe('nosniff');
-    await expect(page.getByText('Demo-Modus:')).toBeVisible();
+    await expect(page.getByTestId('demo-banner')).toContainText('Demo-Modus');
   });
 
   test('staff see the admin area, players do not', async ({ page, browser }) => {
@@ -282,7 +282,7 @@ test('search finds events by team name', async ({ page }) => {
   const team = (await page
     .getByTestId('event-link')
     .first()
-    .locator('.truncate.text-sm')
+    .getByTestId('team-name')
     .first()
     .textContent())!.trim();
   const term = team.split(/\s+/).find((w) => w.length >= 3) ?? team;
@@ -292,11 +292,23 @@ test('search finds events by team name', async ({ page }) => {
   await expect(page).toHaveURL(new RegExp(`/search\\?q=`));
 });
 
-test('mobile: app-style home with top matches, tiles and tab bar @mobile', async ({ page }) => {
+test('mobile: home sections and a bottom navigation that follows the route @mobile', async ({
+  page,
+}) => {
   await page.goto('/');
+  await expect(page.getByTestId('balance-card')).toBeVisible();
+  await expect(page.getByTestId('live-section')).toBeVisible();
   await expect(page.getByTestId('top-match').first()).toBeVisible();
-  await expect(page.getByTestId('quick-tile').first()).toBeVisible();
   await expectNoHorizontalOverflow(page);
-  await page.getByTestId('tab-casino').click();
-  await expect(page).toHaveURL(/\/(casino|login)/);
+  await expect(page.getByTestId('tab-home')).toHaveAttribute('aria-current', 'page');
+  await page.getByTestId('tab-sport').click();
+  await expect(page).toHaveURL(/\/sports$/);
+  await expect(page.getByTestId('tab-sport')).toHaveAttribute('aria-current', 'page');
+  await expect(page.getByTestId('tab-home')).not.toHaveAttribute('aria-current', 'page');
+  await page.getByTestId('tab-live').click();
+  await expect(page).toHaveURL(/\/live$/);
+  await expect(page.getByTestId('tab-live')).toHaveAttribute('aria-current', 'page');
+  await page.getByTestId('tab-account').click();
+  await expect(page).toHaveURL(/\/login/);
+  await expect(page.getByTestId('tab-account')).toHaveAttribute('aria-current', 'page');
 });

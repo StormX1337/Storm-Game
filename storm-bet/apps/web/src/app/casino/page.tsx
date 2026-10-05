@@ -19,7 +19,7 @@ export default async function CasinoPage() {
           'Slots, Roulette, Blackjack und Baccarat – ausschließlich mit Spielgeld, Ergebnisse vom Server.',
         )}
         actions={
-          <Link href="/casino/history" className="text-sm text-accent hover:underline">
+          <Link href="/casino/history" className="text-sm text-accent-strong hover:underline">
             {t('Mein Verlauf')}
           </Link>
         }

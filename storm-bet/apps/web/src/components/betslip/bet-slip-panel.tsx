@@ -15,16 +15,19 @@ export function BetSlipPanel() {
   return (
     <aside
       aria-label={t('Wettschein')}
-      className="sticky top-[4.5rem] hidden max-h-[calc(100dvh-5.5rem)] w-full flex-col overflow-hidden rounded-lg border border-border bg-surface lg:flex"
+      className="sticky top-[5.5rem] hidden max-h-[calc(100dvh-6.5rem)] w-full flex-col overflow-hidden rounded-xl border border-border bg-surface shadow-[var(--shadow-card)] lg:flex"
     >
       <div className="flex items-center gap-2 border-b border-border px-4 py-3">
-        <Ticket className="size-4 text-accent" aria-hidden="true" />
-        <h2 className="text-sm font-semibold">{t('Wettschein')}</h2>
+        <Ticket className="size-4 text-accent-strong" aria-hidden="true" />
+        <h2 className="text-sm font-bold uppercase tracking-[0.08em]">{t('Wettschein')}</h2>
         {count ? (
-          <span className="tabular ml-auto rounded bg-accent-soft px-1.5 text-xs font-semibold text-accent-strong">
+          <span className="tabular grid min-w-5 place-items-center rounded-full bg-accent px-1.5 text-[11px] font-bold leading-5 text-accent-fg">
             {count}
           </span>
         ) : null}
+        <span className="ml-auto rounded-[5px] bg-warning-soft px-1.5 py-px text-[10px] font-bold uppercase tracking-wider text-warning">
+          {t('Demo')}
+        </span>
       </div>
       <BetSlip className="min-h-0 flex-1" />
     </aside>
@@ -61,13 +64,17 @@ export function MobileBetSlipBar() {
   return (
     <Dialog open={open && !wide} onOpenChange={setOpen}>
       {items.length > 0 ? (
-        <div className="fixed inset-x-0 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-40 px-3 pb-1 pt-3 md:bottom-0 md:pb-[calc(0.75rem+env(safe-area-inset-bottom))] lg:hidden">
+        // Room at the page end, so the floating bar never hides the last content.
+        <div aria-hidden="true" className="h-16 lg:hidden" />
+      ) : null}
+      {items.length > 0 ? (
+        <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-40 px-3 pb-2 pt-2 md:bottom-0 md:pb-[calc(0.75rem+env(safe-area-inset-bottom))] lg:hidden">
           <button
             onClick={() => setOpen(true)}
-            className="flex w-full items-center gap-3 rounded-lg bg-accent px-4 py-3 text-accent-fg shadow-[var(--shadow-pop)] animate-slide-up"
+            className="flex h-12 w-full items-center gap-3 rounded-xl bg-accent px-4 text-accent-fg shadow-[0_10px_30px_-10px_rgb(79_91_255/0.8)] animate-slide-up active:scale-[0.99]"
             data-testid="mobile-slip-button"
           >
-            <span className="grid size-7 place-items-center rounded-full bg-accent-fg/15 text-sm font-bold">
+            <span className="tabular grid size-7 place-items-center rounded-full bg-white/20 text-sm font-bold">
               {items.length}
             </span>
             <span className="text-sm font-semibold">{t('Wettschein')}</span>
@@ -83,7 +90,14 @@ export function MobileBetSlipBar() {
         </div>
       ) : null}
       <SheetContent className="flex flex-col lg:hidden" aria-describedby={undefined}>
-        <DialogTitle className="px-4 pb-2 pt-3 text-sm">{t('Wettschein')}</DialogTitle>
+        <div className="flex items-center gap-2 px-4 pb-1 pt-2">
+          <DialogTitle className="text-sm font-bold uppercase tracking-[0.08em]">
+            {t('Wettschein')}
+          </DialogTitle>
+          <span className="ml-auto rounded-[5px] bg-warning-soft px-1.5 py-px text-[10px] font-bold uppercase tracking-wider text-warning">
+            {t('Demo')}
+          </span>
+        </div>
         <BetSlip className="min-h-0 flex-1" />
       </SheetContent>
     </Dialog>

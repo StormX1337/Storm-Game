@@ -8,7 +8,7 @@ import { EVENT_STATUS_LABELS } from '@/lib/labels';
 import { useLiveEvent } from './hooks';
 import { DemoDataBadge, LiveBadge } from './live-indicator';
 import { MatchField } from './match-field';
-import { TeamBadge } from './team-badge';
+import { TeamBadge, teamHue } from './team-badge';
 import { SportIcon } from './sport-icon';
 import { useT } from '@/i18n/client';
 
@@ -25,8 +25,15 @@ export function Scoreboard({ event }: { event: EventDetailDto }) {
   ]
     .filter(Boolean)
     .join(' · ');
+  const h1 = teamHue(event.home.name);
+  const h2 = teamHue(event.away.name);
   return (
-    <Card className="overflow-hidden">
+    <Card
+      className="overflow-hidden"
+      style={{
+        backgroundImage: `radial-gradient(90% 120% at 0% 0%, hsl(${h1} 70% 50% / 0.10), transparent 60%), radial-gradient(90% 120% at 100% 0%, hsl(${h2} 70% 50% / 0.10), transparent 60%)`,
+      }}
+    >
       <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2.5 text-xs text-fg-muted">
         <SportIcon sport={event.sport.key} />
         <span>{t(event.sport.name)}</span>
@@ -67,7 +74,7 @@ export function Scoreboard({ event }: { event: EventDetailDto }) {
                 {live.score.away}
               </p>
             ) : (
-              <p className="text-sm font-medium text-fg-muted">
+              <p className="text-lg font-extrabold tracking-tight text-fg">
                 {t(formatKickoff(event.startTime))}
               </p>
             )}
@@ -115,8 +122,8 @@ function TeamName({
         align === 'right' ? 'items-end text-right' : 'items-start text-left',
       )}
     >
-      <TeamBadge name={name} short={short} className="size-11 text-xs" />
-      <span className="line-clamp-2 text-sm font-semibold sm:text-base">{name}</span>
+      <TeamBadge name={name} short={short} className="size-12 text-xs sm:size-14 sm:text-sm" />
+      <span className="line-clamp-2 text-sm font-bold tracking-tight sm:text-base">{name}</span>
     </div>
   );
 }

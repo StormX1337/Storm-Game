@@ -97,7 +97,7 @@ export default async function BetDetailPage({ params }: { params: Promise<{ betI
                     <p className="text-xs text-fg-muted">{t(leg.marketName)}</p>
                   </Td>
                   <Td>
-                    <Link href={`/events/${leg.eventId}`} className="hover:text-accent">
+                    <Link href={`/events/${leg.eventId}`} className="hover:text-accent-strong">
                       {leg.eventName}
                     </Link>
                     <p className="text-xs text-fg-subtle">{formatDateTime(leg.startTime)}</p>

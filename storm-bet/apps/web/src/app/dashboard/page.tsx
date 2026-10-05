@@ -1,6 +1,19 @@
 import type { AccountSummaryDto, BetDto, Paginated } from '@storm-bet/types';
 import { Button, Card, EmptyState, StatCard } from '@storm-bet/ui';
-import { CheckCheck, Coins, Hourglass, Receipt, TrendingUp, Wallet } from 'lucide-react';
+import {
+  CheckCheck,
+  Coins,
+  Dices,
+  Gift,
+  HeartHandshake,
+  Hourglass,
+  Layers,
+  Receipt,
+  TrendingUp,
+  Trophy,
+  Users,
+  Wallet,
+} from 'lucide-react';
 import Link from 'next/link';
 import { BetCard } from '@/components/dashboard/bet-card';
 import { VerifyNotice } from '@/components/dashboard/verify-notice';
@@ -8,6 +21,16 @@ import { PageHeader, SectionTitle } from '@/components/sportsbook/page-header';
 import { formatMoney } from '@/lib/format';
 import { getSessionUser, serverApi } from '@/lib/server-api';
 import { getT } from '@/i18n/server';
+
+/** Everything beyond the sportsbook tabs – the bottom bar's "Konto" leads here. */
+const MORE = [
+  { href: '/casino', label: 'Casino', icon: Dices },
+  { href: '/bet-builder', label: 'Bet Builder', icon: Layers },
+  { href: '/promotions', label: 'Aktionen', icon: Gift },
+  { href: '/feed', label: 'Tipp-Feed', icon: Users },
+  { href: '/leaderboard', label: 'Rangliste', icon: Trophy },
+  { href: '/responsible-gaming', label: 'Spielerschutz', icon: HeartHandshake },
+];
 
 export default async function DashboardPage({
   searchParams,
@@ -37,7 +60,10 @@ export default async function DashboardPage({
         }
       />
       {user && !user.emailVerified ? <VerifyNotice /> : null}
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5" data-testid="dashboard-cards">
+      <div
+        className="grid grid-cols-2 gap-3 xl:grid-cols-5 [&>*:first-child]:col-span-2 xl:[&>*:first-child]:col-span-1"
+        data-testid="dashboard-cards"
+      >
         <StatCard
           label={t('Demo Balance')}
           value={formatMoney(summary.wallet.available, { unit: false })}
@@ -67,7 +93,7 @@ export default async function DashboardPage({
       <section className="space-y-3">
         <SectionTitle
           action={
-            <Link href="/dashboard/bets" className="text-sm text-accent hover:underline">
+            <Link href="/dashboard/bets" className="text-sm text-accent-strong hover:underline">
               {t('Alle Wetten')}
             </Link>
           }
@@ -96,6 +122,26 @@ export default async function DashboardPage({
             ))}
           </div>
         )}
+      </section>
+      <section className="space-y-3" aria-labelledby="more-title">
+        <SectionTitle>
+          <span id="more-title">{t('Mehr')}</span>
+        </SectionTitle>
+        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+          {MORE.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className="group flex items-center gap-3 rounded-xl border border-border bg-surface p-3 transition-colors hover:border-border-strong hover:bg-surface-2"
+              data-testid="account-more"
+            >
+              <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-surface-3 text-fg-muted transition-colors group-hover:text-accent-strong">
+                <item.icon className="size-[18px]" aria-hidden="true" />
+              </span>
+              <span className="min-w-0 truncate text-sm font-semibold">{t(item.label)}</span>
+            </Link>
+          ))}
+        </div>
       </section>
     </>
   );

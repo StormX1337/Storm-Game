@@ -70,7 +70,7 @@ export default async function AdminBetsPage({
                   <Td>
                     <Link
                       href={`/admin/bets/${b.id}`}
-                      className="font-mono text-xs hover:text-accent"
+                      className="font-mono text-xs hover:text-accent-strong"
                     >
                       {b.reference}
                     </Link>
@@ -79,7 +79,7 @@ export default async function AdminBetsPage({
                     </p>
                   </Td>
                   <Td className="text-xs">
-                    <Link href={`/admin/users/${b.user.id}`} className="hover:text-accent">
+                    <Link href={`/admin/users/${b.user.id}`} className="hover:text-accent-strong">
                       {b.user.email}
                     </Link>
                   </Td>

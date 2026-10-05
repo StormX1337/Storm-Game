@@ -2,7 +2,7 @@
 
 import type { AccountSummaryDto } from '@storm-bet/types';
 import { cn } from '@storm-bet/ui';
-import { Dices, House, Radio, Receipt, Trophy } from 'lucide-react';
+import { House, Radio, Receipt, Trophy, UserRound } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -10,12 +10,43 @@ import { api } from '@/lib/api-client';
 import { useT } from '@/i18n/client';
 import { useSession, WALLET_CHANGED } from '../providers/session';
 
-const TABS = [
-  { href: '/', label: 'Start', icon: House, match: [] as string[] },
-  { href: '/sports', label: 'Sport', icon: Trophy, match: ['/sports', '/events'] },
-  { href: '/casino', label: 'Casino', icon: Dices, match: ['/casino'], featured: true },
-  { href: '/live', label: 'Live', icon: Radio, match: ['/live'] },
-  { href: '/dashboard/bets', label: 'Wetten', icon: Receipt, match: ['/dashboard/bets'] },
+type Tab = {
+  key: string;
+  href: string;
+  label: string;
+  icon: typeof House;
+  active: (pathname: string) => boolean;
+};
+
+const under = (pathname: string, base: string) =>
+  pathname === base || pathname.startsWith(`${base}/`);
+
+const TABS: Tab[] = [
+  { key: 'home', href: '/', label: 'Start', icon: House, active: (p) => p === '/' },
+  {
+    key: 'sport',
+    href: '/sports',
+    label: 'Sport',
+    icon: Trophy,
+    active: (p) => ['/sports', '/events', '/search', '/bet-builder'].some((base) => under(p, base)),
+  },
+  { key: 'live', href: '/live', label: 'Live', icon: Radio, active: (p) => under(p, '/live') },
+  {
+    key: 'bets',
+    href: '/dashboard/bets',
+    label: 'Wetten',
+    icon: Receipt,
+    active: (p) => under(p, '/dashboard/bets'),
+  },
+  {
+    key: 'account',
+    href: '/dashboard',
+    label: 'Konto',
+    icon: UserRound,
+    active: (p) =>
+      (under(p, '/dashboard') && !under(p, '/dashboard/bets')) ||
+      ['/login', '/register'].some((base) => under(p, base)),
+  },
 ];
 
 /** Open bets for the badge; refreshed whenever the balance moves (bet placed or settled). */
@@ -42,69 +73,54 @@ function useOpenBets() {
   return count;
 }
 
-/** Phone navigation; the header links take over from the md breakpoint. */
+/**
+ * Phone navigation: five fixed destinations. The active tab always follows the
+ * route; pages outside these sections (casino, feed …) leave all tabs inactive.
+ */
 export function MobileTabBar() {
   const t = useT();
   const pathname = usePathname();
+  const { user } = useSession();
   const openBets = useOpenBets();
-  const active = (tab: (typeof TABS)[number]) =>
-    tab.href === '/'
-      ? pathname === '/'
-      : tab.match.some((m) => pathname === m || pathname.startsWith(`${m}/`));
   return (
     <>
       {/* Keeps the page end (footer) clear of the fixed bar. */}
-      <div aria-hidden="true" className="h-[calc(3.75rem+env(safe-area-inset-bottom))] md:hidden" />
+      <div aria-hidden="true" className="h-[calc(4rem+env(safe-area-inset-bottom))] md:hidden" />
       <nav
         aria-label={t('Schnellnavigation')}
-        className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-bg/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
+        className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-bg/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl md:hidden"
       >
-        <div className="grid h-15 grid-cols-5">
+        <div className="grid h-16 grid-cols-5">
           {TABS.map((tab) => {
-            const on = active(tab);
-            if (tab.featured) {
-              return (
-                <Link
-                  key={tab.href}
-                  href={tab.href}
-                  aria-current={on ? 'page' : undefined}
-                  className="flex flex-col items-center justify-end gap-0.5 pb-1.5 text-[11px] font-semibold text-fg"
-                  data-testid="tab-casino"
-                >
-                  <span
-                    className={cn(
-                      '-mt-6 grid size-13 place-items-center rounded-full border-4 border-bg bg-[linear-gradient(135deg,#7c3aed,#4f6bff)] text-white shadow-lg shadow-accent/30',
-                      on && 'ring-2 ring-accent-strong',
-                    )}
-                  >
-                    <tab.icon className="size-6" aria-hidden="true" />
-                  </span>
-                  {t(tab.label)}
-                </Link>
-              );
-            }
-            const badge = tab.href === '/dashboard/bets' && openBets > 0 ? openBets : null;
+            const on = tab.active(pathname);
+            const href = tab.key === 'account' && !user ? '/login' : tab.href;
+            const badge = tab.key === 'bets' && openBets > 0 ? openBets : null;
             return (
               <Link
-                key={tab.href}
-                href={tab.href}
+                key={tab.key}
+                href={href}
                 aria-current={on ? 'page' : undefined}
                 className={cn(
-                  'relative flex flex-col items-center justify-center gap-0.5 text-[11px] font-medium transition-colors',
-                  on ? 'text-accent-strong' : 'text-fg-muted',
+                  'relative flex flex-col items-center justify-center gap-1 text-[11px] transition-colors',
+                  on ? 'font-semibold text-accent-strong' : 'font-medium text-fg-subtle',
                 )}
+                data-testid={`tab-${tab.key}`}
               >
                 {on ? (
                   <span
                     aria-hidden="true"
-                    className="absolute inset-x-5 top-0 h-0.5 rounded-full bg-accent-strong"
+                    className="absolute top-0 h-0.5 w-8 rounded-b-full bg-accent shadow-[0_0_12px_rgb(79_91_255/0.9)]"
                   />
                 ) : null}
                 <span className="relative">
-                  <tab.icon className="size-5" aria-hidden="true" />
+                  <tab.icon
+                    className={cn('size-[22px]', on && 'drop-shadow-[0_0_6px_rgb(79_91_255/0.55)]')}
+                    strokeWidth={on ? 2.2 : 1.8}
+                    aria-hidden="true"
+                  />
                   {badge ? (
                     <span
-                      className="tabular absolute -right-2.5 -top-1.5 grid min-w-4 place-items-center rounded-full bg-live px-1 text-[10px] font-bold leading-4 text-white"
+                      className="tabular absolute -right-2.5 -top-1.5 grid min-w-4 place-items-center rounded-full bg-live px-1 text-[10px] font-bold leading-4 text-white ring-2 ring-bg"
                       data-testid="tab-open-bets"
                     >
                       {badge > 99 ? '99+' : badge}

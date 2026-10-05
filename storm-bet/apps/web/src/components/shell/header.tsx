@@ -1,7 +1,7 @@
 'use client';
 
 import { cn } from '@storm-bet/ui';
-import { Gift, Search } from 'lucide-react';
+import { Search } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { LiveDot } from '../sportsbook/live-indicator';
@@ -10,62 +10,64 @@ import { UserMenu } from './user-menu';
 import { useT } from '@/i18n/client';
 
 const NAV = [
-  { href: '/sports', label: 'Sport' },
+  { href: '/sports', label: 'Sport', match: ['/sports', '/events'] },
   { href: '/live', label: 'Live', live: true },
-  { href: '/casino', label: 'Casino' },
-  { href: '/feed', label: 'Tipp-Feed' },
-  { href: '/leaderboard', label: 'Rangliste' },
   { href: '/promotions', label: 'Aktionen' },
-  { href: '/dashboard/bets', label: 'Meine Wetten' },
-  { href: '/dashboard/wallet', label: 'Wallet' },
-  { href: '/dashboard/profile', label: 'Profil' },
+  { href: '/bet-builder', label: 'Bet Builder' },
+  { href: '/casino', label: 'Casino', wide: true },
+  { href: '/feed', label: 'Tipp-Feed', wide: true },
+  { href: '/leaderboard', label: 'Rangliste', wide: true },
 ];
 
 export function Header({ liveCount }: { liveCount?: number }) {
   const t = useT();
   const pathname = usePathname();
   return (
-    <header className="sticky top-0 z-40 border-b border-white/10 bg-[linear-gradient(100deg,#2337c6,#4f6bff_55%,#6d8bff)] pt-[env(safe-area-inset-top)] md:border-border md:bg-bg/85 md:bg-none md:backdrop-blur md:supports-[backdrop-filter]:bg-bg/70">
-      <div className="mx-auto flex h-14 max-w-[1600px] items-center gap-2 px-3 sm:gap-4 sm:px-4 lg:px-6">
+    <header className="sticky top-0 z-40 border-b border-border bg-bg/85 pt-[env(safe-area-inset-top)] backdrop-blur-xl supports-[backdrop-filter]:bg-bg/70">
+      <div className="mx-auto flex h-14 max-w-[1440px] items-center gap-3 px-4 md:h-16 lg:gap-6 lg:px-6">
         <Brand />
-        {/* Phones use the bottom tab bar instead. */}
-        <nav aria-label={t('Hauptnavigation')} className="hidden items-center gap-1 md:flex">
-          {NAV.map((item, i) => {
-            const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+        {/* Phones use the bottom navigation instead. */}
+        <nav aria-label={t('Hauptnavigation')} className="hidden h-full items-stretch md:flex">
+          {NAV.map((item) => {
+            const active = (item.match ?? [item.href]).some(
+              (m) => pathname === m || pathname.startsWith(`${m}/`),
+            );
             return (
               <Link
                 key={item.href}
                 href={item.href}
+                aria-current={active ? 'page' : undefined}
                 className={cn(
-                  'flex items-center gap-1.5 whitespace-nowrap rounded-md px-2 py-1.5 text-sm font-medium transition-colors sm:px-2.5',
-                  active ? 'bg-surface-3 text-fg' : 'text-fg-muted hover:text-fg',
-                  i > 5 && 'hidden xl:flex',
+                  'relative flex items-center gap-1.5 whitespace-nowrap px-3 text-sm font-medium transition-colors',
+                  active ? 'text-fg' : 'text-fg-muted hover:text-fg',
+                  item.wide && 'hidden xl:flex',
                 )}
               >
                 {item.live ? <LiveDot /> : null}
                 {t(item.label)}
                 {item.live && liveCount ? (
-                  <span className="tabular text-xs text-fg-subtle">{liveCount}</span>
+                  <span className="tabular rounded-full bg-live-soft px-1.5 text-[11px] font-semibold text-live">
+                    {liveCount}
+                  </span>
+                ) : null}
+                {active ? (
+                  <span
+                    aria-hidden="true"
+                    className="absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-accent"
+                  />
                 ) : null}
               </Link>
             );
           })}
         </nav>
-        <div className="ml-auto flex items-center gap-0.5 sm:gap-1">
-          <Link
-            href="/promotions"
-            aria-label={t('Aktionen')}
-            className="grid size-9 place-items-center rounded-full text-white/90 transition-colors hover:bg-white/10 md:text-fg-muted md:hover:bg-surface-3 md:hover:text-fg"
-          >
-            <Gift className="size-5" aria-hidden="true" />
-          </Link>
+        <div className="ml-auto flex items-center gap-1 sm:gap-2">
           <Link
             href="/search"
             aria-label={t('Suche')}
-            className="grid size-9 place-items-center rounded-full text-white/90 transition-colors hover:bg-white/10 md:text-fg-muted md:hover:bg-surface-3 md:hover:text-fg"
+            className="grid size-9 place-items-center rounded-full text-fg-muted transition-colors hover:bg-surface-2 hover:text-fg"
             data-testid="search-link"
           >
-            <Search className="size-5" aria-hidden="true" />
+            <Search className="size-[18px]" aria-hidden="true" />
           </Link>
           <UserMenu />
         </div>

@@ -32,23 +32,30 @@ export default async function SportsPage() {
           odds.isSimulated ? t('Sämtliche Daten sind simuliert.') : t('Quoten: {0}.', [odds.name]),
         ])}
       />
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 2xl:grid-cols-4">
         {(sports ?? []).map((s) => (
           <Link
             key={s.key}
             href={`/sports/${s.key}`}
-            className="rounded-lg border border-border bg-surface p-4 transition-colors hover:border-border-strong hover:bg-surface-2"
+            className="group flex items-center gap-3 rounded-xl border border-border bg-surface p-3 transition-colors hover:border-border-strong hover:bg-surface-2"
+            data-testid="sport-card"
           >
-            <SportIcon sport={s.key} className="size-5 text-accent" />
-            <p className="mt-3 font-semibold">{t(s.name)}</p>
-            <p className="mt-0.5 text-xs text-fg-muted">
-              {s.eventCount} {t('Events')}
-              {s.liveCount ? (
-                <span className="ml-2 inline-flex items-center gap-1 text-live">
-                  <LiveDot /> {s.liveCount} live
+            <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-surface-3 text-fg-muted transition-colors group-hover:text-accent-strong">
+              <SportIcon sport={s.key} className="size-5" />
+            </span>
+            <span className="min-w-0">
+              <span className="block truncate text-sm font-semibold">{t(s.name)}</span>
+              <span className="flex items-center gap-2 text-xs text-fg-muted">
+                <span className="tabular">
+                  {s.eventCount} {t('Events')}
                 </span>
-              ) : null}
-            </p>
+                {s.liveCount ? (
+                  <span className="inline-flex items-center gap-1 font-semibold text-live">
+                    <LiveDot /> {s.liveCount}
+                  </span>
+                ) : null}
+              </span>
+            </span>
           </Link>
         ))}
       </div>
