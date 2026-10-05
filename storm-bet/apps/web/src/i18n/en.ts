@@ -1110,4 +1110,9 @@ export const EN: Record<string, string> = {
   '{0} weitere Märkte': '{0} more markets',
   '{0}: {1}, Quote {2}': '{0}: {1}, odds {2}',
   '{0}: {1}, gesperrt': '{0}: {1}, suspended',
+  Startguthaben: 'Starting credit',
+  'Spielgeld ohne Geldwert': 'Play money without monetary value',
+  'nicht einzahlbar · nicht auszahlbar': 'no deposits · no withdrawals',
+  'Normale Quote': 'Normal odds',
+  'Die Events konnten nicht geladen werden.': "The events couldn't be loaded.",
 };

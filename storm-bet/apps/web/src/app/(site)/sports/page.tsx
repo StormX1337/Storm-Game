@@ -1,6 +1,7 @@
 import type { EventSummaryDto, Paginated, SportDto } from '@storm-bet/types';
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { LoadError } from '@/components/shell/load-error';
 import { EventList } from '@/components/sportsbook/event-list';
 import { LiveDot } from '@/components/sportsbook/live-indicator';
 import { PageHeader, SectionTitle } from '@/components/sportsbook/page-header';
@@ -60,7 +61,11 @@ export default async function SportsPage() {
         ))}
       </div>
       <SectionTitle>{t('Die nächsten Events')}</SectionTitle>
-      <EventList events={upcoming?.items ?? []} emptyTitle={t('Keine anstehenden Events')} />
+      {upcoming === null ? (
+        <LoadError />
+      ) : (
+        <EventList events={upcoming.items} emptyTitle={t('Keine anstehenden Events')} />
+      )}
     </div>
   );
 }

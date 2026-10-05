@@ -38,7 +38,7 @@ export function BoostList() {
         icon={<Zap className="size-4 text-violet-strong" aria-hidden="true" />}
         count={boosts.length}
       />
-      <div className="scrollbar-none -mx-4 flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto overscroll-x-contain px-4 pb-1 md:mx-0 md:grid md:grid-cols-2 md:overflow-visible md:px-0 2xl:grid-cols-3">
+      <div className="scrollbar-none -mx-4 flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto overscroll-x-contain px-4 pb-1 md:mx-0 md:grid md:grid-cols-2 md:overflow-visible md:px-0">
         {boosts.map((b) => (
           <BoostCard key={b.id} boost={b} loggedIn={!!user} onChange={load} />
         ))}
@@ -113,10 +113,10 @@ function BoostCard({
           +{boost.upliftPct}%
         </span>
       </div>
-      <div className="mx-4 grid grid-cols-[1fr_auto_1fr] items-center gap-2 rounded-lg border border-border bg-surface-2/60 px-3 py-2.5">
+      <div className="mx-4 grid grid-cols-[1fr_auto_1fr] items-center gap-2 rounded-lg border border-up/20 bg-[linear-gradient(90deg,transparent,rgb(34_197_94/0.08))] px-3 py-2.5">
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-wider text-fg-subtle">
-            {t('Alte Quote')}
+            {t('Normale Quote')}
           </p>
           <p className="tabular text-base font-semibold text-fg-subtle line-through decoration-fg-subtle/70">
             {formatOdds(boost.odds)}
@@ -124,10 +124,8 @@ function BoostCard({
         </div>
         <ArrowRight className="size-4 text-fg-subtle" aria-hidden="true" />
         <div className="text-right">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-up">
-            {t('Geboostet')}
-          </p>
-          <p className="tabular text-2xl font-extrabold leading-7 text-up">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-up">{t('Boost')}</p>
+          <p className="tabular text-[28px] font-extrabold leading-8 text-up">
             {formatOdds(boost.boostedOdds)}
           </p>
         </div>

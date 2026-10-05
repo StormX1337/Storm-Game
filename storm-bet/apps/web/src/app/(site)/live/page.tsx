@@ -4,6 +4,7 @@ import { Card, EmptyState } from '@storm-bet/ui';
 import { CalendarClock, Radio } from 'lucide-react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { LoadError } from '@/components/shell/load-error';
 import { AutoRefresh } from '@/components/sportsbook/auto-refresh';
 import { EventList } from '@/components/sportsbook/event-list';
 import { FilterChips, ViewTabs } from '@/components/sportsbook/filter-chips';
@@ -103,7 +104,9 @@ export default async function LivePage({
       />
       <FilterChips label={t('Sportarten')} items={chips} />
       <AutoRefresh seconds={60} />
-      {view === 'live' ? (
+      {events === null ? (
+        <LoadError />
+      ) : view === 'live' ? (
         items.length ? (
           <LiveGrid events={items} />
         ) : (

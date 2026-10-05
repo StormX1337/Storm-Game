@@ -16,6 +16,7 @@ import { Features } from '@/components/home/features';
 import { LeagueChips } from '@/components/home/league-chips';
 import { LiveSection } from '@/components/home/live-section';
 import { TopMatches } from '@/components/home/top-matches';
+import { LoadError } from '@/components/shell/load-error';
 import { BoostList } from '@/components/sportsbook/boost-list';
 import { getT } from '@/i18n/server';
 import { getPlatformMeta, getSessionUser, tryServerApi } from '@/lib/server-api';
@@ -67,11 +68,17 @@ export default async function HomePage() {
   const crash = casino?.games.find((g) => g.slug === 'storm-crash');
   const crashHref = crash ? `/casino/${crash.id}` : user ? '/casino' : '/login?next=/casino';
   const liveTotal = (sports ?? []).reduce((sum, s) => sum + s.liveCount, 0);
+  // Both lists missing means the API is unreachable, not that nothing is on.
+  const failed = live === null && upcoming === null;
 
   return (
     <div className="space-y-8">
       <BalanceCard startCredit={START_CREDIT} />
-      <LiveSection events={liveItems.slice(0, 6)} total={liveTotal || liveItems.length} />
+      {failed ? (
+        <LoadError />
+      ) : (
+        <LiveSection events={liveItems.slice(0, 6)} total={liveTotal || liveItems.length} />
+      )}
       <TopMatches events={top} boosts={boostList} />
       <div id="boosts" className="scroll-mt-24">
         <BoostList />
@@ -79,12 +86,14 @@ export default async function HomePage() {
       {builderEvent ? <BetBuilderCard event={builderEvent} /> : null}
       <Features crashHref={crashHref} />
       <LeagueChips leagues={leagues ?? []} />
-      <EventBrowser
-        sports={sports ?? []}
-        initial={liveItems.length ? liveItems : upcomingItems}
-        initialMode={liveItems.length ? 'live' : 'upcoming'}
-        withinHours={within}
-      />
+      {failed ? null : (
+        <EventBrowser
+          sports={sports ?? []}
+          initial={liveItems.length ? liveItems : upcomingItems}
+          initialMode={liveItems.length ? 'live' : 'upcoming'}
+          withinHours={within}
+        />
+      )}
       <aside className="flex items-start gap-3 rounded-xl border border-border bg-surface p-4">
         <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-warning-soft text-warning">
           <HeartHandshake className="size-[18px]" aria-hidden="true" />

@@ -18,7 +18,7 @@ export async function Footer() {
   const { odds } = await getPlatformMeta();
   return (
     <footer className="mt-16 border-t border-border bg-surface/60">
-      <div className="mx-auto grid max-w-[1440px] gap-8 px-4 py-10 md:grid-cols-[1.2fr_1fr] lg:px-6">
+      <div className="mx-auto grid max-w-[1440px] gap-8 px-4 py-10 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] lg:px-6">
         <div className="space-y-4">
           <div className="flex items-center justify-between gap-3">
             <Brand alwaysShowName />
@@ -55,7 +55,7 @@ export async function Footer() {
         </div>
         <nav
           aria-label={t('Fußzeile')}
-          className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-3 md:justify-self-end"
+          className="grid min-w-0 grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-3 md:grid-cols-2 md:justify-self-end lg:grid-cols-3"
         >
           {LINKS.map((l) => (
             <Link

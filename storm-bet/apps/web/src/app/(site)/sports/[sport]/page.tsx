@@ -2,13 +2,14 @@ import type { EventSummaryDto, LeagueDto, Paginated, SportDto, SportKey } from '
 import { SPORT_KEYS } from '@storm-bet/types';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
+import { LoadError } from '@/components/shell/load-error';
 import { EventList } from '@/components/sportsbook/event-list';
 import { FilterChips, ViewTabs } from '@/components/sportsbook/filter-chips';
 import { LiveDot } from '@/components/sportsbook/live-indicator';
 import { SectionTitle } from '@/components/sportsbook/page-header';
 import { SportIcon } from '@/components/sportsbook/sport-icon';
 import { SPORT_LABELS } from '@/lib/labels';
-import { getPlatformMeta, tryServerApi } from '@/lib/server-api';
+import { getPlatformMeta, serverApi, ServerApiError, tryServerApi } from '@/lib/server-api';
 import { getT } from '@/i18n/server';
 
 export const dynamic = 'force-dynamic';
@@ -43,7 +44,7 @@ export default async function SportPage({
   const { odds } = await getPlatformMeta();
   const within = odds.isSimulated ? 36 : 7 * 24;
   const [detail, events] = await Promise.all([
-    tryServerApi<{ sport: SportDto; leagues: LeagueDto[] }>(`/sports/${sport}`),
+    loadSport(sport),
     tryServerApi<Paginated<EventSummaryDto>>(
       tab === 'live'
         ? `/events?sport=${sport}&status=live&limit=50${leagueFilter}`
@@ -52,7 +53,8 @@ export default async function SportPage({
           }`,
     ),
   ]);
-  if (!detail) notFound();
+  if (detail === 'missing') notFound();
+  if (detail === null) return <LoadError />;
 
   const href = (next: { tab?: string; day?: string; league?: string | null }) => {
     const q = new URLSearchParams();
@@ -150,20 +152,34 @@ export default async function SportPage({
         </section>
       ) : null}
 
-      <EventList
-        events={events?.items ?? []}
-        subscribeLive={tab === 'live'}
-        emptyTitle={tab === 'live' ? t('Gerade läuft kein Event') : t('Keine anstehenden Events')}
-        emptyDescription={
-          tab === 'live'
-            ? t('Neue Spiele beginnen laufend – schau gleich wieder vorbei.')
-            : day
-              ? t('An diesem Tag sind keine Spiele angesetzt.')
-              : t('In diesem Wettbewerb sind aktuell keine Spiele angesetzt.')
-        }
-      />
+      {events === null ? (
+        <LoadError />
+      ) : (
+        <EventList
+          events={events.items}
+          subscribeLive={tab === 'live'}
+          emptyTitle={tab === 'live' ? t('Gerade läuft kein Event') : t('Keine anstehenden Events')}
+          emptyDescription={
+            tab === 'live'
+              ? t('Neue Spiele beginnen laufend – schau gleich wieder vorbei.')
+              : day
+                ? t('An diesem Tag sind keine Spiele angesetzt.')
+                : t('In diesem Wettbewerb sind aktuell keine Spiele angesetzt.')
+          }
+        />
+      )}
     </div>
   );
+}
+
+/** The sport's leagues; 'missing' for an unknown sport, null when the API is unreachable. */
+async function loadSport(sport: string) {
+  try {
+    return await serverApi<{ sport: SportDto; leagues: LeagueDto[] }>(`/sports/${sport}`);
+  } catch (error) {
+    if (error instanceof ServerApiError && error.status === 404) return 'missing' as const;
+    return null;
+  }
 }
 
 /** Today and the next six days (Europe/Berlin). */

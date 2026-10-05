@@ -1,8 +1,8 @@
 'use client';
 
 import type { EventSummaryDto, Paginated, SportDto, SportKey } from '@storm-bet/types';
-import { cn } from '@storm-bet/ui';
-import { Clock, Grid2x2, Zap } from 'lucide-react';
+import { Button, Card, cn } from '@storm-bet/ui';
+import { AlertTriangle, Clock, Grid2x2, RotateCw, Zap } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useT } from '@/i18n/client';
 import { api } from '@/lib/api-client';
@@ -28,6 +28,8 @@ export function EventBrowser({
   const [sport, setSport] = useState<SportKey | null>(null);
   const [events, setEvents] = useState(initial);
   const [loading, setLoading] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const first = useRef(true);
 
   useEffect(() => {
@@ -41,13 +43,17 @@ export function EventBrowser({
     if (sport) params.set('sport', sport);
     if (mode === 'upcoming') params.set('withinHours', String(withinHours));
     api<Paginated<EventSummaryDto>>(`/events?${params}`)
-      .then((r) => !cancelled && setEvents(r.items))
-      .catch(() => !cancelled && setEvents([]))
+      .then((r) => {
+        if (cancelled) return;
+        setEvents(r.items);
+        setFailed(false);
+      })
+      .catch(() => !cancelled && setFailed(true))
       .finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;
     };
-  }, [mode, sport, withinHours]);
+  }, [mode, sport, withinHours, attempt]);
 
   const tabs = sports.filter((s) => (mode === 'live' ? s.liveCount > 0 : s.eventCount > 0));
   return (
@@ -122,18 +128,30 @@ export function EventBrowser({
           })}
         </div>
       </div>
-      <div className={cn('transition-opacity', loading && 'opacity-60')}>
-        <EventList
-          events={events}
-          subscribeLive={mode === 'live'}
-          emptyTitle={mode === 'live' ? 'Gerade läuft kein Event' : 'Keine anstehenden Events'}
-          emptyDescription={
-            mode === 'live'
-              ? t('Schau gleich wieder vorbei – neue Spiele beginnen laufend.')
-              : undefined
-          }
-        />
-      </div>
+      {failed ? (
+        <Card className="flex flex-wrap items-center gap-3 p-4" role="alert">
+          <AlertTriangle className="size-5 shrink-0 text-warning" aria-hidden="true" />
+          <p className="min-w-0 flex-1 text-sm text-fg-muted">
+            {t('Die Events konnten nicht geladen werden.')}
+          </p>
+          <Button size="sm" variant="outline" onClick={() => setAttempt((n) => n + 1)}>
+            <RotateCw /> {t('Erneut versuchen')}
+          </Button>
+        </Card>
+      ) : (
+        <div className={cn('transition-opacity', loading && 'opacity-60')}>
+          <EventList
+            events={events}
+            subscribeLive={mode === 'live'}
+            emptyTitle={mode === 'live' ? 'Gerade läuft kein Event' : 'Keine anstehenden Events'}
+            emptyDescription={
+              mode === 'live'
+                ? t('Schau gleich wieder vorbei – neue Spiele beginnen laufend.')
+                : undefined
+            }
+          />
+        </div>
+      )}
     </section>
   );
 }

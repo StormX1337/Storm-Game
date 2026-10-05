@@ -21,15 +21,14 @@ export function BalanceCard({ startCredit }: { startCredit: number }) {
       <div className="flex flex-wrap items-center gap-x-4 gap-y-3 p-4 sm:p-5">
         <div className="min-w-[9.5rem] flex-1">
           <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-accent-strong">
-            {user ? t('Dein Demo-Guthaben') : t('Demo-Guthaben')}
+            {user ? t('Dein Demo-Guthaben') : t('Startguthaben')}
           </p>
           <p className="tabular mt-1 text-[28px] font-extrabold leading-none tracking-tight sm:text-[32px]">
             {amount}
           </p>
           <p className="mt-2 text-xs leading-snug text-fg-muted">
-            <span className="block sm:inline">{t('Nur Spielgeld')}</span>
-            <span className="hidden sm:inline"> · </span>
-            <span className="block sm:inline">{t('Kein Geldwert')}</span>
+            <span className="block">{t('Spielgeld ohne Geldwert')}</span>
+            <span className="block text-fg-subtle">{t('nicht einzahlbar · nicht auszahlbar')}</span>
           </p>
         </div>
         {user ? (
@@ -48,7 +47,7 @@ export function BalanceCard({ startCredit }: { startCredit: number }) {
         ) : (
           <Button className="max-[359px]:w-full" asChild>
             <Link href="/register" data-testid="balance-cta">
-              {t('Jetzt testen')} <ArrowRight />
+              {t('Kostenlos testen')} <ArrowRight />
             </Link>
           </Button>
         )}

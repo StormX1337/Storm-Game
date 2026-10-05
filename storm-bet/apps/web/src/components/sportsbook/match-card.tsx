@@ -66,14 +66,18 @@ export const MatchCard = memo(function MatchCard({
           {live.isLive ? (
             <>
               <LiveBadge />
-              {clock ? <span className="tabular font-semibold text-live">{clock}</span> : null}
+              {clock ? (
+                <span className="tabular shrink-0 whitespace-nowrap font-semibold text-live">
+                  {clock}
+                </span>
+              ) : null}
             </>
           ) : closed ? (
             <span className="font-semibold text-fg-subtle">
               {live.status === 'CANCELLED' ? t('Abgesagt') : t('Beendet')}
             </span>
           ) : (
-            <span className="tabular font-semibold text-fg">
+            <span className="tabular shrink-0 whitespace-nowrap font-semibold text-fg">
               {t(formatKickoff(event.startTime))}
             </span>
           )}
@@ -91,7 +95,13 @@ export const MatchCard = memo(function MatchCard({
           {[event.home, event.away].map((team, i) => (
             <div key={team.id} className="flex items-center gap-2.5">
               <TeamBadge name={team.name} className="size-6 text-[9px]" />
-              <span className="min-w-0 flex-1 truncate text-[15px] font-semibold tracking-tight transition-colors group-hover:text-accent-strong">
+              <span
+                className={cn(
+                  'min-w-0 flex-1 truncate font-semibold tracking-tight transition-colors group-hover:text-accent-strong',
+                  // Featured cards set the teams like a fixture poster; live cards stay compact.
+                  variant === 'featured' ? 'text-[14px] uppercase' : 'text-[15px]',
+                )}
+              >
                 {team.name}
               </span>
               {live.score ? (
