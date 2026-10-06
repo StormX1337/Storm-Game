@@ -48,8 +48,12 @@ export const MatchCard = memo(function MatchCard({
   return (
     <article
       className={cn(
-        'relative flex flex-col overflow-hidden rounded-xl border bg-surface p-3 shadow-[var(--shadow-card)] transition-colors hover:border-border-strong lg:p-3.5',
-        live.isLive ? 'border-live/30' : 'border-border',
+        'relative flex flex-col overflow-hidden rounded-xl border bg-surface p-3 shadow-[var(--shadow-card)] transition-[border-color,box-shadow] duration-200 hover:border-border-strong hover:shadow-[var(--shadow-pop)] lg:p-3.5',
+        live.isLive
+          ? 'border-live/30'
+          : variant === 'featured'
+            ? 'border-accent/20 bg-brand-soft'
+            : 'border-border',
         className,
       )}
       data-testid={variant === 'live' ? 'live-card' : 'top-match'}
@@ -111,7 +115,7 @@ export const MatchCard = memo(function MatchCard({
               {live.score ? (
                 <span
                   className={cn(
-                    'tabular min-w-6 text-right text-xl font-extrabold leading-none',
+                    'tabular w-8 shrink-0 text-right text-xl font-extrabold leading-none',
                     live.isLive ? 'text-fg' : 'text-fg-muted',
                   )}
                 >

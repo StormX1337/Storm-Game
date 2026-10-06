@@ -101,7 +101,7 @@ export function MobileTabBar() {
                 href={href}
                 aria-current={on ? 'page' : undefined}
                 className={cn(
-                  'relative flex flex-col items-center justify-center gap-1 text-[11px] transition-colors',
+                  'relative flex flex-col items-center justify-center gap-1 text-[11px] tracking-wide transition-colors active:scale-95',
                   on ? 'font-semibold text-accent-strong' : 'font-medium text-fg-subtle',
                 )}
                 data-testid={`tab-${tab.key}`}
@@ -109,12 +109,12 @@ export function MobileTabBar() {
                 {on ? (
                   <span
                     aria-hidden="true"
-                    className="absolute top-0 h-0.5 w-8 rounded-b-full bg-accent shadow-[0_0_12px_rgb(79_91_255/0.9)]"
+                    className="absolute top-0 h-[3px] w-9 rounded-b-full bg-accent shadow-[0_0_10px_rgb(79_91_255/0.8)]"
                   />
                 ) : null}
                 <span className="relative">
                   <tab.icon
-                    className={cn('size-[22px]', on && 'drop-shadow-[0_0_6px_rgb(79_91_255/0.55)]')}
+                    className={cn('size-6', on && 'drop-shadow-[0_0_6px_rgb(79_91_255/0.55)]')}
                     strokeWidth={on ? 2.2 : 1.8}
                     aria-hidden="true"
                   />

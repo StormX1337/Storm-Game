@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { cn } from '@storm-bet/ui';
 import { useT } from '@/i18n/client';
+import { useSession } from '../providers/session';
 
 /** The STORM mark: a lightning bolt on the brand gradient. */
 export function BrandMark({ className }: { className?: string }) {
@@ -28,25 +29,26 @@ export function Brand({
   alwaysShowName?: boolean;
 }) {
   const t = useT();
+  const { user } = useSession();
   return (
     <Link
       href="/"
       className={cn('flex shrink-0 items-center gap-2 rounded-md', className)}
       aria-label={t('STORM BET Startseite')}
     >
-      <BrandMark className={alwaysShowName ? undefined : 'md:size-8'} />
+      <BrandMark className={alwaysShowName ? undefined : 'lg:size-8'} />
       <span
         className={cn(
           'text-[15px] font-extrabold tracking-[0.12em] text-fg',
-          !alwaysShowName && 'md:text-[18px]',
+          !alwaysShowName && 'max-md:text-[14px] max-md:tracking-[0.06em] lg:text-[18px]',
         )}
       >
         STORM
         <span
           className={cn(
             'font-semibold text-accent-strong',
-            // Narrow phones keep the room for balance and account.
-            !alwaysShowName && 'max-[429px]:hidden',
+            // Narrow phones keep the room for balance (logged in) or the two buttons.
+            !alwaysShowName && (user ? 'max-[429px]:hidden' : 'max-[389px]:hidden'),
           )}
         >
           {' '}

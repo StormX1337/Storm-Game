@@ -18,8 +18,16 @@ export function BalanceCard({ startCredit }: { startCredit: number }) {
       aria-label={t('Demo-Guthaben')}
       data-testid="balance-card"
     >
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-3 p-3.5 sm:p-5">
-        <div className="min-w-[8.5rem] flex-1">
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -right-6 -top-8 text-accent/[0.07]"
+      >
+        <svg viewBox="0 0 32 32" className="size-40" fill="currentColor">
+          <path d="M18.5 4.5 8.5 18h6.8l-2 9.5 10.2-14h-7l2-9Z" />
+        </svg>
+      </div>
+      <div className="relative flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:gap-4 sm:p-5">
+        <div className="min-w-0 flex-1">
           <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-accent-strong">
             {user ? t('Dein Demo-Guthaben') : t('Startguthaben')}
           </p>
@@ -47,7 +55,7 @@ export function BalanceCard({ startCredit }: { startCredit: number }) {
             </Button>
           </div>
         ) : (
-          <Button size="sm" className="max-[339px]:w-full sm:h-10 sm:px-4 sm:text-sm" asChild>
+          <Button className="w-full sm:w-auto" asChild>
             <Link href="/register" data-testid="balance-cta">
               {t('Kostenlos testen')} <ArrowRight />
             </Link>

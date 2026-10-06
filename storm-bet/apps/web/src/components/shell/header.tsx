@@ -12,8 +12,8 @@ import { useT } from '@/i18n/client';
 const NAV = [
   { href: '/sports', label: 'Sport', match: ['/sports', '/events'] },
   { href: '/live', label: 'Live', live: true },
-  { href: '/promotions', label: 'Aktionen' },
-  { href: '/bet-builder', label: 'Bet Builder' },
+  { href: '/promotions', label: 'Aktionen', wide: true },
+  { href: '/bet-builder', label: 'Bet Builder', wide: true },
 ];
 
 export function Header({ liveCount }: { liveCount?: number }) {
@@ -35,8 +35,10 @@ export function Header({ liveCount }: { liveCount?: number }) {
                 href={item.href}
                 aria-current={active ? 'page' : undefined}
                 className={cn(
-                  'relative flex items-center gap-1.5 whitespace-nowrap px-3 text-sm font-semibold transition-colors lg:px-4 lg:text-[15px]',
+                  'relative flex items-center gap-1.5 whitespace-nowrap px-2.5 text-sm font-semibold transition-colors lg:px-4 lg:text-[15px]',
                   active ? 'text-fg' : 'text-fg-muted hover:text-fg',
+                  // Tablets: room for balance and account first.
+                  item.wide && 'hidden lg:flex',
                 )}
               >
                 {item.live ? <LiveDot /> : null}

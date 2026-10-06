@@ -118,7 +118,7 @@ export function SportTabs({ sports }: { sports: SportDto[] }) {
   const liveTotal = sports.reduce((s, x) => s + x.liveCount, 0);
   const pill = (active: boolean) =>
     cn(
-      'flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-[13px] font-semibold transition-colors',
+      'flex h-10 shrink-0 items-center gap-2 rounded-full border px-4 text-[13px] font-semibold transition-colors active:scale-[0.97] [&_svg]:size-4',
       active
         ? 'border-accent/50 bg-accent-soft text-fg [&_svg]:text-accent-strong'
         : 'border-border bg-surface text-fg-muted hover:border-border-strong hover:text-fg',
