@@ -61,8 +61,10 @@ export function EventList({
   emptyTitle = 'Keine Events',
   emptyDescription,
   boosts,
+  emptyAction,
 }: {
   events: EventSummaryDto[];
+  emptyAction?: React.ReactNode;
   subscribeLive?: boolean;
   /** Open odds boosts: event id → uplift in percent. */
   boosts?: Record<string, number>;
@@ -77,7 +79,12 @@ export function EventList({
   if (events.length === 0) {
     return (
       <Card>
-        <EmptyState icon={<CalendarX />} title={t(emptyTitle)} description={emptyDescription} />
+        <EmptyState
+          icon={<CalendarX />}
+          title={t(emptyTitle)}
+          description={emptyDescription}
+          action={emptyAction}
+        />
       </Card>
     );
   }
@@ -113,7 +120,7 @@ export function EventListSkeleton({ rows = 6 }: { rows?: number }) {
       {Array.from({ length: rows }, (_, i) => (
         <div
           key={i}
-          className="grid gap-3 border-b border-border/70 px-4 py-3 md:grid-cols-[1fr_280px]"
+          className="grid gap-3 border-b border-border/70 px-3 py-3 md:grid-cols-[minmax(0,1fr)_minmax(270px,340px)_56px] md:items-center md:px-5 md:py-3.5"
         >
           <div className="space-y-2">
             <div className="h-3.5 w-3/5 animate-pulse rounded bg-surface-3" />
@@ -121,7 +128,7 @@ export function EventListSkeleton({ rows = 6 }: { rows?: number }) {
           </div>
           <div className="grid grid-cols-3 gap-1.5">
             {[0, 1, 2].map((k) => (
-              <div key={k} className="h-11 animate-pulse rounded-md bg-surface-3" />
+              <div key={k} className="h-11 animate-pulse rounded-lg bg-surface-3 md:h-12" />
             ))}
           </div>
         </div>

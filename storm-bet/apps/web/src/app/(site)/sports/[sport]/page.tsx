@@ -8,6 +8,7 @@ import type {
 } from '@storm-bet/types';
 import { SPORT_KEYS } from '@storm-bet/types';
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { LoadError } from '@/components/shell/load-error';
 import { EventList } from '@/components/sportsbook/event-list';
@@ -65,7 +66,7 @@ export default async function SportPage({
     (boostList?.boosts ?? []).filter((b) => b.open).map((b) => [b.eventId, b.upliftPct]),
   );
   if (detail === 'missing') notFound();
-  if (detail === null) return <LoadError />;
+  if (detail === null) return <LoadError message="Spiele konnten nicht geladen werden." />;
 
   const href = (next: { tab?: string; day?: string; league?: string | null }) => {
     const q = new URLSearchParams();
@@ -164,19 +165,27 @@ export default async function SportPage({
       ) : null}
 
       {events === null ? (
-        <LoadError />
+        <LoadError message="Spiele konnten nicht geladen werden." />
       ) : (
         <EventList
           events={events.items}
           boosts={boosts}
           subscribeLive={tab === 'live'}
-          emptyTitle={tab === 'live' ? t('Gerade läuft kein Event') : t('Keine anstehenden Events')}
+          emptyTitle={tab === 'live' ? t('Gerade läuft kein Event') : t('Keine Spiele verfügbar.')}
           emptyDescription={
             tab === 'live'
               ? t('Neue Spiele beginnen laufend – schau gleich wieder vorbei.')
-              : day
-                ? t('An diesem Tag sind keine Spiele angesetzt.')
-                : t('In diesem Wettbewerb sind aktuell keine Spiele angesetzt.')
+              : t('Versuche ein anderes Datum oder einen anderen Wettbewerb.')
+          }
+          emptyAction={
+            tab !== 'popular' || leagueId ? (
+              <Link
+                href={`/sports/${sport}`}
+                className="inline-flex h-9 items-center rounded-lg bg-accent px-4 text-sm font-semibold text-accent-fg hover:bg-accent-hover"
+              >
+                {t('Andere Spiele anzeigen')}
+              </Link>
+            ) : undefined
           }
         />
       )}

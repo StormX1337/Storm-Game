@@ -5,6 +5,7 @@ import { cn } from '@storm-bet/ui';
 import { Dices, Gift, Home, Layers, LayoutGrid, Radio, Trophy, Users } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useEffect, useRef } from 'react';
 import { SportIcon } from '../sportsbook/sport-icon';
 import { useT } from '@/i18n/client';
 
@@ -116,6 +117,15 @@ export function SportTabs({ sports }: { sports: SportDto[] }) {
   const t = useT();
   const pathname = usePathname();
   const liveTotal = sports.reduce((s, x) => s + x.liveCount, 0);
+  const ref = useRef<HTMLElement>(null);
+  // The current sport is scrolled into view when it sits further right.
+  useEffect(() => {
+    const nav = ref.current;
+    const chip = nav?.querySelector<HTMLElement>('[aria-current="page"]');
+    if (!nav || !chip) return;
+    if (chip.offsetLeft + chip.offsetWidth > nav.clientWidth + nav.scrollLeft)
+      nav.scrollTo({ left: Math.max(0, chip.offsetLeft - 16) });
+  }, [pathname]);
   const pill = (active: boolean) =>
     cn(
       'flex h-10 shrink-0 items-center gap-2 rounded-full border px-4 text-[13px] font-semibold transition-colors active:scale-[0.97] [&_svg]:size-4',
@@ -125,6 +135,7 @@ export function SportTabs({ sports }: { sports: SportDto[] }) {
     );
   return (
     <nav
+      ref={ref}
       aria-label={t('Sportarten')}
       className="scrollbar-none -mx-4 flex snap-x gap-2 overflow-x-auto overscroll-x-contain px-4 xl:hidden"
     >

@@ -1116,4 +1116,8 @@ export const EN: Record<string, string> = {
   'Normale Quote': 'Normal odds',
   'Die Events konnten nicht geladen werden.': "The events couldn't be loaded.",
   'Quoten aktuell nicht verfügbar': 'Odds currently unavailable',
+  'Keine Spiele verfügbar.': 'No matches available.',
+  'Versuche ein anderes Datum oder einen anderen Wettbewerb.': 'Try another date or competition.',
+  'Andere Spiele anzeigen': 'Show other matches',
+  'Spiele konnten nicht geladen werden.': "Matches couldn't be loaded.",
 };

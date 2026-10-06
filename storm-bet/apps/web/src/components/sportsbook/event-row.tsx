@@ -3,7 +3,7 @@
 import type { EventSummaryDto } from '@storm-bet/types';
 import { OUTCOME_LABELS } from '@storm-bet/types';
 import { cn } from '@storm-bet/ui';
-import { ChevronRight, Zap } from 'lucide-react';
+import { ChevronRight, Lock, Zap } from 'lucide-react';
 import Link from 'next/link';
 import { formatKickoff } from '@/lib/format';
 import { useLiveEvent } from './hooks';
@@ -122,9 +122,10 @@ export function EventRow({
           ))}
         </div>
       ) : (
-        <div className="hidden text-center text-xs text-fg-subtle md:block">
-          {closed ? t('Keine Wetten') : t('Keine Quoten')}
-        </div>
+        <p className="flex items-center gap-1.5 rounded-lg bg-surface-2 px-3 py-2 text-xs text-fg-muted md:justify-center md:bg-transparent md:px-0">
+          <Lock className="size-3.5 shrink-0 text-fg-subtle" aria-hidden="true" />
+          {closed ? t('Keine Wetten') : t('Quoten aktuell nicht verfügbar')}
+        </p>
       )}
       <Link
         href={`/events/${event.id}`}
