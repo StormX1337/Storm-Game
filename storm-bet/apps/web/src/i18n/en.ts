@@ -1115,4 +1115,5 @@ export const EN: Record<string, string> = {
   'nicht einzahlbar · nicht auszahlbar': 'no deposits · no withdrawals',
   'Normale Quote': 'Normal odds',
   'Die Events konnten nicht geladen werden.': "The events couldn't be loaded.",
+  'Quoten aktuell nicht verfügbar': 'Odds currently unavailable',
 };

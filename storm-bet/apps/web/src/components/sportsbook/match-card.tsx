@@ -3,7 +3,7 @@
 import type { BoostDto, EventSummaryDto } from '@storm-bet/types';
 import { OUTCOME_LABELS, PERIOD_LABELS } from '@storm-bet/types';
 import { cn } from '@storm-bet/ui';
-import { ChevronRight, Zap } from 'lucide-react';
+import { ChevronRight, Lock, Zap } from 'lucide-react';
 import Link from 'next/link';
 import { memo } from 'react';
 import { useT } from '@/i18n/client';
@@ -36,7 +36,8 @@ export const MatchCard = memo(function MatchCard({
   const closed = live.status === 'FINISHED' || live.status === 'CANCELLED';
   const h1 = teamHue(event.home.name);
   const h2 = teamHue(event.away.name);
-  const more = Math.max(0, event.marketCount - 1);
+  // Markets beyond the one shown on the card.
+  const more = Math.max(0, event.marketCount - (market ? 1 : 0));
   const clock = [
     t(PERIOD_LABELS[live.liveState?.period ?? ''] ?? live.liveState?.period ?? ''),
     live.liveState?.clock,
@@ -64,16 +65,14 @@ export const MatchCard = memo(function MatchCard({
             : `linear-gradient(90deg, hsl(${h1} 70% 55%), hsl(${h2} 70% 55%))`,
         }}
       />
-      <Link href={`/events/${event.id}`} className="group block flex-1">
+      <Link href={`/events/${event.id}`} className="group block">
         <div className="flex items-center gap-2 text-[11px]">
           {live.isLive ? (
             <>
               <LiveBadge />
-              {clock ? (
-                <span className="tabular shrink-0 whitespace-nowrap font-semibold text-live">
-                  {clock}
-                </span>
-              ) : null}
+              <span className="tabular shrink-0 whitespace-nowrap font-semibold text-live">
+                {clock || t('Läuft')}
+              </span>
             </>
           ) : closed ? (
             <span className="font-semibold text-fg-subtle">
@@ -149,6 +148,12 @@ export const MatchCard = memo(function MatchCard({
             />
           ))}
         </div>
+      ) : !closed ? (
+        // No main market right now (e.g. a sport without 1X2): one quiet line, no empty block.
+        <p className="mt-2.5 flex items-center gap-1.5 rounded-lg bg-surface-2 px-3 py-2 text-xs text-fg-muted">
+          <Lock className="size-3.5 shrink-0 text-fg-subtle" aria-hidden="true" />
+          {t('Quoten aktuell nicht verfügbar')}
+        </p>
       ) : null}
       {more > 0 ? (
         <Link
