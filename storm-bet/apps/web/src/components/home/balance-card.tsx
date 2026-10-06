@@ -28,7 +28,9 @@ export function BalanceCard({ startCredit }: { startCredit: number }) {
           </p>
           <p className="mt-2 text-xs leading-snug text-fg-muted">
             <span className="block">{t('Spielgeld ohne Geldwert')}</span>
-            <span className="block text-[11px] text-fg-subtle">{t('nicht einzahlbar · nicht auszahlbar')}</span>
+            <span className="block text-[11px] text-fg-subtle">
+              {t('nicht einzahlbar · nicht auszahlbar')}
+            </span>
           </p>
         </div>
         {user ? (
