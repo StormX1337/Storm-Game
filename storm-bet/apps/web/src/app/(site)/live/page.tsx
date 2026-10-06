@@ -43,6 +43,10 @@ export default async function LivePage({
     getPlatformMeta(),
   ]);
   const items = events?.items ?? [];
+  // The upcoming view only helps when the chosen sport has matches that are not running.
+  const hasUpcoming = (sports ?? []).some(
+    (s) => (!sport || s.key === sport) && s.eventCount > s.liveCount,
+  );
   const liveTotal = (sports ?? []).reduce((sum, s) => sum + s.liveCount, 0);
   const href = (v: string, s: string | null) => {
     const q = new URLSearchParams();
@@ -105,7 +109,7 @@ export default async function LivePage({
       <FilterChips label={t('Sportarten')} items={chips} />
       <AutoRefresh seconds={60} />
       {events === null ? (
-        <LoadError />
+        <LoadError message="Live-Spiele konnten nicht geladen werden." />
       ) : view === 'live' ? (
         items.length ? (
           <LiveGrid events={items} />
@@ -113,15 +117,17 @@ export default async function LivePage({
           <Card>
             <EmptyState
               icon={<Radio />}
-              title={t('Keine Live-Events')}
-              description={t('Gerade läuft kein Event. Neue Spiele beginnen laufend.')}
+              title={t('Keine Live-Spiele verfügbar.')}
+              description={t('Versuche es später erneut oder wechsle zu „Demnächst“.')}
               action={
-                <Link
-                  href={href('upcoming', sport)}
-                  className="inline-flex h-9 items-center rounded-lg bg-accent px-4 text-sm font-semibold text-accent-fg hover:bg-accent-hover"
-                >
-                  {t('Kommende Spiele ansehen')}
-                </Link>
+                hasUpcoming ? (
+                  <Link
+                    href={href('upcoming', sport)}
+                    className="inline-flex h-9 items-center rounded-lg bg-accent px-4 text-sm font-semibold text-accent-fg hover:bg-accent-hover"
+                  >
+                    {t('Demnächst anzeigen')}
+                  </Link>
+                ) : undefined
               }
             />
           </Card>

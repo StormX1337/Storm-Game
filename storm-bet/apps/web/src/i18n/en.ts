@@ -1120,4 +1120,9 @@ export const EN: Record<string, string> = {
   'Versuche ein anderes Datum oder einen anderen Wettbewerb.': 'Try another date or competition.',
   'Andere Spiele anzeigen': 'Show other matches',
   'Spiele konnten nicht geladen werden.': "Matches couldn't be loaded.",
+  'Keine Live-Spiele verfügbar.': 'No live matches available.',
+  'Versuche es später erneut oder wechsle zu „Demnächst“.':
+    'Try again later or switch to “Coming up”.',
+  'Demnächst anzeigen': 'Show coming up',
+  'Live-Spiele konnten nicht geladen werden.': "Live matches couldn't be loaded.",
 };
